@@ -6,13 +6,17 @@
   import TabBar from '$lib/components/TabBar.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
   import ConflictDialog from '$lib/components/ConflictDialog.svelte';
+  import Outline from '$lib/components/Outline.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
   import { tabsStore } from '$lib/stores/tabs.svelte';
   import { commands } from '$lib/ipc/commands';
+  import type { HeadingItem } from '$lib/editor/outline';
 
   let wordCount = $state(0);
   let cursorLine = $state(1);
   let cursorCol = $state(1);
+  let headings = $state<HeadingItem[]>([]);
+  let editorRef = $state<{ scrollToPosition: (from: number) => void } | undefined>(undefined);
 
   // Conflict dialog state
   let conflictFilePath = $state<string | null>(null);
@@ -21,6 +25,10 @@
     if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
       e.preventDefault();
       uiStore.toggleSidebar();
+    }
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'O') {
+      e.preventDefault();
+      uiStore.toggleOutline();
     }
   }
 
@@ -85,7 +93,7 @@
 
     <div class="flex-1 min-h-0 overflow-hidden">
       {#if tabsStore.activeTab}
-        <Editor bind:wordCount bind:cursorLine bind:cursorCol />
+        <Editor bind:wordCount bind:cursorLine bind:cursorCol bind:headings bind:this={editorRef} />
       {:else}
         <div class="flex items-center justify-center h-full" style="color: var(--novelist-text-secondary);">
           <div class="text-center">
@@ -98,6 +106,12 @@
 
     <StatusBar {wordCount} {cursorLine} {cursorCol} />
   </div>
+
+  {#if uiStore.outlineVisible}
+    <div class="shrink-0 overflow-y-auto" style="width: 200px;">
+      <Outline {headings} onNavigate={(from) => editorRef?.scrollToPosition(from)} />
+    </div>
+  {/if}
 </div>
 
 {#if conflictFilePath}

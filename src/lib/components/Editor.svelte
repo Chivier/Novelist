@@ -8,14 +8,27 @@
   import { projectStore } from '$lib/stores/project.svelte';
   import { commands } from '$lib/ipc/commands';
   import { countWords } from '$lib/utils/wordcount';
+  import { extractHeadings, type HeadingItem } from '$lib/editor/outline';
 
   const FILE_SIZE_WYSIWYG_LIMIT = 1024 * 1024; // 1MB
 
   let wordCount = $state(0);
   let cursorLine = $state(1);
   let cursorCol = $state(1);
+  let headings = $state<HeadingItem[]>([]);
 
-  export { wordCount, cursorLine, cursorCol };
+  export { wordCount, cursorLine, cursorCol, headings };
+
+  function scrollToPosition(from: number) {
+    if (!view) return;
+    view.dispatch({
+      selection: { anchor: from },
+      scrollIntoView: true,
+    });
+    view.focus();
+  }
+
+  export { scrollToPosition };
 
   let editorContainer: HTMLDivElement;
   let view: EditorView | null = null;
@@ -45,6 +58,7 @@
         if (update.docChanged) {
           const text = update.state.doc.toString();
           wordCount = countWords(text);
+          headings = extractHeadings(update.state);
           const t = tabsStore.activeTab;
           if (t) {
             tabsStore.updateContent(t.id, text);
@@ -106,6 +120,7 @@
     const state = createEditorState(tab.content, extensions);
     view = new EditorView({ state, parent: editorContainer });
     wordCount = countWords(tab.content);
+    headings = extractHeadings(view.state);
     updateCursorInfo(view);
   }
 
