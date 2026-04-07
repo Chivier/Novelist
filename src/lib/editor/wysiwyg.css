@@ -74,3 +74,9 @@
   margin: 12px 0;
   padding: 0;
 }
+
+/* Zen mode — paragraph focus dimming */
+.cm-novelist-zen-dim {
+  opacity: 0.3;
+  transition: opacity 200ms ease;
+}

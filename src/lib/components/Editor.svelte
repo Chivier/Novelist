@@ -6,6 +6,7 @@
   import { createEditorExtensions, createEditorState } from '$lib/editor/setup';
   import { tabsStore } from '$lib/stores/tabs.svelte';
   import { projectStore } from '$lib/stores/project.svelte';
+  import { uiStore } from '$lib/stores/ui.svelte';
   import { commands } from '$lib/ipc/commands';
   import { countWords } from '$lib/utils/wordcount';
   import { extractHeadings, type HeadingItem } from '$lib/editor/outline';
@@ -34,6 +35,7 @@
   let view: EditorView | null = null;
   let currentTabId: string | null = null;
   let currentTabVersion: number = -1;
+  let currentZenMode: boolean = false;
 
   function updateCursorInfo(v: EditorView) {
     const pos = v.state.selection.main.head;
@@ -51,7 +53,7 @@
       console.log(`[Editor] File size ${fileEntry?.size} bytes exceeds ${FILE_SIZE_WYSIWYG_LIMIT} bytes limit; disabling WYSIWYG mode.`);
     }
 
-    const base = createEditorExtensions({ wysiwyg: useWysiwyg });
+    const base = createEditorExtensions({ wysiwyg: useWysiwyg, zen: uiStore.zenMode });
     return [
       ...base,
       EditorView.updateListener.of((update) => {
@@ -105,11 +107,12 @@
       return;
     }
 
-    // Rebuild view if tab changed OR version changed (e.g. content reloaded externally)
-    if (tab.id === currentTabId && tab.version === currentTabVersion && view) return;
+    // Rebuild view if tab changed, version changed, or zen mode toggled
+    if (tab.id === currentTabId && tab.version === currentTabVersion && currentZenMode === uiStore.zenMode && view) return;
 
     currentTabId = tab.id;
     currentTabVersion = tab.version;
+    currentZenMode = uiStore.zenMode;
 
     if (view) {
       view.destroy();
@@ -125,9 +128,10 @@
   }
 
   $effect(() => {
-    // Track activeTab and its version reactively
+    // Track activeTab, version, and zen mode reactively
     const _tab = tabsStore.activeTab;
     const _version = _tab?.version;
+    const _zen = uiStore.zenMode;
     if (editorContainer) {
       loadTab();
     }

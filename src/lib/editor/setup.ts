@@ -6,6 +6,7 @@ import { syntaxHighlighting, defaultHighlightStyle, bracketMatching } from '@cod
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { wysiwygPlugin } from './wysiwyg';
 import { imeComposingField, imeGuardPlugin } from './ime-guard';
+import { typewriterPlugin, paragraphFocusPlugin } from './zen';
 import './wysiwyg.css';
 
 const novelistTheme = EditorView.theme({
@@ -48,7 +49,7 @@ const novelistTheme = EditorView.theme({
   },
 });
 
-export function createEditorExtensions(options?: { wysiwyg?: boolean }): Extension[] {
+export function createEditorExtensions(options?: { wysiwyg?: boolean; zen?: boolean }): Extension[] {
   const exts: Extension[] = [
     lineNumbers(),
     highlightActiveLine(),
@@ -71,6 +72,10 @@ export function createEditorExtensions(options?: { wysiwyg?: boolean }): Extensi
 
   if (options?.wysiwyg !== false) {
     exts.push(wysiwygPlugin);
+  }
+
+  if (options?.zen) {
+    exts.push(typewriterPlugin, paragraphFocusPlugin);
   }
 
   return exts;
