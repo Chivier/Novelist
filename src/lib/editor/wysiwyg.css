@@ -4,6 +4,8 @@
   width: 0;
   display: inline;
   overflow: hidden;
+  opacity: 0;
+  transition: font-size 120ms ease, opacity 120ms ease;
 }
 
 /* Revealed syntax markers — cursor IS in this node */
@@ -11,6 +13,7 @@
   font-size: inherit;
   opacity: 0.5;
   color: var(--novelist-text-secondary);
+  transition: font-size 120ms ease, opacity 120ms ease;
 }
 
 /* Headings */
