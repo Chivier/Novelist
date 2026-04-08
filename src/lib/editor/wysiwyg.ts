@@ -41,6 +41,8 @@ function buildDecorations(view: EditorView): DecorationSet {
         if (node.name in headingClasses) {
           const headingClass = headingClasses[node.name];
           const headingNode = node.node;
+          // Heading markers collapse to zero-width when hidden (aligns with body text)
+          const hMarkerClass = cursorInside ? 'cm-novelist-marker-visible' : 'cm-novelist-heading-hidden';
 
           // Find HeaderMark children (the # symbols and trailing space)
           let markerEnd = node.from;
@@ -51,7 +53,7 @@ function buildDecorations(view: EditorView): DecorationSet {
                 // Hide or reveal the marker
                 if (cursor.from < cursor.to) {
                   decos.push(
-                    Decoration.mark({ class: markerClass }).range(cursor.from, cursor.to)
+                    Decoration.mark({ class: hMarkerClass }).range(cursor.from, cursor.to)
                   );
                 }
                 // Track the end of markers to know where content starts
@@ -74,16 +76,15 @@ function buildDecorations(view: EditorView): DecorationSet {
           // Hide the space between marker and content
           if (contentStart > afterMarker && afterMarker < lineEndPos) {
             decos.push(
-              Decoration.mark({ class: markerClass }).range(afterMarker, contentStart)
+              Decoration.mark({ class: hMarkerClass }).range(afterMarker, contentStart)
             );
           }
 
-          // Apply heading style to the content portion
-          if (contentStart < node.to) {
-            decos.push(
-              Decoration.mark({ class: headingClass }).range(contentStart, node.to)
-            );
-          }
+          // Apply heading style to the FULL line (including collapsed markers)
+          // so font-size covers the entire line consistently
+          decos.push(
+            Decoration.mark({ class: headingClass }).range(node.from, node.to)
+          );
 
           return false; // Don't descend further
         }
@@ -336,41 +337,32 @@ function handleInlineMarkup(
 
 /**
  * The WYSIWYG ViewPlugin. Rebuilds decorations on doc change, selection
- * change, or viewport change. Skips rebuilds during IME composition and
- * debounces selection-only updates by 50ms for smooth cursor transitions.
+ * change, or viewport change. Skips rebuilds during IME composition,
+ * then forces a rebuild once composition ends.
+ *
+ * All rebuilds are synchronous — deferring to rAF causes CM6 to settle
+ * scroll/layout before decoration changes take effect, leading to visible
+ * jumps when heading font-sizes or hidden markers change line heights.
  */
 class WysiwygPluginClass {
   decorations: DecorationSet;
-  private pendingUpdate: ReturnType<typeof setTimeout> | null = null;
 
   constructor(view: EditorView) {
     this.decorations = buildDecorations(view);
   }
 
   update(update: ViewUpdate) {
-    if (update.state.field(imeComposingField, false)) return;
+    const wasComposing = update.startState.field(imeComposingField, false);
+    const isComposing = update.state.field(imeComposingField, false);
 
-    if (update.docChanged || update.viewportChanged) {
-      this.clearPending();
+    // Skip during active IME composition
+    if (isComposing) return;
+
+    // Rebuild on any relevant change, including when composition just ended
+    if (update.docChanged || update.viewportChanged || update.selectionSet
+        || (wasComposing && !isComposing)) {
       this.decorations = buildDecorations(update.view);
-    } else if (update.selectionSet) {
-      this.clearPending();
-      this.pendingUpdate = setTimeout(() => {
-        this.decorations = buildDecorations(update.view);
-        update.view.requestMeasure();
-      }, 50);
     }
-  }
-
-  clearPending() {
-    if (this.pendingUpdate) {
-      clearTimeout(this.pendingUpdate);
-      this.pendingUpdate = null;
-    }
-  }
-
-  destroy() {
-    this.clearPending();
   }
 }
 
