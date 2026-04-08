@@ -14,11 +14,9 @@
 </script>
 
 <div
-  class="h-6 flex items-center px-3 text-xs select-none"
-  style="background: var(--novelist-bg-secondary); border-top: 1px solid var(--novelist-border); color: var(--novelist-text-secondary);"
+  class="h-5 flex items-center px-3 select-none"
+  style="background: var(--novelist-bg); border-top: 1px solid var(--novelist-border-subtle); color: var(--novelist-text-tertiary); font-size: 0.65rem; letter-spacing: 0.01em;"
 >
   <span>{wordCount} words</span>
-  <span class="mx-2">|</span>
-  <span>Goal: {goalPercent}%</span>
   <span class="ml-auto">Ln {cursorLine}, Col {cursorCol}</span>
 </div>

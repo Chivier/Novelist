@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
   import { open } from '@tauri-apps/plugin-dialog';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import Editor from '$lib/components/Editor.svelte';
   import TabBar from '$lib/components/TabBar.svelte';
@@ -11,6 +12,7 @@
   import ZenMode from '$lib/components/ZenMode.svelte';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
   import ExportDialog from '$lib/components/ExportDialog.svelte';
+  import Settings from '$lib/components/Settings.svelte';
   import Welcome from '$lib/components/Welcome.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
   import { projectStore } from '$lib/stores/project.svelte';
@@ -24,13 +26,13 @@
   let pane1CursorLine = $state(1);
   let pane1CursorCol = $state(1);
   let pane1Headings = $state<HeadingItem[]>([]);
-  let pane1EditorRef = $state<{ scrollToPosition: (from: number) => void } | undefined>(undefined);
+  let pane1EditorRef = $state<{ scrollToPosition: (from: number) => void; jumpToAbsoluteLine: (line: number) => void } | undefined>(undefined);
 
   let pane2WordCount = $state(0);
   let pane2CursorLine = $state(1);
   let pane2CursorCol = $state(1);
   let pane2Headings = $state<HeadingItem[]>([]);
-  let pane2EditorRef = $state<{ scrollToPosition: (from: number) => void } | undefined>(undefined);
+  let pane2EditorRef = $state<{ scrollToPosition: (from: number) => void; jumpToAbsoluteLine: (line: number) => void } | undefined>(undefined);
 
   // Status bar reflects active pane
   let wordCount = $derived(tabsStore.activePaneId === 'pane-2' ? pane2WordCount : pane1WordCount);
@@ -41,6 +43,19 @@
 
   let paletteOpen = $state(false);
   let exportDialogOpen = $state(false);
+
+  // Dynamic window title
+  $effect(() => {
+    const tab = tabsStore.activeTab;
+    const project = projectStore.name;
+    let title = 'Novelist';
+    if (tab) {
+      title = `${tab.isDirty ? '● ' : ''}${tab.fileName} — ${project} — Novelist`;
+    } else if (projectStore.isOpen) {
+      title = `${project} — Novelist`;
+    }
+    getCurrentWindow().setTitle(title);
+  });
 
   // Conflict dialog state
   let conflictFilePath = $state<string | null>(null);
@@ -79,32 +94,109 @@
     await openProjectFromPath(path);
   }
 
+  async function handleNewFile() {
+    if (!projectStore.dirPath) return;
+    // Generate unique filename
+    let name = 'untitled.md';
+    let counter = 1;
+    const existing = new Set(projectStore.files.map(f => f.name));
+    while (existing.has(name)) {
+      name = `untitled-${counter}.md`;
+      counter++;
+    }
+    const result = await commands.createFile(projectStore.dirPath, name);
+    if (result.status === 'ok') {
+      // Refresh sidebar
+      const filesResult = await commands.listDirectory(projectStore.dirPath!);
+      if (filesResult.status === 'ok') projectStore.updateFiles(filesResult.data);
+      // Open in editor
+      const readResult = await commands.readFile(result.data);
+      if (readResult.status === 'ok') {
+        tabsStore.openTab(result.data, readResult.data);
+        await commands.registerOpenFile(result.data);
+      }
+    }
+  }
+
   function handleKeydown(e: KeyboardEvent) {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+    const mod = e.metaKey || e.ctrlKey;
+
+    // Cmd+B: toggle sidebar
+    if (mod && e.key === 'b') {
       e.preventDefault();
       uiStore.toggleSidebar();
+      return;
     }
-    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'O') {
+    // Cmd+Shift+O: toggle outline
+    if (mod && e.shiftKey && e.key === 'O') {
       e.preventDefault();
       uiStore.toggleOutline();
+      return;
     }
-    if (e.key === 'F11' || ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'Z')) {
+    // F11 or Cmd+Shift+Z: zen mode
+    if (e.key === 'F11' || (mod && e.shiftKey && e.key === 'Z')) {
       e.preventDefault();
       uiStore.toggleZen();
+      return;
     }
-    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'P') {
+    // Cmd+Shift+P: command palette
+    if (mod && e.shiftKey && e.key === 'P') {
       e.preventDefault();
       paletteOpen = !paletteOpen;
+      return;
     }
+    // Escape: exit zen mode
     if (e.key === 'Escape' && uiStore.zenMode) {
       e.preventDefault();
       uiStore.toggleZen();
+      return;
     }
-    // Cmd+\ or Ctrl+\ to toggle split view
-    if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
+    // Cmd+\: toggle split view
+    if (mod && e.key === '\\') {
       e.preventDefault();
       tabsStore.toggleSplit();
+      return;
     }
+    // Cmd+N: new file
+    if (mod && e.key === 'n') {
+      e.preventDefault();
+      handleNewFile();
+      return;
+    }
+    // Cmd+P: export project
+    if (mod && !e.shiftKey && e.key === 'p') {
+      e.preventDefault();
+      exportDialogOpen = true;
+      return;
+    }
+    // Cmd+W: close tab
+    if (mod && e.key === 'w') {
+      e.preventDefault();
+      const tab = tabsStore.activeTab;
+      if (tab) tabsStore.closeTab(tab.id);
+      return;
+    }
+    // Cmd+,: settings
+    if (mod && e.key === ',') {
+      e.preventDefault();
+      uiStore.toggleSettings();
+      return;
+    }
+    // Cmd+G: go to line
+    if (mod && e.key === 'g') {
+      e.preventDefault();
+      handleGoToLine();
+      return;
+    }
+  }
+
+  function handleGoToLine() {
+    const input = prompt('Go to line:');
+    if (!input) return;
+    const line = parseInt(input, 10);
+    if (isNaN(line) || line < 1) return;
+    const ref = tabsStore.activePaneId === 'pane-2' ? pane2EditorRef : pane1EditorRef;
+    ref?.jumpToAbsoluteLine(line);
   }
 
   async function handleKeepMine(filePath: string) {
@@ -131,12 +223,26 @@
   }
 
   onMount(async () => {
-    commandRegistry.register({ id: 'toggle-sidebar', label: 'Toggle Sidebar', shortcut: 'Ctrl+B', handler: () => uiStore.toggleSidebar() });
-    commandRegistry.register({ id: 'toggle-outline', label: 'Toggle Outline', shortcut: 'Ctrl+Shift+O', handler: () => uiStore.toggleOutline() });
+    commandRegistry.register({ id: 'toggle-sidebar', label: 'Toggle Sidebar', shortcut: 'Cmd+B', handler: () => uiStore.toggleSidebar() });
+    commandRegistry.register({ id: 'toggle-outline', label: 'Toggle Outline', shortcut: 'Cmd+Shift+O', handler: () => uiStore.toggleOutline() });
     commandRegistry.register({ id: 'toggle-zen', label: 'Toggle Zen Mode', shortcut: 'F11', handler: () => uiStore.toggleZen() });
-    commandRegistry.register({ id: 'command-palette', label: 'Command Palette', shortcut: 'Ctrl+Shift+P', handler: () => { paletteOpen = !paletteOpen; } });
-    commandRegistry.register({ id: 'toggle-split', label: 'Toggle Split View', shortcut: 'Ctrl+\\', handler: () => tabsStore.toggleSplit() });
-    commandRegistry.register({ id: 'export-project', label: 'Export Project', handler: () => { exportDialogOpen = true; } });
+    commandRegistry.register({ id: 'command-palette', label: 'Command Palette', shortcut: 'Cmd+Shift+P', handler: () => { paletteOpen = !paletteOpen; } });
+    commandRegistry.register({ id: 'toggle-split', label: 'Toggle Split View', shortcut: 'Cmd+\\', handler: () => tabsStore.toggleSplit() });
+    commandRegistry.register({ id: 'new-file', label: 'New File', shortcut: 'Cmd+N', handler: () => handleNewFile() });
+    commandRegistry.register({ id: 'export-project', label: 'Export Project', shortcut: 'Cmd+P', handler: () => { exportDialogOpen = true; } });
+    commandRegistry.register({ id: 'close-tab', label: 'Close Tab', shortcut: 'Cmd+W', handler: () => { const tab = tabsStore.activeTab; if (tab) tabsStore.closeTab(tab.id); } });
+    commandRegistry.register({ id: 'open-settings', label: 'Open Settings', shortcut: 'Cmd+,', handler: () => uiStore.toggleSettings() });
+    commandRegistry.register({ id: 'go-to-line', label: 'Go to Line', shortcut: 'Cmd+G', handler: () => handleGoToLine() });
+    commandRegistry.register({ id: 'run-benchmark', label: 'Run Performance Benchmark (150K lines)', handler: async () => {
+      const { runBenchmark } = await import('$lib/utils/benchmark');
+      const result = await runBenchmark(150000);
+      alert(result);
+    }});
+    commandRegistry.register({ id: 'run-scroll-test', label: 'Run Scroll+Edit Stability Test', handler: async () => {
+      const { runScrollEditTest } = await import('$lib/utils/scroll-edit-test');
+      const result = await runScrollEditTest();
+      alert(result);
+    }});
 
     const unlisten = await listen<{ path: string }>('file-changed', async (event) => {
       const { path } = event.payload;
@@ -187,7 +293,7 @@
   -->
   <div class="flex h-full w-full">
     {#if uiStore.sidebarVisible}
-      <div class="shrink-0" style="width: {uiStore.sidebarWidth}px; border-right: 1px solid var(--novelist-border);">
+      <div class="shrink-0" style="width: {uiStore.sidebarWidth}px; border-right: 1px solid var(--novelist-border-subtle, var(--novelist-border));">
         <Sidebar />
       </div>
     {/if}
@@ -203,8 +309,8 @@
         <div
           class="flex flex-col flex-1 min-w-0"
           style="
-            border-right: {tabsStore.splitActive ? '1px solid var(--novelist-border)' : 'none'};
-            {tabsStore.splitActive && tabsStore.activePaneId === 'pane-1' ? 'box-shadow: inset 0 0 0 2px var(--novelist-accent);' : ''}
+            border-right: {tabsStore.splitActive ? '1px solid var(--novelist-border-subtle, var(--novelist-border))' : 'none'};
+            {tabsStore.splitActive && tabsStore.activePaneId === 'pane-1' ? 'box-shadow: inset 0 2px 0 0 var(--novelist-accent);' : ''}
           "
           onclick={() => tabsStore.setActivePane('pane-1')}
         >
@@ -214,10 +320,10 @@
             {#if tabsStore.getPaneActiveTab('pane-1')}
               <Editor paneId="pane-1" bind:wordCount={pane1WordCount} bind:cursorLine={pane1CursorLine} bind:cursorCol={pane1CursorCol} bind:headings={pane1Headings} bind:this={pane1EditorRef} />
             {:else}
-              <div class="flex items-center justify-center h-full" style="color: var(--novelist-text-secondary);">
+              <div class="flex items-center justify-center h-full" style="color: var(--novelist-text-tertiary, var(--novelist-text-secondary));">
                 <div class="text-center">
-                  <p class="text-lg mb-2">Novelist</p>
-                  <p class="text-sm">Open a folder to get started (Ctrl+B to toggle sidebar)</p>
+                  <p style="font-size: 1.1rem; font-weight: 500; margin-bottom: 6px; color: var(--novelist-text-secondary);">Novelist</p>
+                  <p style="font-size: 0.8rem;">Open a folder to get started</p>
                 </div>
               </div>
             {/if}
@@ -230,7 +336,7 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="flex flex-col flex-1 min-w-0"
-            style="{tabsStore.activePaneId === 'pane-2' ? 'box-shadow: inset 0 0 0 2px var(--novelist-accent);' : ''}"
+            style="{tabsStore.activePaneId === 'pane-2' ? 'box-shadow: inset 0 2px 0 0 var(--novelist-accent);' : ''}"
             onclick={() => tabsStore.setActivePane('pane-2')}
           >
             <TabBar paneId="pane-2" />
@@ -239,10 +345,9 @@
               {#if tabsStore.getPaneActiveTab('pane-2')}
                 <Editor paneId="pane-2" bind:wordCount={pane2WordCount} bind:cursorLine={pane2CursorLine} bind:cursorCol={pane2CursorCol} bind:headings={pane2Headings} bind:this={pane2EditorRef} />
               {:else}
-                <div class="flex items-center justify-center h-full" style="color: var(--novelist-text-secondary);">
+                <div class="flex items-center justify-center h-full" style="color: var(--novelist-text-tertiary, var(--novelist-text-secondary));">
                   <div class="text-center">
-                    <p class="text-lg mb-2">Split View</p>
-                    <p class="text-sm">Open a file in this pane</p>
+                    <p style="font-size: 0.85rem;">Open a file in this pane</p>
                   </div>
                 </div>
               {/if}
@@ -256,11 +361,23 @@
       <StatusBar {wordCount} {cursorLine} {cursorCol} />
     </div>
 
-    {#if uiStore.outlineVisible}
-      <div class="shrink-0 overflow-y-auto" style="width: 200px;">
-        <Outline {headings} onNavigate={(from) => activeEditorRef?.scrollToPosition(from)} />
-      </div>
-    {/if}
+    <!-- Outline panel + toggle tab -->
+    <div class="shrink-0 flex">
+      {#if uiStore.outlineVisible}
+        <div class="overflow-y-auto" style="width: 200px; border-left: 1px solid var(--novelist-border-subtle, var(--novelist-border));">
+          <Outline {headings} onNavigate={(from) => activeEditorRef?.scrollToPosition(from)} />
+        </div>
+      {/if}
+      <!-- Vertical toggle tab -->
+      <button
+        class="flex items-center justify-center cursor-pointer"
+        style="width: 20px; background: transparent; color: var(--novelist-text-tertiary, var(--novelist-text-secondary)); border: none; border-left: 1px solid var(--novelist-border-subtle, var(--novelist-border)); writing-mode: vertical-rl; font-size: 9px; letter-spacing: 0.08em; user-select: none; transition: color 100ms;"
+        onclick={() => uiStore.toggleOutline()}
+        title="Toggle Outline (Cmd+Shift+O)"
+      >
+        OUTLINE
+      </button>
+    </div>
   </div>
 {/if}
 
@@ -279,4 +396,8 @@
 
 {#if exportDialogOpen}
   <ExportDialog onClose={() => { exportDialogOpen = false; }} />
+{/if}
+
+{#if uiStore.settingsOpen}
+  <Settings onClose={() => { uiStore.settingsOpen = false; }} />
 {/if}

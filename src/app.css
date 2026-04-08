@@ -1,34 +1,49 @@
 @import "tailwindcss";
+@import "lxgw-wenkai-webfont/lxgwwenkai-regular.css";
+@import "lxgw-wenkai-webfont/lxgwwenkai-bold.css";
 
 :root {
-  --novelist-bg: #ffffff;
-  --novelist-bg-secondary: #f5f5f5;
-  --novelist-text: #333333;
-  --novelist-text-secondary: #666666;
-  --novelist-accent: #4a90d9;
-  --novelist-border: #e0e0e0;
+  --novelist-bg: #fcfcfa;
+  --novelist-bg-secondary: #f4f3ef;
+  --novelist-bg-tertiary: #eae8e3;
+  --novelist-text: #2c2c2c;
+  --novelist-text-secondary: #8a8a8a;
+  --novelist-text-tertiary: #b0b0b0;
+  --novelist-accent: #5b7e9a;
+  --novelist-accent-soft: color-mix(in srgb, var(--novelist-accent) 10%, transparent);
+  --novelist-border: #e8e6e1;
+  --novelist-border-subtle: #f0eeea;
   --novelist-editor-bg: var(--novelist-bg);
-  --novelist-editor-font: "Noto Serif SC", Georgia, serif;
+  --novelist-editor-font: "LXGW WenKai", "Noto Serif SC", Georgia, serif;
   --novelist-editor-font-size: 16px;
-  --novelist-editor-line-height: 1.8;
-  --novelist-editor-max-width: 720px;
-  --novelist-heading-color: var(--novelist-text);
-  --novelist-link-color: var(--novelist-accent);
-  --novelist-code-bg: #f0f0f0;
-  --novelist-blockquote-border: var(--novelist-accent);
+  --novelist-editor-line-height: 1.85;
+  --novelist-editor-max-width: 740px;
+  --novelist-heading-color: #1a1a1a;
+  --novelist-link-color: #5b7e9a;
+  --novelist-code-bg: #f0eeea;
+  --novelist-blockquote-border: #d0cec8;
   --novelist-sidebar-bg: var(--novelist-bg-secondary);
   --novelist-sidebar-text: var(--novelist-text);
+  --novelist-sidebar-hover: color-mix(in srgb, var(--novelist-accent) 8%, var(--novelist-bg-secondary));
+  --novelist-sidebar-active: color-mix(in srgb, var(--novelist-accent) 14%, var(--novelist-bg-secondary));
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --novelist-bg: #1e1e1e;
-    --novelist-bg-secondary: #252526;
-    --novelist-text: #cccccc;
-    --novelist-text-secondary: #999999;
-    --novelist-accent: #569cd6;
-    --novelist-border: #3e3e3e;
-    --novelist-code-bg: #2d2d2d;
+    --novelist-bg: #1c1c1e;
+    --novelist-bg-secondary: #232326;
+    --novelist-bg-tertiary: #2c2c2f;
+    --novelist-text: #d4d4d4;
+    --novelist-text-secondary: #808080;
+    --novelist-text-tertiary: #5a5a5a;
+    --novelist-accent: #7ba7c2;
+    --novelist-border: #2e2e31;
+    --novelist-border-subtle: #272729;
+    --novelist-heading-color: #e8e8e8;
+    --novelist-code-bg: #28282b;
+    --novelist-blockquote-border: #3e3e42;
+    --novelist-sidebar-hover: color-mix(in srgb, var(--novelist-accent) 8%, var(--novelist-bg-secondary));
+    --novelist-sidebar-active: color-mix(in srgb, var(--novelist-accent) 15%, var(--novelist-bg-secondary));
   }
 }
 
@@ -37,7 +52,10 @@ html, body, #app {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  font-size: 13px;
   background: var(--novelist-bg);
   color: var(--novelist-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
