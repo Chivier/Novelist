@@ -11,63 +11,148 @@ interface TabState {
   version: number;
 }
 
+interface PaneState {
+  id: string;
+  tabs: TabState[];
+  activeTabId: string | null;
+}
+
 class TabsStore {
-  tabs = $state<TabState[]>([]);
-  activeTabId = $state<string | null>(null);
+  panes = $state<PaneState[]>([{ id: 'pane-1', tabs: [], activeTabId: null }]);
+  activePaneId = $state('pane-1');
+  splitActive = $state(false);
+
+  get activePane(): PaneState {
+    return this.panes.find(p => p.id === this.activePaneId) || this.panes[0];
+  }
 
   get activeTab(): TabState | undefined {
-    return this.tabs.find(t => t.id === this.activeTabId);
+    const pane = this.activePane;
+    return pane.tabs.find(t => t.id === pane.activeTabId);
+  }
+
+  // Backward-compat: returns active pane's tabs
+  get tabs(): TabState[] { return this.activePane.tabs; }
+
+  // Backward-compat: returns active pane's activeTabId
+  get activeTabId(): string | null { return this.activePane.activeTabId; }
+
+  toggleSplit() {
+    if (this.splitActive) {
+      this.panes = [this.panes[0]];
+      this.activePaneId = this.panes[0].id;
+      this.splitActive = false;
+    } else {
+      this.panes = [...this.panes, { id: 'pane-2', tabs: [], activeTabId: null }];
+      this.splitActive = true;
+    }
+  }
+
+  setActivePane(paneId: string) {
+    this.activePaneId = paneId;
+  }
+
+  getPaneTabs(paneId: string): TabState[] {
+    return this.panes.find(p => p.id === paneId)?.tabs ?? [];
+  }
+
+  getPaneActiveTabId(paneId: string): string | null {
+    return this.panes.find(p => p.id === paneId)?.activeTabId ?? null;
+  }
+
+  getPaneActiveTab(paneId: string): TabState | undefined {
+    const pane = this.panes.find(p => p.id === paneId);
+    if (!pane) return undefined;
+    return pane.tabs.find(t => t.id === pane.activeTabId);
   }
 
   openTab(filePath: string, content: string) {
-    const existing = this.tabs.find(t => t.filePath === filePath);
-    if (existing) { this.activeTabId = existing.id; return; }
+    const pane = this.activePane;
+    const existing = pane.tabs.find(t => t.filePath === filePath);
+    if (existing) { pane.activeTabId = existing.id; return; }
 
     const fileName = filePath.split('/').pop() || filePath;
     const id = crypto.randomUUID();
-    this.tabs.push({ id, filePath, fileName, content, isDirty: false, scrollPosition: 0, cursorPosition: 0, version: 0 });
-    this.activeTabId = id;
+    pane.tabs.push({ id, filePath, fileName, content, isDirty: false, scrollPosition: 0, cursorPosition: 0, version: 0 });
+    pane.activeTabId = id;
   }
 
   closeTab(id: string) {
-    const idx = this.tabs.findIndex(t => t.id === id);
-    if (idx === -1) return;
-    const tab = this.tabs[idx];
-    commands.unregisterOpenFile(tab.filePath).catch(err => {
-      console.error('Failed to unregister open file:', err);
-    });
-    this.tabs.splice(idx, 1);
-    if (this.activeTabId === id) {
-      this.activeTabId = this.tabs.length > 0 ? this.tabs[Math.min(idx, this.tabs.length - 1)].id : null;
+    // Find which pane contains this tab
+    for (const pane of this.panes) {
+      const idx = pane.tabs.findIndex(t => t.id === id);
+      if (idx === -1) continue;
+      const tab = pane.tabs[idx];
+      commands.unregisterOpenFile(tab.filePath).catch(err => {
+        console.error('Failed to unregister open file:', err);
+      });
+      pane.tabs.splice(idx, 1);
+      if (pane.activeTabId === id) {
+        pane.activeTabId = pane.tabs.length > 0 ? pane.tabs[Math.min(idx, pane.tabs.length - 1)].id : null;
+      }
+      return;
     }
   }
 
-  activateTab(id: string) { this.activeTabId = id; }
+  activateTab(id: string) {
+    // Find which pane contains this tab and activate it
+    for (const pane of this.panes) {
+      const tab = pane.tabs.find(t => t.id === id);
+      if (tab) {
+        pane.activeTabId = id;
+        this.activePaneId = pane.id;
+        return;
+      }
+    }
+  }
 
   updateContent(id: string, content: string) {
-    const tab = this.tabs.find(t => t.id === id);
-    if (tab) { tab.content = content; tab.isDirty = true; }
+    for (const pane of this.panes) {
+      const tab = pane.tabs.find(t => t.id === id);
+      if (tab) { tab.content = content; tab.isDirty = true; return; }
+    }
   }
 
   markSaved(id: string) {
-    const tab = this.tabs.find(t => t.id === id);
-    if (tab) tab.isDirty = false;
-  }
-
-  reloadContent(id: string, newContent: string) {
-    const tab = this.tabs.find(t => t.id === id);
-    if (tab) {
-      tab.content = newContent;
-      tab.isDirty = false;
-      tab.version += 1;
+    for (const pane of this.panes) {
+      const tab = pane.tabs.find(t => t.id === id);
+      if (tab) { tab.isDirty = false; return; }
     }
   }
 
-  findByPath(filePath: string): TabState | undefined {
-    return this.tabs.find(t => t.filePath === filePath);
+  reloadContent(id: string, newContent: string) {
+    for (const pane of this.panes) {
+      const tab = pane.tabs.find(t => t.id === id);
+      if (tab) {
+        tab.content = newContent;
+        tab.isDirty = false;
+        tab.version += 1;
+        return;
+      }
+    }
   }
 
-  closeAll() { this.tabs = []; this.activeTabId = null; }
+  // Search ALL panes
+  findByPath(filePath: string): TabState | undefined {
+    for (const pane of this.panes) {
+      const tab = pane.tabs.find(t => t.filePath === filePath);
+      if (tab) return tab;
+    }
+    return undefined;
+  }
+
+  // Clear ALL panes
+  closeAll() {
+    this.panes = [{ id: 'pane-1', tabs: [], activeTabId: null }];
+    this.activePaneId = 'pane-1';
+    this.splitActive = false;
+  }
+
+  // Returns all tabs across all panes (for auto-save)
+  get allTabs(): TabState[] {
+    return this.panes.flatMap(p => p.tabs);
+  }
 }
 
 export const tabsStore = new TabsStore();
+export type { TabState, PaneState };

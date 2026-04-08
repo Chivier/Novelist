@@ -11,14 +11,26 @@
   import { countWords } from '$lib/utils/wordcount';
   import { extractHeadings, type HeadingItem } from '$lib/editor/outline';
 
+  interface Props {
+    paneId?: string;
+    wordCount?: number;
+    cursorLine?: number;
+    cursorCol?: number;
+    headings?: HeadingItem[];
+  }
+
   const FILE_SIZE_WYSIWYG_LIMIT = 1024 * 1024; // 1MB
 
-  let wordCount = $state(0);
-  let cursorLine = $state(1);
-  let cursorCol = $state(1);
-  let headings = $state<HeadingItem[]>([]);
+  let {
+    paneId,
+    wordCount = $bindable(0),
+    cursorLine = $bindable(1),
+    cursorCol = $bindable(1),
+    headings = $bindable<HeadingItem[]>([]),
+  }: Props = $props();
 
-  export { wordCount, cursorLine, cursorCol, headings };
+  // Effective pane id - falls back to active pane
+  let effectivePaneId = $derived(paneId ?? tabsStore.activePaneId);
 
   function scrollToPosition(from: number) {
     if (!view) return;
@@ -44,8 +56,12 @@
     cursorCol = pos - line.from + 1;
   }
 
+  function getActiveTab() {
+    return tabsStore.getPaneActiveTab(effectivePaneId);
+  }
+
   function buildExtensions(): Extension[] {
-    const tab = tabsStore.activeTab;
+    const tab = getActiveTab();
     const fileEntry = projectStore.files.find(f => f.path === tab?.filePath);
     const useWysiwyg = !fileEntry || fileEntry.size < FILE_SIZE_WYSIWYG_LIMIT;
 
@@ -61,7 +77,7 @@
           const text = update.state.doc.toString();
           wordCount = countWords(text);
           headings = extractHeadings(update.state);
-          const t = tabsStore.activeTab;
+          const t = getActiveTab();
           if (t) {
             tabsStore.updateContent(t.id, text);
           }
@@ -83,7 +99,7 @@
   }
 
   async function saveCurrentFile() {
-    const tab = tabsStore.activeTab;
+    const tab = getActiveTab();
     if (!tab || !tab.isDirty) return;
 
     await commands.registerWriteIgnore(tab.filePath);
@@ -96,7 +112,7 @@
   }
 
   function loadTab() {
-    const tab = tabsStore.activeTab;
+    const tab = getActiveTab();
     if (!tab) {
       if (view) {
         view.destroy();
@@ -128,8 +144,8 @@
   }
 
   $effect(() => {
-    // Track activeTab, version, and zen mode reactively
-    const _tab = tabsStore.activeTab;
+    // Track pane's active tab, version, and zen mode reactively
+    const _tab = tabsStore.getPaneActiveTab(effectivePaneId);
     const _version = _tab?.version;
     const _zen = uiStore.zenMode;
     if (editorContainer) {
@@ -141,7 +157,7 @@
     loadTab();
 
     const autoSaveInterval = setInterval(async () => {
-      for (const tab of tabsStore.tabs) {
+      for (const tab of tabsStore.allTabs) {
         if (tab.isDirty) {
           await commands.registerWriteIgnore(tab.filePath);
           const result = await commands.writeFile(tab.filePath, tab.content);
