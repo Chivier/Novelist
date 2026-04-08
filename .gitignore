@@ -6,3 +6,6 @@ Thumbs.db
 .vscode/
 .idea/
 .novelist/workspace.json
+src-tauri/gen/
+research/MiaoYan/
+research/notesnook/
