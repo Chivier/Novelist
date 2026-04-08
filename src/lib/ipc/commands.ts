@@ -23,6 +23,18 @@ export const commands = {
 	registerWriteIgnore: (path: string) => typedError<null, string>(__TAURI_INVOKE("register_write_ignore", { path })),
 	getRecentProjects: () => typedError<RecentProject[], string>(__TAURI_INVOKE("get_recent_projects")),
 	addRecentProject: (path: string, name: string) => typedError<null, string>(__TAURI_INVOKE("add_recent_project", { path, name })),
+	// Scan ~/.novelist/plugins/ and return info for each plugin found.
+	listPlugins: () => typedError<PluginInfo[], string>(__TAURI_INVOKE("list_plugins")),
+	// Load and activate a plugin by its ID.
+	loadPlugin: (pluginId: string) => typedError<null, string>(__TAURI_INVOKE("load_plugin", { pluginId })),
+	// Unload (deactivate) a plugin.
+	unloadPlugin: (pluginId: string) => typedError<null, string>(__TAURI_INVOKE("unload_plugin", { pluginId })),
+	// Get all commands registered by active plugins.
+	getPluginCommands: () => typedError<RegisteredCommandInfo[], string>(__TAURI_INVOKE("get_plugin_commands")),
+	// Execute a registered plugin command. Returns any text replacements the plugin wants to make.
+	invokePluginCommand: (pluginId: string, commandId: string) => typedError<PluginReplacementResult[], string>(__TAURI_INVOKE("invoke_plugin_command", { pluginId, commandId })),
+	// Update the document state that plugins can read.
+	setPluginDocumentState: (content: string, selectionFrom: number, selectionTo: number, wordCount: number) => typedError<null, string>(__TAURI_INVOKE("set_plugin_document_state", { content, selectionFrom, selectionTo, wordCount })),
 };
 
 /* Types */
@@ -35,6 +47,20 @@ export type FileEntry = {
 
 export type OutlineConfig = {
 	order?: string[],
+};
+
+export type PluginInfo = {
+	id: string,
+	name: string,
+	version: string,
+	permissions: string[],
+	active: boolean,
+};
+
+export type PluginReplacementResult = {
+	from: number,
+	to: number,
+	text: string,
 };
 
 export type ProjectConfig = {
@@ -53,6 +79,12 @@ export type RecentProject = {
 	path: string,
 	name: string,
 	last_opened: string,
+};
+
+export type RegisteredCommandInfo = {
+	plugin_id: string,
+	command_id: string,
+	label: string,
 };
 
 export type WritingConfig = {
