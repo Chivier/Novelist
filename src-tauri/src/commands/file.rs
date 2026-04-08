@@ -186,6 +186,186 @@ mod tests {
         assert_eq!(entries[1].name, "a.md");
         assert_eq!(entries[2].name, "b.md");
     }
+
+    #[tokio::test]
+    async fn test_list_directory_shows_novelist_dir() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir(dir.path().join(".novelist")).unwrap();
+        fs::write(dir.path().join(".other_hidden"), "").unwrap();
+        let entries = list_directory(dir.path().to_string_lossy().to_string())
+            .await
+            .unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, ".novelist");
+    }
+
+    #[tokio::test]
+    async fn test_list_directory_not_found() {
+        let result = list_directory("/nonexistent/dir".to_string()).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_list_directory_not_a_dir() {
+        let dir = TempDir::new().unwrap();
+        let file_path = dir.path().join("file.txt");
+        fs::write(&file_path, "").unwrap();
+        let result = list_directory(file_path.to_string_lossy().to_string()).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_create_file() {
+        let dir = TempDir::new().unwrap();
+        let result = create_file(
+            dir.path().to_string_lossy().to_string(),
+            "new.md".to_string(),
+        )
+        .await
+        .unwrap();
+        assert!(result.ends_with("new.md"));
+        assert!(Path::new(&result).exists());
+        assert_eq!(fs::read_to_string(&result).unwrap(), "");
+    }
+
+    #[tokio::test]
+    async fn test_create_file_already_exists() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("exists.md"), "content").unwrap();
+        let result = create_file(
+            dir.path().to_string_lossy().to_string(),
+            "exists.md".to_string(),
+        )
+        .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_create_directory() {
+        let dir = TempDir::new().unwrap();
+        let result = create_directory(
+            dir.path().to_string_lossy().to_string(),
+            "chapters".to_string(),
+        )
+        .await
+        .unwrap();
+        assert!(Path::new(&result).is_dir());
+    }
+
+    #[tokio::test]
+    async fn test_create_directory_already_exists() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir(dir.path().join("chapters")).unwrap();
+        let result = create_directory(
+            dir.path().to_string_lossy().to_string(),
+            "chapters".to_string(),
+        )
+        .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_rename_item() {
+        let dir = TempDir::new().unwrap();
+        let old_path = dir.path().join("old.md");
+        fs::write(&old_path, "content").unwrap();
+        let new_path = rename_item(
+            old_path.to_string_lossy().to_string(),
+            "new.md".to_string(),
+        )
+        .await
+        .unwrap();
+        assert!(!old_path.exists());
+        assert!(Path::new(&new_path).exists());
+        assert_eq!(fs::read_to_string(&new_path).unwrap(), "content");
+    }
+
+    #[tokio::test]
+    async fn test_rename_item_not_found() {
+        let result = rename_item("/nonexistent.md".to_string(), "new.md".to_string()).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_rename_item_target_exists() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.md"), "").unwrap();
+        fs::write(dir.path().join("b.md"), "").unwrap();
+        let result = rename_item(
+            dir.path().join("a.md").to_string_lossy().to_string(),
+            "b.md".to_string(),
+        )
+        .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_delete_file() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("delete_me.md");
+        fs::write(&file, "content").unwrap();
+        delete_item(file.to_string_lossy().to_string())
+            .await
+            .unwrap();
+        assert!(!file.exists());
+    }
+
+    #[tokio::test]
+    async fn test_delete_directory() {
+        let dir = TempDir::new().unwrap();
+        let sub = dir.path().join("subdir");
+        fs::create_dir(&sub).unwrap();
+        fs::write(sub.join("file.md"), "").unwrap();
+        delete_item(sub.to_string_lossy().to_string())
+            .await
+            .unwrap();
+        assert!(!sub.exists());
+    }
+
+    #[tokio::test]
+    async fn test_delete_item_not_found() {
+        let result = delete_item("/nonexistent.md".to_string()).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_write_file_creates_new() {
+        let dir = TempDir::new().unwrap();
+        let file_path = dir.path().join("new.md");
+        write_file(
+            file_path.to_string_lossy().to_string(),
+            "# Title\n\nBody".to_string(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(fs::read_to_string(&file_path).unwrap(), "# Title\n\nBody");
+    }
+
+    #[tokio::test]
+    async fn test_write_file_overwrites() {
+        let dir = TempDir::new().unwrap();
+        let file_path = dir.path().join("existing.md");
+        fs::write(&file_path, "old content").unwrap();
+        write_file(
+            file_path.to_string_lossy().to_string(),
+            "new content".to_string(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(fs::read_to_string(&file_path).unwrap(), "new content");
+    }
+
+    #[tokio::test]
+    async fn test_read_file_utf8_cjk() {
+        let dir = TempDir::new().unwrap();
+        let file_path = dir.path().join("cjk.md");
+        let content = "# 第一章\n\n落霞与孤鹜齐飞，秋水共长天一色。";
+        fs::write(&file_path, content).unwrap();
+        let result = read_file(file_path.to_string_lossy().to_string())
+            .await
+            .unwrap();
+        assert_eq!(result, content);
+    }
 }
 
 #[cfg(test)]

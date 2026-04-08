@@ -7,9 +7,13 @@
   transition: opacity 80ms ease-out;
 }
 
-/* Heading markers collapse to zero width when hidden so heading text
-   aligns with body text.  Small horizontal shift on click is expected
-   (same behaviour as Typora / Miaoyan). */
+/* Heading markers hidden when cursor is outside the heading.
+   Use opacity:0 + zero-size to collapse them without changing the
+   line's measured height.  Keeping the same approach as inline markers
+   (opacity-only) would reserve space and misalign heading text.
+   font-size:0 is safe here because the heading TEXT (not the markers)
+   sets the line height via syntaxHighlighting, so collapsing the
+   markers cannot change the line's block height. */
 .cm-novelist-heading-hidden {
   font-size: 0;
   letter-spacing: 0;
@@ -87,6 +91,62 @@
   border-top: 1px solid var(--novelist-border);
   margin: 16px 0;
   padding: 0;
+}
+
+/* ── GFM Tables ─────────────────────────────────────────── */
+.cm-line:has(.cm-table-sep) {
+  /* fallback for browsers without :has — handled by line deco below */
+}
+
+.cm-novelist-table-line {
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 0.9em;
+}
+
+/* Rendered via CM6 theme — but keep for cascade overrides */
+.cm-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+}
+.cm-content th,
+.cm-content td {
+  border: 1px solid var(--novelist-border);
+  padding: 6px 12px;
+  text-align: left;
+}
+.cm-content th {
+  background: color-mix(in srgb, var(--novelist-accent) 8%, var(--novelist-bg));
+  font-weight: 600;
+}
+
+/* ── Images ─────────────────────────────────────────────── */
+.cm-novelist-image-widget {
+  display: block;
+  max-width: 100%;
+  margin: 8px 0;
+  border-radius: 6px;
+}
+.cm-novelist-image-widget img {
+  max-width: 100%;
+  max-height: 400px;
+  border-radius: 6px;
+  border: 1px solid var(--novelist-border);
+  display: block;
+}
+.cm-novelist-image-alt {
+  color: var(--novelist-text-secondary);
+  font-style: italic;
+  font-size: 0.9em;
+}
+.cm-novelist-image-error {
+  color: var(--novelist-text-secondary);
+  font-style: italic;
+  font-size: 0.85em;
+  padding: 4px 8px;
+  border: 1px dashed var(--novelist-border);
+  border-radius: 4px;
+  display: inline-block;
 }
 
 /* Zen mode — paragraph focus dimming */

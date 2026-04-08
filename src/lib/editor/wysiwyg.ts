@@ -1,13 +1,77 @@
-import { ViewPlugin, Decoration, type DecorationSet, EditorView, type ViewUpdate } from '@codemirror/view';
+import { ViewPlugin, Decoration, type DecorationSet, EditorView, type ViewUpdate, WidgetType } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
 import { type EditorState, type Range } from '@codemirror/state';
+import { invoke } from '@tauri-apps/api/core';
 import { imeComposingField } from './ime-guard';
 
 /**
- * Check if any cursor/selection head falls within the given range.
+ * Widget that renders an inline image preview below the markdown line.
  */
-function cursorInRange(state: EditorState, from: number, to: number): boolean {
-  return state.selection.ranges.some(r => r.head >= from && r.head <= to);
+class ImageWidget extends WidgetType {
+  constructor(private src: string, private alt: string, private projectDir: string) {
+    super();
+  }
+
+  toDOM(): HTMLElement {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'cm-novelist-image-widget';
+
+    const img = document.createElement('img');
+    // Resolve relative paths against project directory
+    if (this.src.startsWith('http://') || this.src.startsWith('https://') || this.src.startsWith('data:')) {
+      img.src = this.src;
+    } else {
+      // Local file — use Tauri's asset protocol or file://
+      const resolved = this.projectDir
+        ? `${this.projectDir}/${this.src}`
+        : this.src;
+      img.src = `https://asset.localhost/${encodeURIComponent(resolved)}`;
+    }
+    img.alt = this.alt;
+    img.loading = 'lazy';
+    img.onerror = () => {
+      wrapper.innerHTML = '';
+      const err = document.createElement('span');
+      err.className = 'cm-novelist-image-error';
+      err.textContent = `Image not found: ${this.src}`;
+      wrapper.appendChild(err);
+    };
+    wrapper.appendChild(img);
+
+    if (this.alt) {
+      const caption = document.createElement('div');
+      caption.className = 'cm-novelist-image-alt';
+      caption.textContent = this.alt;
+      wrapper.appendChild(caption);
+    }
+
+    return wrapper;
+  }
+
+  eq(other: ImageWidget): boolean {
+    return this.src === other.src && this.alt === other.alt;
+  }
+
+  get estimatedHeight(): number { return 200; }
+  ignoreEvent(): boolean { return false; }
+}
+
+/**
+ * Pre-compute cursor positions into a sorted array for fast range checks.
+ * Avoids re-iterating state.selection.ranges on every node.
+ */
+function makeCursorSet(state: EditorState): number[] {
+  return state.selection.ranges.map(r => r.head).sort((a, b) => a - b);
+}
+
+function cursorInRangeFast(heads: number[], from: number, to: number): boolean {
+  // Binary search for first head >= from
+  let lo = 0, hi = heads.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (heads[mid] < from) lo = mid + 1; else hi = mid;
+  }
+  return lo < heads.length && heads[lo] <= to;
 }
 
 /**
@@ -25,23 +89,35 @@ const headingClasses: Record<string, string> = {
 /**
  * Walk the visible syntax tree and build WYSIWYG decorations.
  */
+/** Project directory for resolving relative image paths. Set by Editor.svelte. */
+let _projectDir = '';
+export function setWysiwygProjectDir(dir: string) { _projectDir = dir; }
+
 function buildDecorations(view: EditorView): DecorationSet {
   const { state } = view;
   const decos: Range<Decoration>[] = [];
+  const cursorHeads = makeCursorSet(state);
+  const projectDir = _projectDir;
 
   for (const { from, to } of view.visibleRanges) {
     syntaxTree(state).iterate({
       from,
       to,
       enter(node) {
-        const cursorInside = cursorInRange(state, node.from, node.to);
+        const cursorInside = cursorInRangeFast(cursorHeads, node.from, node.to);
         const markerClass = cursorInside ? 'cm-novelist-marker-visible' : 'cm-novelist-hidden';
 
         // --- ATX Headings ---
+        // NOTE: Heading font-sizes are applied via syntaxHighlighting (setup.ts),
+        // NOT via mark decorations here. This is critical: mark decorations only
+        // cover visible ranges, so heading lines outside the viewport would lose
+        // their font-size → CM6's cached line heights become stale → click-after-
+        // scroll lands on the wrong line.  syntaxHighlighting is driven by the
+        // incremental parser and applies consistently regardless of viewport.
+        //
+        // This block only handles marker hiding (# symbols + trailing space).
         if (node.name in headingClasses) {
-          const headingClass = headingClasses[node.name];
           const headingNode = node.node;
-          // Heading markers collapse to zero-width when hidden (aligns with body text)
           const hMarkerClass = cursorInside ? 'cm-novelist-marker-visible' : 'cm-novelist-heading-hidden';
 
           // Find HeaderMark children (the # symbols and trailing space)
@@ -50,13 +126,11 @@ function buildDecorations(view: EditorView): DecorationSet {
           if (cursor.firstChild()) {
             do {
               if (cursor.name === 'HeaderMark') {
-                // Hide or reveal the marker
                 if (cursor.from < cursor.to) {
                   decos.push(
                     Decoration.mark({ class: hMarkerClass }).range(cursor.from, cursor.to)
                   );
                 }
-                // Track the end of markers to know where content starts
                 if (cursor.to > markerEnd) {
                   markerEnd = cursor.to;
                 }
@@ -64,27 +138,23 @@ function buildDecorations(view: EditorView): DecorationSet {
             } while (cursor.nextSibling());
           }
 
-          // Also hide the space after the last # mark
-          const lineText = state.doc.lineAt(node.from);
+          // Also hide the space between # marks and heading text.
+          // Single sliceString call instead of per-character loop.
           const afterMarker = markerEnd;
-          // Find the first non-space character after the marker
+          const lineEndPos = state.doc.lineAt(node.from).to;
+          const maxSpaces = Math.min(lineEndPos - afterMarker, 4); // headings have at most 1-2 spaces
           let contentStart = afterMarker;
-          const lineEndPos = lineText.to;
-          while (contentStart < lineEndPos && state.doc.sliceString(contentStart, contentStart + 1) === ' ') {
-            contentStart++;
+          if (maxSpaces > 0) {
+            const chunk = state.doc.sliceString(afterMarker, afterMarker + maxSpaces);
+            while (contentStart - afterMarker < chunk.length && chunk[contentStart - afterMarker] === ' ') {
+              contentStart++;
+            }
           }
-          // Hide the space between marker and content
           if (contentStart > afterMarker && afterMarker < lineEndPos) {
             decos.push(
               Decoration.mark({ class: hMarkerClass }).range(afterMarker, contentStart)
             );
           }
-
-          // Apply heading style to the FULL line (including collapsed markers)
-          // so font-size covers the entire line consistently
-          decos.push(
-            Decoration.mark({ class: headingClass }).range(node.from, node.to)
-          );
 
           return false; // Don't descend further
         }
@@ -119,25 +189,24 @@ function buildDecorations(view: EditorView): DecorationSet {
           const cursor = linkNode.cursor();
           let linkTextFrom = -1;
           let linkTextTo = -1;
+          let linkMarkCount = 0;
 
           if (cursor.firstChild()) {
             do {
               if (cursor.name === 'LinkMark') {
-                // Hide [ ] ( ) markers
                 if (cursor.from < cursor.to) {
                   decos.push(
                     Decoration.mark({ class: markerClass }).range(cursor.from, cursor.to)
                   );
                 }
-                // Track the text range: between first [ and first ]
-                const text = state.doc.sliceString(cursor.from, cursor.to);
-                if (text === '[' && linkTextFrom === -1) {
+                // First LinkMark is "[", second is "]" — use count instead of sliceString
+                linkMarkCount++;
+                if (linkMarkCount === 1) {
                   linkTextFrom = cursor.to;
-                } else if (text === ']' && linkTextTo === -1) {
+                } else if (linkMarkCount === 2) {
                   linkTextTo = cursor.from;
                 }
               } else if (cursor.name === 'URL') {
-                // Hide the URL portion
                 if (cursor.from < cursor.to) {
                   decos.push(
                     Decoration.mark({ class: markerClass }).range(cursor.from, cursor.to)
@@ -161,50 +230,40 @@ function buildDecorations(view: EditorView): DecorationSet {
         if (node.name === 'Blockquote') {
           const bqNode = node.node;
 
-          // Apply line decoration to each line in the blockquote
-          const startLine = state.doc.lineAt(node.from).number;
-          const endLine = state.doc.lineAt(node.to).number;
-          for (let i = startLine; i <= endLine; i++) {
-            const line = state.doc.line(i);
-            decos.push(
-              Decoration.line({ class: 'cm-novelist-blockquote-line' }).range(line.from)
-            );
+          // Apply line decorations using iterRange (avoids repeated line-number lookups)
+          const bqDeco = Decoration.line({ class: 'cm-novelist-blockquote-line' });
+          state.doc.iterRange(node.from, node.to, (text, start) => {
+            // iterRange callback fires per text chunk; we need line starts.
+            // Use lineAt on chunk start for accurate line-from positions.
+          });
+          // Fallback: iterate by line number (CM6 caches lineAt results internally)
+          let pos = node.from;
+          while (pos <= node.to) {
+            const line = state.doc.lineAt(pos);
+            decos.push(bqDeco.range(line.from));
+            pos = line.to + 1;
           }
 
-          // Find and hide QuoteMark children
+          // Find and hide QuoteMark children (including nested)
+          // Use a recursive tree cursor walk to find all QuoteMarks
           const cursor = bqNode.cursor();
+          const hideQuoteMark = (c: typeof cursor) => {
+            if (c.from < c.to) {
+              decos.push(Decoration.mark({ class: markerClass }).range(c.from, c.to));
+              // Hide trailing space after > (single sliceString, max 1 char)
+              const after = c.to;
+              if (after < node.to && state.doc.sliceString(after, after + 1) === ' ') {
+                decos.push(Decoration.mark({ class: markerClass }).range(after, after + 1));
+              }
+            }
+          };
           if (cursor.firstChild()) {
             do {
-              if (cursor.name === 'QuoteMark') {
-                if (cursor.from < cursor.to) {
-                  decos.push(
-                    Decoration.mark({ class: markerClass }).range(cursor.from, cursor.to)
-                  );
-                  // Also hide the space after >
-                  const afterMark = cursor.to;
-                  if (afterMark < node.to && state.doc.sliceString(afterMark, afterMark + 1) === ' ') {
-                    decos.push(
-                      Decoration.mark({ class: markerClass }).range(afterMark, afterMark + 1)
-                    );
-                  }
-                }
-              }
-              // Recurse into children to find nested QuoteMarks
+              if (cursor.name === 'QuoteMark') hideQuoteMark(cursor);
+              // One level of nesting for nested blockquotes
               if (cursor.firstChild()) {
                 do {
-                  if (cursor.name === 'QuoteMark') {
-                    if (cursor.from < cursor.to) {
-                      decos.push(
-                        Decoration.mark({ class: markerClass }).range(cursor.from, cursor.to)
-                      );
-                      const afterMark = cursor.to;
-                      if (afterMark < node.to && state.doc.sliceString(afterMark, afterMark + 1) === ' ') {
-                        decos.push(
-                          Decoration.mark({ class: markerClass }).range(afterMark, afterMark + 1)
-                        );
-                      }
-                    }
-                  }
+                  if (cursor.name === 'QuoteMark') hideQuoteMark(cursor);
                 } while (cursor.nextSibling());
                 cursor.parent();
               }
@@ -222,14 +281,13 @@ function buildDecorations(view: EditorView): DecorationSet {
           const cursorIn = cursorInRange(state, node.from, node.to);
           const fenceMarkerClass = cursorIn ? 'cm-novelist-marker-visible' : 'cm-novelist-hidden';
 
-          // Apply line decorations for code block styling
-          const startLine = state.doc.lineAt(node.from).number;
-          const endLine = state.doc.lineAt(node.to).number;
-          for (let i = startLine; i <= endLine; i++) {
-            const line = state.doc.line(i);
-            decos.push(
-              Decoration.line({ class: 'cm-novelist-codeblock-line' }).range(line.from)
-            );
+          // Apply line decorations — walk by position to avoid line-number lookups
+          const codeDeco = Decoration.line({ class: 'cm-novelist-codeblock-line' });
+          let codePos = node.from;
+          while (codePos <= node.to) {
+            const line = state.doc.lineAt(codePos);
+            decos.push(codeDeco.range(line.from));
+            codePos = line.to + 1;
           }
 
           // Hide the fence markers (``` lines) and CodeInfo
@@ -270,7 +328,6 @@ function buildDecorations(view: EditorView): DecorationSet {
 
         // --- TaskMarker (checkbox in list items) ---
         if (node.name === 'TaskMarker') {
-          // TaskMarker is the [ ] or [x] part
           if (node.from < node.to) {
             const text = state.doc.sliceString(node.from, node.to);
             const isChecked = text.includes('x') || text.includes('X');
@@ -282,7 +339,6 @@ function buildDecorations(view: EditorView): DecorationSet {
               Decoration.mark({ class: markerClass }).range(node.from, node.to)
             );
 
-            // When cursor is away, we still show the marker but styled as checkbox
             if (!cursorInside) {
               decos.push(
                 Decoration.mark({ class: checkboxClass }).range(node.from, node.to)
@@ -290,6 +346,62 @@ function buildDecorations(view: EditorView): DecorationSet {
             }
           }
           return false;
+        }
+
+        // --- Image ![alt](url) ---
+        if (node.name === 'Image') {
+          if (!cursorInside) {
+            // Extract alt text and URL from child nodes
+            let altText = '';
+            let imgUrl = '';
+            const imgCursor = node.node.cursor();
+            if (imgCursor.firstChild()) {
+              do {
+                if (imgCursor.name === 'URL') {
+                  imgUrl = state.doc.sliceString(imgCursor.from, imgCursor.to);
+                }
+              } while (imgCursor.nextSibling());
+            }
+            // Alt text is between first [ and ]
+            const lineText = state.doc.lineAt(node.from).text;
+            const altMatch = lineText.match(/!\[([^\]]*)\]/);
+            if (altMatch) altText = altMatch[1];
+
+            // Hide the full markdown syntax
+            decos.push(
+              Decoration.mark({ class: 'cm-novelist-hidden' }).range(node.from, node.to)
+            );
+
+            // Insert image preview widget after the line
+            if (imgUrl) {
+              const line = state.doc.lineAt(node.from);
+              decos.push(
+                Decoration.widget({
+                  widget: new ImageWidget(imgUrl, altText, projectDir),
+                  block: true,
+                }).range(line.to)
+              );
+            }
+          } else {
+            // Cursor inside — show raw syntax with dimmed markers
+            decos.push(
+              Decoration.mark({ class: 'cm-novelist-marker-visible' }).range(node.from, node.to)
+            );
+          }
+          return false;
+        }
+
+        // --- Table (GFM) — apply monospace styling for alignment ---
+        if (node.name === 'Table') {
+          const tableDeco = Decoration.line({ class: 'cm-novelist-table-line' });
+          let tPos = node.from;
+          while (tPos <= node.to) {
+            const line = state.doc.lineAt(tPos);
+            decos.push(tableDeco.range(line.from));
+            tPos = line.to + 1;
+          }
+          // Don't return false — allow inline formatting inside table cells
+          return;
         }
       },
     });
@@ -346,9 +458,11 @@ function handleInlineMarkup(
  */
 class WysiwygPluginClass {
   decorations: DecorationSet;
+  private lastCursorLine = -1;
 
   constructor(view: EditorView) {
     this.decorations = buildDecorations(view);
+    this.lastCursorLine = view.state.doc.lineAt(view.state.selection.main.head).number;
   }
 
   update(update: ViewUpdate) {
@@ -358,14 +472,184 @@ class WysiwygPluginClass {
     // Skip during active IME composition
     if (isComposing) return;
 
-    // Rebuild on any relevant change, including when composition just ended
-    if (update.docChanged || update.viewportChanged || update.selectionSet
-        || (wasComposing && !isComposing)) {
+    // Always rebuild on doc change, viewport change, or composition end
+    if (update.docChanged || update.viewportChanged || (wasComposing && !isComposing)) {
       this.decorations = buildDecorations(update.view);
+      this.lastCursorLine = update.state.doc.lineAt(update.state.selection.main.head).number;
+      return;
+    }
+
+    // For selection-only changes: skip rebuild if cursor stayed on the same line.
+    // Marker visibility only changes when cursor enters/leaves a node, which
+    // typically means moving to a different line. This avoids full tree walks
+    // on every character-level cursor movement within a line.
+    if (update.selectionSet) {
+      const newLine = update.state.doc.lineAt(update.state.selection.main.head).number;
+      if (newLine !== this.lastCursorLine) {
+        this.decorations = buildDecorations(update.view);
+        this.lastCursorLine = newLine;
+      }
     }
   }
 }
 
 export const wysiwygPlugin = ViewPlugin.fromClass(WysiwygPluginClass, {
   decorations: (v) => v.decorations,
+});
+
+/**
+ * Cmd+Click on links to open in browser.
+ * Walks the syntax tree at click position to find a Link node with URL child.
+ */
+export const linkClickPlugin = EditorView.domEventHandlers({
+  click(event: MouseEvent, view: EditorView) {
+    if (!(event.metaKey || event.ctrlKey)) return false;
+    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+    if (pos === null) return false;
+
+    // Walk syntax tree at click position looking for a Link ancestor
+    let url = '';
+    syntaxTree(view.state).iterate({
+      from: pos, to: pos,
+      enter(node) {
+        if (node.name === 'URL') {
+          url = view.state.doc.sliceString(node.from, node.to);
+        }
+        if (node.name === 'Link' || node.name === 'Image') {
+          // Continue into children to find URL
+        }
+      },
+    });
+
+    if (url) {
+      // Ensure it has a protocol
+      if (!/^https?:\/\//i.test(url)) {
+        url = 'https://' + url;
+      }
+      window.open(url, '_blank');
+      event.preventDefault();
+      return true;
+    }
+    return false;
+  },
+});
+
+/**
+ * Image paste handler — when user pastes an image from clipboard,
+ * save it to .novelist/images/ and insert markdown reference.
+ */
+export const imagePastePlugin = EditorView.domEventHandlers({
+  async paste(event: ClipboardEvent, view: EditorView) {
+    const items = event.clipboardData?.items;
+    if (!items || !_projectDir) return false;
+
+    for (const item of items) {
+      if (!item.type.startsWith('image/')) continue;
+
+      event.preventDefault();
+      const file = item.getAsFile();
+      if (!file) continue;
+
+      // Read as data URL for immediate preview, then save to disk via IPC
+      const ext = file.type.split('/')[1] || 'png';
+      const timestamp = Date.now();
+      const filename = `paste-${timestamp}.${ext}`;
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+
+        // Save via Tauri — dynamically import to avoid circular deps
+
+
+        // Ensure .novelist/images/ exists
+        const imagesDir = `${_projectDir}/.novelist/images`;
+        await invoke('create_directory', {
+          parentDir: `${_projectDir}/.novelist`,
+          name: 'images',
+        }).catch(() => {}); // OK if already exists
+
+        // Write the image file
+        const imgPath = `${imagesDir}/${filename}`;
+        await invoke('write_file', {
+          path: imgPath,
+          content: Array.from(bytes).map(b => String.fromCharCode(b)).join(''),
+        });
+
+        // Insert markdown at cursor
+        const pos = view.state.selection.main.head;
+        const mdText = `![pasted image](.novelist/images/${filename})`;
+        view.dispatch({
+          changes: { from: pos, insert: mdText },
+          selection: { anchor: pos + mdText.length },
+        });
+      } catch (err) {
+        console.error('[ImagePaste] Failed:', err);
+        // Fallback: insert as data URL
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result as string;
+          const pos = view.state.selection.main.head;
+          const mdText = `![pasted image](${dataUrl})`;
+          view.dispatch({
+            changes: { from: pos, insert: mdText },
+            selection: { anchor: pos + mdText.length },
+          });
+        };
+        reader.readAsDataURL(file);
+      }
+
+      return true;
+    }
+    return false;
+  },
+
+  async drop(event: DragEvent, view: EditorView) {
+    const files = event.dataTransfer?.files;
+    if (!files || files.length === 0 || !_projectDir) return false;
+
+    const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+    if (imageFiles.length === 0) return false;
+
+    event.preventDefault();
+    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head;
+    let insertText = '';
+
+    for (const file of imageFiles) {
+      const ext = file.name.split('.').pop() || 'png';
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const timestamp = Date.now();
+      const filename = `${timestamp}-${safeName}`;
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+
+
+        const imagesDir = `${_projectDir}/.novelist/images`;
+        await invoke('create_directory', {
+          parentDir: `${_projectDir}/.novelist`,
+          name: 'images',
+        }).catch(() => {});
+
+        const imgPath = `${imagesDir}/${filename}`;
+        await invoke('write_file', {
+          path: imgPath,
+          content: Array.from(bytes).map(b => String.fromCharCode(b)).join(''),
+        });
+
+        insertText += `![${file.name}](.novelist/images/${filename})\n`;
+      } catch (err) {
+        console.error('[ImageDrop] Failed:', err);
+      }
+    }
+
+    if (insertText) {
+      view.dispatch({
+        changes: { from: pos, insert: insertText },
+        selection: { anchor: pos + insertText.length },
+      });
+    }
+    return true;
+  },
 });

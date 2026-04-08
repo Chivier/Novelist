@@ -11,7 +11,6 @@ export const typewriterPlugin = ViewPlugin.fromClass(
 
     update(update: ViewUpdate) {
       if (update.selectionSet || update.docChanged) {
-        // Coalesce multiple updates into a single scroll
         if (this.raf !== null) cancelAnimationFrame(this.raf);
         this.raf = requestAnimationFrame(() => {
           this.raf = null;
@@ -40,27 +39,48 @@ const dimLine = Decoration.line({ class: 'cm-novelist-zen-dim' });
 
 /**
  * Paragraph focus — dims non-active paragraphs.
- * Only processes visible lines to avoid O(n) iteration on large documents.
+ *
+ * Optimizations vs original:
+ * - Caches paragraph boundaries; skips rebuild if cursor is in the same paragraph
+ * - Does NOT call view.requestMeasure() (let CM6 schedule its own layout)
+ * - Only processes visible lines
  */
 export const paragraphFocusPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
     private pending: number | null = null;
+    private lastParaStart = -1;
+    private lastParaEnd = -1;
 
     constructor(view: EditorView) {
       this.decorations = this.buildDim(view);
     }
 
     update(update: ViewUpdate) {
-      if (update.docChanged || update.selectionSet || update.viewportChanged) {
-        // Debounce to avoid per-keystroke full rebuild
-        if (this.pending !== null) cancelAnimationFrame(this.pending);
-        this.pending = requestAnimationFrame(() => {
-          this.pending = null;
-          this.decorations = this.buildDim(update.view);
-          update.view.requestMeasure();
-        });
+      if (update.docChanged || update.viewportChanged) {
+        // Doc or viewport changed — must rebuild
+        this.lastParaStart = -1;
+        this.scheduleBuild(update.view);
+        return;
       }
+
+      if (update.selectionSet) {
+        // Only rebuild if cursor moved to a different paragraph
+        const { state } = update.view;
+        const cursorLine = state.doc.lineAt(state.selection.main.head).number;
+        if (cursorLine >= this.lastParaStart && cursorLine <= this.lastParaEnd) {
+          return; // Still in same paragraph — skip rebuild
+        }
+        this.scheduleBuild(update.view);
+      }
+    }
+
+    private scheduleBuild(view: EditorView) {
+      if (this.pending !== null) cancelAnimationFrame(this.pending);
+      this.pending = requestAnimationFrame(() => {
+        this.pending = null;
+        this.decorations = this.buildDim(view);
+      });
     }
 
     buildDim(view: EditorView): DecorationSet {
@@ -74,14 +94,17 @@ export const paragraphFocusPlugin = ViewPlugin.fromClass(
       while (paraStart > 1 && state.doc.line(paraStart - 1).text.trim() !== '') paraStart--;
       while (paraEnd < state.doc.lines && state.doc.line(paraEnd + 1).text.trim() !== '') paraEnd++;
 
+      // Cache for fast same-paragraph check
+      this.lastParaStart = paraStart;
+      this.lastParaEnd = paraEnd;
+
       // Only dim VISIBLE lines outside the current paragraph
       for (const { from, to } of view.visibleRanges) {
         const startLine = state.doc.lineAt(from).number;
         const endLine = state.doc.lineAt(to).number;
         for (let i = startLine; i <= endLine; i++) {
           if (i < paraStart || i > paraEnd) {
-            const line = state.doc.line(i);
-            decos.push(dimLine.range(line.from));
+            decos.push(dimLine.range(state.doc.line(i).from));
           }
         }
       }

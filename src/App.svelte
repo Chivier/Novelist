@@ -14,6 +14,7 @@
   import ExportDialog from '$lib/components/ExportDialog.svelte';
   import Settings from '$lib/components/Settings.svelte';
   import Welcome from '$lib/components/Welcome.svelte';
+  import DraftNote from '$lib/components/DraftNote.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
   import { projectStore } from '$lib/stores/project.svelte';
   import { tabsStore } from '$lib/stores/tabs.svelte';
@@ -133,6 +134,12 @@
       uiStore.toggleOutline();
       return;
     }
+    // Cmd+Shift+D: toggle draft note
+    if (mod && e.shiftKey && e.key === 'D') {
+      e.preventDefault();
+      uiStore.toggleDraft();
+      return;
+    }
     // F11 or Cmd+Shift+Z: zen mode
     if (e.key === 'F11' || (mod && e.shiftKey && e.key === 'Z')) {
       e.preventDefault();
@@ -226,6 +233,7 @@
     commandRegistry.register({ id: 'toggle-sidebar', label: 'Toggle Sidebar', shortcut: 'Cmd+B', handler: () => uiStore.toggleSidebar() });
     commandRegistry.register({ id: 'toggle-outline', label: 'Toggle Outline', shortcut: 'Cmd+Shift+O', handler: () => uiStore.toggleOutline() });
     commandRegistry.register({ id: 'toggle-zen', label: 'Toggle Zen Mode', shortcut: 'F11', handler: () => uiStore.toggleZen() });
+    commandRegistry.register({ id: 'toggle-draft', label: 'Toggle Draft Note', shortcut: 'Cmd+Shift+D', handler: () => uiStore.toggleDraft() });
     commandRegistry.register({ id: 'command-palette', label: 'Command Palette', shortcut: 'Cmd+Shift+P', handler: () => { paletteOpen = !paletteOpen; } });
     commandRegistry.register({ id: 'toggle-split', label: 'Toggle Split View', shortcut: 'Cmd+\\', handler: () => tabsStore.toggleSplit() });
     commandRegistry.register({ id: 'new-file', label: 'New File', shortcut: 'Cmd+N', handler: () => handleNewFile() });
@@ -361,22 +369,39 @@
       <StatusBar {wordCount} {cursorLine} {cursorCol} />
     </div>
 
-    <!-- Outline panel + toggle tab -->
+    <!-- Right panels (Outline / Draft) + toggle tabs -->
     <div class="shrink-0 flex">
+      <!-- Panel content -->
       {#if uiStore.outlineVisible}
         <div class="overflow-y-auto" style="width: 200px; border-left: 1px solid var(--novelist-border-subtle, var(--novelist-border));">
           <Outline {headings} onNavigate={(from) => activeEditorRef?.scrollToPosition(from)} />
         </div>
       {/if}
-      <!-- Vertical toggle tab -->
-      <button
-        class="flex items-center justify-center cursor-pointer"
-        style="width: 20px; background: transparent; color: var(--novelist-text-tertiary, var(--novelist-text-secondary)); border: none; border-left: 1px solid var(--novelist-border-subtle, var(--novelist-border)); writing-mode: vertical-rl; font-size: 9px; letter-spacing: 0.08em; user-select: none; transition: color 100ms;"
-        onclick={() => uiStore.toggleOutline()}
-        title="Toggle Outline (Cmd+Shift+O)"
-      >
-        OUTLINE
-      </button>
+      {#if uiStore.draftVisible && tabsStore.activeTab}
+        <div style="width: 300px; border-left: 1px solid var(--novelist-border-subtle, var(--novelist-border));">
+          <DraftNote filePath={tabsStore.activeTab.filePath} />
+        </div>
+      {/if}
+      <!-- Vertical toggle tabs -->
+      <div class="flex flex-col" style="border-left: 1px solid var(--novelist-border-subtle, var(--novelist-border));">
+        <button
+          class="flex items-center justify-center cursor-pointer"
+          style="width: 20px; flex: 1; background: {uiStore.outlineVisible ? 'color-mix(in srgb, var(--novelist-accent) 10%, transparent)' : 'transparent'}; color: {uiStore.outlineVisible ? 'var(--novelist-accent)' : 'var(--novelist-text-tertiary, var(--novelist-text-secondary))'}; border: none; writing-mode: vertical-rl; font-size: 9px; letter-spacing: 0.08em; user-select: none; transition: color 100ms, background 100ms;"
+          onclick={() => uiStore.toggleOutline()}
+          title="Toggle Outline (Cmd+Shift+O)"
+        >
+          OUTLINE
+        </button>
+        <div style="height: 1px; background: var(--novelist-border-subtle, var(--novelist-border));"></div>
+        <button
+          class="flex items-center justify-center cursor-pointer"
+          style="width: 20px; flex: 1; background: {uiStore.draftVisible ? 'color-mix(in srgb, var(--novelist-accent) 10%, transparent)' : 'transparent'}; color: {uiStore.draftVisible ? 'var(--novelist-accent)' : 'var(--novelist-text-tertiary, var(--novelist-text-secondary))'}; border: none; writing-mode: vertical-rl; font-size: 9px; letter-spacing: 0.08em; user-select: none; transition: color 100ms, background 100ms;"
+          onclick={() => uiStore.toggleDraft()}
+          title="Toggle Draft Note (Cmd+Shift+D)"
+        >
+          DRAFT
+        </button>
+      </div>
     </div>
   </div>
 {/if}

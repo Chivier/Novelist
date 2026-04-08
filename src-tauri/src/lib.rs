@@ -5,6 +5,7 @@ mod services;
 
 pub use error::AppError;
 
+use commands::draft::{delete_draft_note, has_draft_note, read_draft_note, write_draft_note};
 use commands::export::{check_pandoc, export_project};
 use commands::file::{
     create_directory, create_file, delete_item, list_directory, read_file, rename_item, write_file,
@@ -66,6 +67,10 @@ pub fn run() {
         rope_save,
         rope_close,
         rope_line_to_char,
+        read_draft_note,
+        write_draft_note,
+        delete_draft_note,
+        has_draft_note,
     ]);
 
     #[cfg(debug_assertions)]

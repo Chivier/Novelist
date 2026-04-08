@@ -28,24 +28,9 @@
   --novelist-sidebar-active: color-mix(in srgb, var(--novelist-accent) 14%, var(--novelist-bg-secondary));
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --novelist-bg: #1c1c1e;
-    --novelist-bg-secondary: #232326;
-    --novelist-bg-tertiary: #2c2c2f;
-    --novelist-text: #d4d4d4;
-    --novelist-text-secondary: #808080;
-    --novelist-text-tertiary: #5a5a5a;
-    --novelist-accent: #7ba7c2;
-    --novelist-border: #2e2e31;
-    --novelist-border-subtle: #272729;
-    --novelist-heading-color: #e8e8e8;
-    --novelist-code-bg: #28282b;
-    --novelist-blockquote-border: #3e3e42;
-    --novelist-sidebar-hover: color-mix(in srgb, var(--novelist-accent) 8%, var(--novelist-bg-secondary));
-    --novelist-sidebar-active: color-mix(in srgb, var(--novelist-accent) 15%, var(--novelist-bg-secondary));
-  }
-}
+/* Dark mode variables are now handled by the theme system (src/lib/themes.ts).
+   The :root defaults above serve as the Light theme fallback.
+   Theme JS applies overrides on load, including for "system" mode. */
 
 html, body, #app {
   height: 100%;

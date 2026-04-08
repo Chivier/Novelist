@@ -228,3 +228,262 @@ pub fn rope_line_to_char(
     let clamped = line.min(doc.rope.len_lines().saturating_sub(1));
     Ok(doc.rope.line_to_char(clamped))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn make_state_with_doc(content: &str) -> (RopeDocumentState, String) {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("test.md");
+        std::fs::write(&path, content).unwrap();
+        let file_id = path.to_string_lossy().to_string();
+
+        let state = RopeDocumentState::new();
+        let rope = Rope::from_str(content);
+        state.docs.lock().unwrap().insert(
+            file_id.clone(),
+            RopeDocument {
+                rope,
+                file_path: path,
+                dirty: false,
+            },
+        );
+        (state, file_id)
+    }
+
+    #[test]
+    fn test_state_new_is_empty() {
+        let state = RopeDocumentState::new();
+        assert!(state.docs.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_open_and_metadata() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("test.md");
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            for i in 0..100 {
+                writeln!(f, "Line {}", i).unwrap();
+            }
+        }
+
+        let state = RopeDocumentState::new();
+        let rope = Rope::from_reader(
+            std::io::BufReader::new(std::fs::File::open(&path).unwrap()),
+        )
+        .unwrap();
+        let total_lines = rope.len_lines();
+        let total_bytes = rope.len_bytes();
+        let file_id = path.to_string_lossy().to_string();
+
+        state.docs.lock().unwrap().insert(
+            file_id.clone(),
+            RopeDocument {
+                rope,
+                file_path: path,
+                dirty: false,
+            },
+        );
+
+        assert_eq!(total_lines, 101); // 100 lines + trailing newline
+        assert!(total_bytes > 0);
+        assert!(state.docs.lock().unwrap().contains_key(&file_id));
+    }
+
+    #[test]
+    fn test_get_lines_basic() {
+        let content = "line0\nline1\nline2\nline3\nline4\n";
+        let (state, file_id) = make_state_with_doc(content);
+
+        let docs = state.docs.lock().unwrap();
+        let doc = docs.get(&file_id).unwrap();
+        let sc = doc.rope.line_to_char(1);
+        let ec = doc.rope.line_to_char(3);
+        let text = doc.rope.slice(sc..ec).to_string();
+        assert_eq!(text, "line1\nline2\n");
+    }
+
+    #[test]
+    fn test_get_lines_clamped() {
+        let content = "a\nb\nc\n";
+        let (state, file_id) = make_state_with_doc(content);
+
+        let docs = state.docs.lock().unwrap();
+        let doc = docs.get(&file_id).unwrap();
+        let total = doc.rope.len_lines();
+        // Request beyond bounds
+        let start = 0.min(total.saturating_sub(1));
+        let end = 999.min(total);
+        let sc = doc.rope.line_to_char(start);
+        let ec = doc.rope.line_to_char(end);
+        let text = doc.rope.slice(sc..ec).to_string();
+        assert_eq!(text, content);
+    }
+
+    #[test]
+    fn test_apply_edit_insert() {
+        let content = "Hello World";
+        let (state, file_id) = make_state_with_doc(content);
+
+        {
+            let mut docs = state.docs.lock().unwrap();
+            let doc = docs.get_mut(&file_id).unwrap();
+            // Insert ", Beautiful" at position 5
+            doc.rope.insert(5, ", Beautiful");
+            doc.dirty = true;
+        }
+
+        let docs = state.docs.lock().unwrap();
+        let doc = docs.get(&file_id).unwrap();
+        assert_eq!(doc.rope.to_string(), "Hello, Beautiful World");
+        assert!(doc.dirty);
+    }
+
+    #[test]
+    fn test_apply_edit_delete() {
+        let content = "Hello Beautiful World";
+        let (state, file_id) = make_state_with_doc(content);
+
+        {
+            let mut docs = state.docs.lock().unwrap();
+            let doc = docs.get_mut(&file_id).unwrap();
+            // Remove " Beautiful" (chars 5..15)
+            doc.rope.remove(5..15);
+        }
+
+        let docs = state.docs.lock().unwrap();
+        let doc = docs.get(&file_id).unwrap();
+        assert_eq!(doc.rope.to_string(), "Hello World");
+    }
+
+    #[test]
+    fn test_apply_edit_replace() {
+        let content = "Hello World";
+        let (state, file_id) = make_state_with_doc(content);
+
+        {
+            let mut docs = state.docs.lock().unwrap();
+            let doc = docs.get_mut(&file_id).unwrap();
+            // Replace "World" (chars 6..11) with "Rust"
+            doc.rope.remove(6..11);
+            doc.rope.insert(6, "Rust");
+        }
+
+        let docs = state.docs.lock().unwrap();
+        let doc = docs.get(&file_id).unwrap();
+        assert_eq!(doc.rope.to_string(), "Hello Rust");
+    }
+
+    #[test]
+    fn test_close_removes_document() {
+        let content = "test";
+        let (state, file_id) = make_state_with_doc(content);
+
+        assert!(state.docs.lock().unwrap().contains_key(&file_id));
+        state.docs.lock().unwrap().remove(&file_id);
+        assert!(!state.docs.lock().unwrap().contains_key(&file_id));
+    }
+
+    #[test]
+    fn test_line_to_char_basic() {
+        let content = "abc\ndef\nghi\n";
+        let (state, file_id) = make_state_with_doc(content);
+
+        let docs = state.docs.lock().unwrap();
+        let doc = docs.get(&file_id).unwrap();
+        assert_eq!(doc.rope.line_to_char(0), 0);
+        assert_eq!(doc.rope.line_to_char(1), 4); // "abc\n" = 4 chars
+        assert_eq!(doc.rope.line_to_char(2), 8); // "abc\ndef\n" = 8 chars
+    }
+
+    #[test]
+    fn test_cjk_content() {
+        let content = "第一章\n落霞与孤鹜齐飞\n秋水共长天一色\n";
+        let (state, file_id) = make_state_with_doc(content);
+
+        let docs = state.docs.lock().unwrap();
+        let doc = docs.get(&file_id).unwrap();
+        assert_eq!(doc.rope.len_lines(), 4); // 3 lines + trailing newline
+        let line1 = doc.rope.line(1).to_string();
+        assert_eq!(line1, "落霞与孤鹜齐飞\n");
+    }
+
+    #[test]
+    fn test_multiple_documents() {
+        let state = RopeDocumentState::new();
+
+        let doc1 = RopeDocument {
+            rope: Rope::from_str("doc1"),
+            file_path: PathBuf::from("/tmp/doc1.md"),
+            dirty: false,
+        };
+        let doc2 = RopeDocument {
+            rope: Rope::from_str("doc2"),
+            file_path: PathBuf::from("/tmp/doc2.md"),
+            dirty: false,
+        };
+
+        {
+            let mut docs = state.docs.lock().unwrap();
+            docs.insert("doc1".to_string(), doc1);
+            docs.insert("doc2".to_string(), doc2);
+        }
+
+        let docs = state.docs.lock().unwrap();
+        assert_eq!(docs.len(), 2);
+        assert_eq!(docs.get("doc1").unwrap().rope.to_string(), "doc1");
+        assert_eq!(docs.get("doc2").unwrap().rope.to_string(), "doc2");
+    }
+
+    #[test]
+    fn test_save_roundtrip() {
+        let content = "# Title\n\nParagraph one.\n\nParagraph two.\n";
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("save_test.md");
+        std::fs::write(&path, content).unwrap();
+
+        let rope = Rope::from_reader(
+            std::io::BufReader::new(std::fs::File::open(&path).unwrap()),
+        )
+        .unwrap();
+
+        // Modify
+        let mut rope = rope;
+        rope.insert(0, "PREPEND\n");
+
+        // Save
+        let saved = rope.to_string();
+        let temp_path = format!("{}.novelist-tmp", path.display());
+        std::fs::write(&temp_path, &saved).unwrap();
+        std::fs::rename(&temp_path, &path).unwrap();
+
+        // Verify
+        let reloaded = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(reloaded, saved);
+        assert!(reloaded.starts_with("PREPEND\n# Title\n"));
+    }
+
+    #[test]
+    fn test_viewport_reads_dont_mutate() {
+        let content = "line0\nline1\nline2\nline3\nline4\n";
+        let (state, file_id) = make_state_with_doc(content);
+
+        let docs = state.docs.lock().unwrap();
+        let doc = docs.get(&file_id).unwrap();
+
+        let hash_before = blake3::hash(doc.rope.to_string().as_bytes());
+
+        // Multiple viewport reads
+        for start in [0, 1, 2, 3] {
+            let sc = doc.rope.line_to_char(start);
+            let ec = doc.rope.line_to_char((start + 2).min(doc.rope.len_lines()));
+            let _ = doc.rope.slice(sc..ec).to_string();
+        }
+
+        let hash_after = blake3::hash(doc.rope.to_string().as_bytes());
+        assert_eq!(hash_before, hash_after);
+    }
+}

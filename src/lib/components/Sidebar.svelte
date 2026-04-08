@@ -247,11 +247,11 @@
     {#if projectStore.isOpen}
       <span class="sidebar-project-name">{projectStore.name}</span>
       <div class="sidebar-actions">
-        <button class="sidebar-icon-btn" onclick={startCreateFile} title="New File">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v10M3 8h10"/></svg>
+        <button class="sidebar-icon-btn" onclick={startCreateFile} title="New File (Cmd+N)">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>
         </button>
         <button class="sidebar-icon-btn" onclick={startCreateFolder} title="New Folder">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h4l2 2h6v7H2z"/><path d="M8 8v4M6 10h4"/></svg>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 5h4l2 2h6v6H2z"/></svg>
         </button>
       </div>
     {:else}
@@ -261,7 +261,6 @@
 
   {#if projectStore.isOpen}
     <div class="sidebar-files">
-      <!-- Inline new item input -->
       {#if creatingFile || creatingFolder}
         <div class="sidebar-input-row">
           <input
@@ -287,10 +286,7 @@
             />
           </div>
         {:else if entry.is_dir}
-          <div
-            class="sidebar-item sidebar-item-dir"
-            oncontextmenu={(e) => handleContextMenu(e, entry)}
-          >
+          <div class="sidebar-item sidebar-item-dir" oncontextmenu={(e) => handleContextMenu(e, entry)}>
             <svg class="sidebar-item-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 4h4l2 2h6v7H2z"/></svg>
             <span class="sidebar-item-name">{entry.name}</span>
           </div>
@@ -306,15 +302,21 @@
             <span class="sidebar-item-ext">.{entry.name.split('.').pop()}</span>
           </button>
         {:else}
-          <div
-            class="sidebar-item sidebar-item-disabled"
-            oncontextmenu={(e) => handleContextMenu(e, entry)}
-          >
+          <div class="sidebar-item sidebar-item-disabled" oncontextmenu={(e) => handleContextMenu(e, entry)}>
             <svg class="sidebar-item-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M4 2h5l3 3v9H4z"/><path d="M9 2v3h3"/></svg>
             <span class="sidebar-item-name">{entry.name}</span>
           </div>
         {/if}
       {/each}
+    </div>
+
+    <!-- Bottom bar: project switch -->
+    <div class="sidebar-bottom">
+      <button class="sidebar-switch-btn" onclick={openDirectory} title="Switch Project">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 4h4l2 2h6v7H2z"/></svg>
+        <span>{projectStore.dirPath?.split('/').pop() ?? 'Project'}</span>
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: auto; opacity: 0.5;"><path d="M4 6l4 4 4-4"/></svg>
+      </button>
     </div>
   {:else}
     <div class="sidebar-empty">
@@ -376,18 +378,18 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
+    width: 22px;
+    height: 22px;
     border: none;
-    border-radius: 5px;
+    border-radius: 4px;
     background: transparent;
-    color: var(--novelist-text-secondary);
+    color: var(--novelist-text-tertiary, var(--novelist-text-secondary));
     cursor: pointer;
     transition: background 100ms, color 100ms;
   }
   .sidebar-icon-btn:hover {
     background: var(--novelist-sidebar-hover);
-    color: var(--novelist-text);
+    color: var(--novelist-accent);
   }
 
   .sidebar-open-btn {
@@ -532,5 +534,38 @@
   .context-menu-item-danger:hover {
     background: #e5484d18;
     color: #e5484d;
+  }
+
+  /* Bottom project switch bar */
+  .sidebar-bottom {
+    padding: 6px 8px;
+    border-top: 1px solid var(--novelist-border-subtle, var(--novelist-border));
+    -webkit-app-region: no-drag;
+  }
+
+  .sidebar-switch-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 6px 8px;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--novelist-text-secondary);
+    font-size: 0.72rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background 80ms;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .sidebar-switch-btn span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sidebar-switch-btn:hover {
+    background: var(--novelist-sidebar-hover);
+    color: var(--novelist-text);
   }
 </style>

@@ -22,4 +22,7 @@ export default defineConfig(async () => ({
       : undefined,
     watch: { ignored: ["**/src-tauri/**"] },
   },
+  test: {
+    include: ["src/**/*.test.ts"],
+  },
 }));

@@ -1,3 +1,5 @@
+import { loadThemeId, saveThemeId, resolveTheme, applyTheme, type Theme } from '$lib/themes';
+
 const SETTINGS_KEY = 'novelist-settings';
 
 interface EditorSettings {
@@ -29,15 +31,28 @@ function saveSettings(s: EditorSettings) {
 class UiStore {
   sidebarVisible = $state(true);
   outlineVisible = $state(false);
+  draftVisible = $state(false);
   sidebarWidth = $state(240);
   zenMode = $state(false);
   settingsOpen = $state(false);
   editorSettings = $state<EditorSettings>(loadSettings());
 
+  // Theme
+  themeId = $state(loadThemeId());
+  currentTheme = $state<Theme>(resolveTheme(loadThemeId()));
+
   toggleSidebar() { this.sidebarVisible = !this.sidebarVisible; }
   toggleOutline() { this.outlineVisible = !this.outlineVisible; }
+  toggleDraft() { this.draftVisible = !this.draftVisible; }
   toggleZen() { this.zenMode = !this.zenMode; }
   toggleSettings() { this.settingsOpen = !this.settingsOpen; }
+
+  setTheme(id: string) {
+    this.themeId = id;
+    this.currentTheme = resolveTheme(id);
+    saveThemeId(id);
+    applyTheme(this.currentTheme);
+  }
 
   updateEditorSettings(partial: Partial<EditorSettings>) {
     this.editorSettings = { ...this.editorSettings, ...partial };
@@ -56,7 +71,16 @@ class UiStore {
 
 export const uiStore = new UiStore();
 
-// Apply saved settings on load
+// Apply saved settings and theme on load
 if (typeof document !== 'undefined') {
   uiStore.applyEditorSettings();
+  applyTheme(uiStore.currentTheme);
+
+  // Listen for system theme changes when using "system" theme
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (uiStore.themeId === 'system') {
+      uiStore.currentTheme = resolveTheme('system');
+      applyTheme(uiStore.currentTheme);
+    }
+  });
 }

@@ -8,14 +8,14 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 /** Commands */
 export const commands = {
 	readFile: (path: string) => typedError<string, string>(__TAURI_INVOKE("read_file", { path })),
-	checkPandoc: () => typedError<PandocStatus, string>(__TAURI_INVOKE("check_pandoc")),
-	exportProject: (inputFiles: string[], outputPath: string, format: string, extraArgs: string[]) => typedError<string, string>(__TAURI_INVOKE("export_project", { inputFiles, outputPath, format, extraArgs })),
 	writeFile: (path: string, content: string) => typedError<null, string>(__TAURI_INVOKE("write_file", { path, content })),
 	listDirectory: (path: string) => typedError<FileEntry[], string>(__TAURI_INVOKE("list_directory", { path })),
 	createFile: (parentDir: string, filename: string) => typedError<string, string>(__TAURI_INVOKE("create_file", { parentDir, filename })),
 	createDirectory: (parentDir: string, name: string) => typedError<string, string>(__TAURI_INVOKE("create_directory", { parentDir, name })),
 	renameItem: (oldPath: string, newName: string) => typedError<string, string>(__TAURI_INVOKE("rename_item", { oldPath, newName })),
 	deleteItem: (path: string) => typedError<null, string>(__TAURI_INVOKE("delete_item", { path })),
+	checkPandoc: () => typedError<PandocStatus, string>(__TAURI_INVOKE("check_pandoc")),
+	exportProject: (inputFiles: string[], outputPath: string, format: string, extraArgs: string[]) => typedError<string, string>(__TAURI_INVOKE("export_project", { inputFiles, outputPath, format, extraArgs })),
 	detectProject: (dirPath: string) => typedError<{
 	project: ProjectMeta,
 	outline?: OutlineConfig,
@@ -41,21 +41,32 @@ export const commands = {
 	invokePluginCommand: (pluginId: string, commandId: string) => typedError<PluginReplacementResult[], string>(__TAURI_INVOKE("invoke_plugin_command", { pluginId, commandId })),
 	// Update the document state that plugins can read.
 	setPluginDocumentState: (content: string, selectionFrom: number, selectionTo: number, wordCount: number) => typedError<null, string>(__TAURI_INVOKE("set_plugin_document_state", { content, selectionFrom, selectionTo, wordCount })),
-	// Rope document commands for large file viewport editing
+	// Open a large file into a Rope. Returns metadata.
 	ropeOpen: (path: string) => typedError<RopeDocumentMeta, string>(__TAURI_INVOKE("rope_open", { path })),
+	/**
+	 *  Get text for a range of lines. Lines are 0-indexed.
+	 *  Returns the text and actual line range (clamped to document bounds).
+	 */
 	ropeGetLines: (fileId: string, startLine: number, endLine: number) => typedError<ViewportContent, string>(__TAURI_INVOKE("rope_get_lines", { fileId, startLine, endLine })),
+	/**
+	 *  Apply an edit to the Rope at character offsets.
+	 *  `from` and `to` are character (not byte) offsets relative to the full document.
+	 *  `insert` is the replacement text (empty string = deletion).
+	 */
 	ropeApplyEdit: (fileId: string, fromChar: number, toChar: number, insert: string) => typedError<number, string>(__TAURI_INVOKE("rope_apply_edit", { fileId, fromChar, toChar, insert })),
+	// Save the Rope to disk atomically.
 	ropeSave: (fileId: string) => typedError<null, string>(__TAURI_INVOKE("rope_save", { fileId })),
+	// Close a Rope document and release memory.
 	ropeClose: (fileId: string) => typedError<null, string>(__TAURI_INVOKE("rope_close", { fileId })),
+	// Get the character offset for a given line number (0-indexed).
 	ropeLineToChar: (fileId: string, line: number) => typedError<number, string>(__TAURI_INVOKE("rope_line_to_char", { fileId, line })),
+	readDraftNote: (projectDir: string, filePath: string) => typedError<string | null, string>(__TAURI_INVOKE("read_draft_note", { projectDir, filePath })),
+	writeDraftNote: (projectDir: string, filePath: string, content: string) => typedError<null, string>(__TAURI_INVOKE("write_draft_note", { projectDir, filePath, content })),
+	deleteDraftNote: (projectDir: string, filePath: string) => typedError<null, string>(__TAURI_INVOKE("delete_draft_note", { projectDir, filePath })),
+	hasDraftNote: (projectDir: string, filePath: string) => typedError<boolean, string>(__TAURI_INVOKE("has_draft_note", { projectDir, filePath })),
 };
 
 /* Types */
-export type PandocStatus = {
-	available: boolean,
-	version: string | null,
-};
-
 export type FileEntry = {
 	name: string,
 	path: string,
@@ -65,6 +76,11 @@ export type FileEntry = {
 
 export type OutlineConfig = {
 	order?: string[],
+};
+
+export type PandocStatus = {
+	available: boolean,
+	version: string | null,
 };
 
 export type PluginInfo = {
@@ -112,9 +128,13 @@ export type RopeDocumentMeta = {
 };
 
 export type ViewportContent = {
+	// The text content for the requested line range
 	text: string,
+	// Actual start line (0-indexed)
 	start_line: number,
+	// Actual end line (exclusive, 0-indexed)
 	end_line: number,
+	// Total lines in document (can change after edits)
 	total_lines: number,
 };
 

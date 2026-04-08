@@ -369,3 +369,213 @@ impl PluginHostState {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::plugin::{PluginManifest, PluginMeta};
+
+    fn make_manifest(id: &str, permissions: Vec<&str>) -> PluginManifest {
+        PluginManifest {
+            plugin: PluginMeta {
+                id: id.to_string(),
+                name: format!("Test Plugin {}", id),
+                version: "1.0.0".to_string(),
+                permissions: permissions.into_iter().map(|s| s.to_string()).collect(),
+            },
+        }
+    }
+
+    #[test]
+    fn test_plugin_host_new() {
+        let host = PluginHostState::new();
+        assert!(host.list_loaded_plugins().is_empty());
+        assert!(host.get_registered_commands().is_empty());
+    }
+
+    #[test]
+    fn test_set_document_state() {
+        let host = PluginHostState::new();
+        host.set_document_state("Hello World".to_string(), 0, 5, 2);
+        // Verify by loading a plugin that reads it
+        let manifest = make_manifest("reader", vec!["read"]);
+        let source = r#"
+            var doc = novelist.getDocument();
+            var sel = novelist.getSelection();
+            var wc = novelist.getWordCount();
+            globalThis.__test_doc = doc;
+            globalThis.__test_sel_from = sel.from;
+            globalThis.__test_sel_to = sel.to;
+            globalThis.__test_wc = wc;
+        "#;
+        host.load_plugin(manifest, source).unwrap();
+        // Plugin loaded successfully means document state was accessible
+        let plugins = host.list_loaded_plugins();
+        assert_eq!(plugins.len(), 1);
+        assert_eq!(plugins[0].id, "reader");
+    }
+
+    #[test]
+    fn test_load_plugin_basic() {
+        let host = PluginHostState::new();
+        let manifest = make_manifest("hello", vec!["read"]);
+        let source = r#"
+            novelist.registerCommand("greet", "Greet", function() {});
+        "#;
+        host.load_plugin(manifest, source).unwrap();
+
+        let plugins = host.list_loaded_plugins();
+        assert_eq!(plugins.len(), 1);
+        assert_eq!(plugins[0].id, "hello");
+        assert_eq!(plugins[0].name, "Test Plugin hello");
+        assert!(plugins[0].active);
+
+        let commands = host.get_registered_commands();
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].plugin_id, "hello");
+        assert_eq!(commands[0].command_id, "greet");
+        assert_eq!(commands[0].label, "Greet");
+    }
+
+    #[test]
+    fn test_load_plugin_multiple_commands() {
+        let host = PluginHostState::new();
+        let manifest = make_manifest("multi", vec!["read"]);
+        let source = r#"
+            novelist.registerCommand("cmd1", "Command 1", function() {});
+            novelist.registerCommand("cmd2", "Command 2", function() {});
+            novelist.registerCommand("cmd3", "Command 3", function() {});
+        "#;
+        host.load_plugin(manifest, source).unwrap();
+
+        let commands = host.get_registered_commands();
+        assert_eq!(commands.len(), 3);
+    }
+
+    #[test]
+    fn test_load_plugin_eval_error() {
+        let host = PluginHostState::new();
+        let manifest = make_manifest("bad", vec!["read"]);
+        let source = "this is not valid javascript {{{";
+        let result = host.load_plugin(manifest, source);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_unload_plugin() {
+        let host = PluginHostState::new();
+        let manifest = make_manifest("temp", vec!["read"]);
+        let source = r#"
+            novelist.registerCommand("cmd1", "Cmd", function() {});
+        "#;
+        host.load_plugin(manifest, source).unwrap();
+        assert_eq!(host.list_loaded_plugins().len(), 1);
+        assert_eq!(host.get_registered_commands().len(), 1);
+
+        host.unload_plugin("temp").unwrap();
+        assert_eq!(host.list_loaded_plugins().len(), 0);
+        assert_eq!(host.get_registered_commands().len(), 0);
+    }
+
+    #[test]
+    fn test_invoke_command_read_only() {
+        let host = PluginHostState::new();
+        host.set_document_state("test content".to_string(), 0, 4, 2);
+        let manifest = make_manifest("readonly", vec!["read"]);
+        let source = r#"
+            novelist.registerCommand("noop", "No-op", function() {
+                var doc = novelist.getDocument();
+            });
+        "#;
+        host.load_plugin(manifest, source).unwrap();
+
+        let replacements = host.invoke_command("readonly", "noop").unwrap();
+        assert!(replacements.is_empty());
+    }
+
+    #[test]
+    fn test_invoke_command_with_write() {
+        let host = PluginHostState::new();
+        host.set_document_state("Hello World".to_string(), 0, 5, 2);
+        let manifest = make_manifest("writer", vec!["write"]);
+        let source = r#"
+            novelist.registerCommand("upper", "Uppercase", function() {
+                novelist.replaceSelection("HELLO");
+            });
+        "#;
+        host.load_plugin(manifest, source).unwrap();
+
+        let replacements = host.invoke_command("writer", "upper").unwrap();
+        assert_eq!(replacements.len(), 1);
+        assert_eq!(replacements[0].from, 0);
+        assert_eq!(replacements[0].to, 5);
+        assert_eq!(replacements[0].text, "HELLO");
+    }
+
+    #[test]
+    fn test_invoke_command_replace_range() {
+        let host = PluginHostState::new();
+        host.set_document_state("Hello World".to_string(), 0, 0, 2);
+        let manifest = make_manifest("ranger", vec!["write"]);
+        let source = r#"
+            novelist.registerCommand("fix", "Fix", function() {
+                novelist.replaceRange(6, 11, "Rust");
+            });
+        "#;
+        host.load_plugin(manifest, source).unwrap();
+
+        let replacements = host.invoke_command("ranger", "fix").unwrap();
+        assert_eq!(replacements.len(), 1);
+        assert_eq!(replacements[0].from, 6);
+        assert_eq!(replacements[0].to, 11);
+        assert_eq!(replacements[0].text, "Rust");
+    }
+
+    #[test]
+    fn test_invoke_nonexistent_plugin() {
+        let host = PluginHostState::new();
+        let result = host.invoke_command("nonexistent", "cmd");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_multiple_plugins() {
+        let host = PluginHostState::new();
+
+        let m1 = make_manifest("plugin1", vec!["read"]);
+        let s1 = r#"novelist.registerCommand("a", "A", function() {});"#;
+        host.load_plugin(m1, s1).unwrap();
+
+        let m2 = make_manifest("plugin2", vec!["read"]);
+        let s2 = r#"novelist.registerCommand("b", "B", function() {});"#;
+        host.load_plugin(m2, s2).unwrap();
+
+        assert_eq!(host.list_loaded_plugins().len(), 2);
+        assert_eq!(host.get_registered_commands().len(), 2);
+
+        // Unload one
+        host.unload_plugin("plugin1").unwrap();
+        assert_eq!(host.list_loaded_plugins().len(), 1);
+        assert_eq!(host.get_registered_commands().len(), 1);
+        assert_eq!(host.get_registered_commands()[0].command_id, "b");
+    }
+
+    #[test]
+    fn test_reload_plugin_replaces_commands() {
+        let host = PluginHostState::new();
+
+        let m1 = make_manifest("reload_me", vec!["read"]);
+        let s1 = r#"novelist.registerCommand("old_cmd", "Old", function() {});"#;
+        host.load_plugin(m1, s1).unwrap();
+        assert_eq!(host.get_registered_commands()[0].command_id, "old_cmd");
+
+        // Reload with new source
+        let m2 = make_manifest("reload_me", vec!["read"]);
+        let s2 = r#"novelist.registerCommand("new_cmd", "New", function() {});"#;
+        host.load_plugin(m2, s2).unwrap();
+
+        let cmds = host.get_registered_commands();
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].command_id, "new_cmd");
+    }
+}

@@ -3,6 +3,8 @@
   import { save } from '@tauri-apps/plugin-dialog';
   import { commands } from '$lib/ipc/commands';
   import { projectStore } from '$lib/stores/project.svelte';
+  import { uiStore } from '$lib/stores/ui.svelte';
+  import { themeToCSS } from '$lib/themes';
 
   interface Props { onClose: () => void; }
   let { onClose }: Props = $props();
@@ -10,6 +12,7 @@
   let pandocAvailable = $state(false);
   let pandocVersion = $state('');
   let format = $state('html');
+  let includeTheme = $state(true);
   let status = $state<'idle' | 'exporting' | 'success' | 'error'>('idle');
   let message = $state('');
 
@@ -50,7 +53,30 @@
 
     status = 'exporting';
     message = '';
-    const result = await commands.exportProject(files, outputPath, format, []);
+
+    // Build extra args — for HTML, inject theme CSS via pandoc --css
+    const extraArgs: string[] = [];
+    if (format === 'html' && includeTheme) {
+      // Write a temporary CSS file with the current theme
+      const themeCSS = themeToCSS(uiStore.currentTheme);
+      const fullCSS = `${themeCSS}
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; background: var(--novelist-bg); color: var(--novelist-text); line-height: 1.7; }
+h1, h2, h3, h4, h5, h6 { color: var(--novelist-heading-color); }
+a { color: var(--novelist-link-color); }
+code { background: var(--novelist-code-bg); padding: 2px 5px; border-radius: 3px; font-size: 0.9em; }
+pre { background: var(--novelist-code-bg); padding: 16px; border-radius: 6px; overflow-x: auto; }
+blockquote { border-left: 3px solid var(--novelist-blockquote-border); padding-left: 16px; color: var(--novelist-text-secondary); font-style: italic; }
+table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+th, td { border: 1px solid var(--novelist-border); padding: 8px 12px; text-align: left; }
+th { background: var(--novelist-bg-secondary); font-weight: 600; }
+hr { border: none; border-top: 1px solid var(--novelist-border); margin: 24px 0; }
+img { max-width: 100%; border-radius: 6px; }`;
+      const cssPath = '/tmp/novelist-export-theme.css';
+      await commands.writeFile(cssPath, fullCSS);
+      extraArgs.push('--css', cssPath);
+    }
+
+    const result = await commands.exportProject(files, outputPath, format, extraArgs);
     if (result.status === 'ok') {
       status = 'success';
       message = result.data;
@@ -133,6 +159,14 @@
         {/each}
       </div>
     </div>
+
+    <!-- Theme option (HTML/EPUB) -->
+    {#if format === 'html' || format === 'epub'}
+      <label class="flex items-center gap-2 mb-4 text-sm cursor-pointer" style="color: var(--novelist-text-secondary);">
+        <input type="checkbox" bind:checked={includeTheme} class="cursor-pointer" />
+        Include current theme styling ({uiStore.currentTheme.name})
+      </label>
+    {/if}
 
     <!-- Status message -->
     {#if status === 'exporting'}

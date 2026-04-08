@@ -76,3 +76,77 @@ pub async fn add_recent_project(path: String, name: String) -> Result<(), AppErr
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_recent_project_serialize() {
+        let p = RecentProject {
+            path: "/home/user/novel".to_string(),
+            name: "My Novel".to_string(),
+            last_opened: "1700000000".to_string(),
+        };
+        let json = serde_json::to_string(&p).unwrap();
+        assert!(json.contains("My Novel"));
+
+        let parsed: RecentProject = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.name, "My Novel");
+        assert_eq!(parsed.path, "/home/user/novel");
+    }
+
+    #[test]
+    fn test_recent_projects_list_serialize() {
+        let projects = vec![
+            RecentProject {
+                path: "/a".to_string(),
+                name: "A".to_string(),
+                last_opened: "100".to_string(),
+            },
+            RecentProject {
+                path: "/b".to_string(),
+                name: "B".to_string(),
+                last_opened: "200".to_string(),
+            },
+        ];
+        let json = serde_json::to_string_pretty(&projects).unwrap();
+        let parsed: Vec<RecentProject> = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].name, "A");
+        assert_eq!(parsed[1].name, "B");
+    }
+
+    #[test]
+    fn test_dedup_and_truncate_logic() {
+        let mut projects: Vec<RecentProject> = (0..25)
+            .map(|i| RecentProject {
+                path: format!("/project/{}", i),
+                name: format!("P{}", i),
+                last_opened: i.to_string(),
+            })
+            .collect();
+
+        // Simulate adding existing project — should move to front
+        let existing_path = "/project/10".to_string();
+        projects.retain(|p| p.path != existing_path);
+        projects.insert(
+            0,
+            RecentProject {
+                path: existing_path.clone(),
+                name: "P10-updated".to_string(),
+                last_opened: "999".to_string(),
+            },
+        );
+        projects.truncate(20);
+
+        assert_eq!(projects.len(), 20);
+        assert_eq!(projects[0].path, "/project/10");
+        assert_eq!(projects[0].name, "P10-updated");
+        // Original P10 should be gone (deduped)
+        assert_eq!(
+            projects.iter().filter(|p| p.path == "/project/10").count(),
+            1
+        );
+    }
+}

@@ -33,3 +33,42 @@ impl specta::Type for AppError {
         DataType::Primitive(Primitive::str)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_display() {
+        let err = AppError::FileNotFound("/tmp/test.md".to_string());
+        assert_eq!(err.to_string(), "File not found: /tmp/test.md");
+
+        let err = AppError::NotADirectory("/tmp/file.txt".to_string());
+        assert_eq!(err.to_string(), "Not a directory: /tmp/file.txt");
+
+        let err = AppError::Custom("something went wrong".to_string());
+        assert_eq!(err.to_string(), "something went wrong");
+    }
+
+    #[test]
+    fn test_error_serialize() {
+        let err = AppError::FileNotFound("/tmp/test.md".to_string());
+        let json = serde_json::to_string(&err).unwrap();
+        assert_eq!(json, "\"File not found: /tmp/test.md\"");
+    }
+
+    #[test]
+    fn test_io_error_conversion() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "not found");
+        let app_err: AppError = io_err.into();
+        assert!(app_err.to_string().contains("not found"));
+    }
+
+    #[test]
+    fn test_toml_parse_error_conversion() {
+        let result: Result<toml::Value, _> = toml::from_str("{{invalid}}");
+        let toml_err = result.unwrap_err();
+        let app_err: AppError = toml_err.into();
+        assert!(app_err.to_string().contains("TOML parse error"));
+    }
+}

@@ -5,21 +5,35 @@ import {
 } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { markdown, markdownLanguage, markdownKeymap } from '@codemirror/lang-markdown';
+import { GFM } from '@lezer/markdown';
 import { syntaxHighlighting, defaultHighlightStyle, HighlightStyle, bracketMatching, indentOnInput } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { searchKeymap, highlightSelectionMatches, openSearchPanel } from '@codemirror/search';
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
-import { wysiwygPlugin } from './wysiwyg';
+import { wysiwygPlugin, linkClickPlugin, imagePastePlugin } from './wysiwyg';
 import { imeComposingField, imeGuardPlugin } from './ime-guard';
 import { typewriterPlugin, paragraphFocusPlugin } from './zen';
 import './wysiwyg.css';
 
 /**
- * Override defaultHighlightStyle for headings: remove the underline,
- * keep bold. Font-size is handled by WYSIWYG decoration classes below.
+ * Heading font sizes MUST live in syntaxHighlighting, NOT in WYSIWYG
+ * mark decorations.  The WYSIWYG plugin only decorates visible ranges;
+ * when a heading scrolls out of the viewport its mark decoration is
+ * removed, making the line revert to default font-size.  CM6 caches
+ * the "tall" measured height but the next measurement may differ →
+ * cumulative height-map drift → click-after-scroll lands on the wrong
+ * line.  syntaxHighlighting is driven by the incremental parser and
+ * applies consistently to every line regardless of viewport, keeping
+ * heading heights stable for CM6's height estimation.
  */
 const novelistHighlightStyle = HighlightStyle.define([
   { tag: tags.heading, fontWeight: 'bold' },
+  { tag: tags.heading1, fontSize: '1.75em', fontWeight: '700', lineHeight: '1.35', color: 'var(--novelist-heading-color)', letterSpacing: '-0.02em' },
+  { tag: tags.heading2, fontSize: '1.4em',  fontWeight: '600', lineHeight: '1.35', color: 'var(--novelist-heading-color)', letterSpacing: '-0.01em' },
+  { tag: tags.heading3, fontSize: '1.2em',  fontWeight: '600', lineHeight: '1.4',  color: 'var(--novelist-heading-color)' },
+  { tag: tags.heading4, fontSize: '1.05em', fontWeight: '600', lineHeight: '1.4',  color: 'var(--novelist-heading-color)' },
+  { tag: tags.heading5, fontSize: '1.0em',  fontWeight: '600', lineHeight: '1.4',  color: 'var(--novelist-text-secondary)' },
+  { tag: tags.heading6, fontSize: '0.92em', fontWeight: '600', lineHeight: '1.4',  color: 'var(--novelist-text-secondary)' },
 ]);
 
 const novelistTheme = EditorView.theme({
@@ -110,7 +124,7 @@ export function createEditorExtensions(options?: EditorOptions): Extension[] {
     placeholder('Start writing...'),
     syntaxHighlighting(novelistHighlightStyle),
     syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-    markdown({ base: markdownLanguage }),
+    markdown({ base: markdownLanguage, extensions: [GFM] }),
     imeComposingField,
     imeGuardPlugin,
     EditorView.lineWrapping,
@@ -128,6 +142,9 @@ export function createEditorExtensions(options?: EditorOptions): Extension[] {
   if (options?.wysiwyg !== false) {
     exts.push(wysiwygPlugin);
   }
+
+  // Always add link click and image paste (even without WYSIWYG)
+  exts.push(linkClickPlugin, imagePastePlugin);
 
   if (options?.zen) {
     exts.push(typewriterPlugin, paragraphFocusPlugin);

@@ -9,6 +9,7 @@
   import { commands } from '$lib/ipc/commands';
   import { countWords } from '$lib/utils/wordcount';
   import { extractHeadings, type HeadingItem } from '$lib/editor/outline';
+  import { setWysiwygProjectDir } from '$lib/editor/wysiwyg';
 
   interface Props {
     paneId?: string;
@@ -75,20 +76,45 @@
     return tabsStore.getPaneActiveTab(effectivePaneId);
   }
 
+  /**
+   * Schedule stats update with a trailing-edge debounce.
+   * Uses requestIdleCallback when available so stats computation
+   * never blocks typing or scroll. Falls back to setTimeout.
+   *
+   * MiaoYan-style performance tiers:
+   * - < 2K lines: full stats (word count + headings) after 500ms idle
+   * - 2K-5K lines: full stats after 1s idle
+   * - > 5K lines: estimate word count, skip headings
+   */
+  let statsScheduled = false;
   function scheduleStatsUpdate(state: import('@codemirror/state').EditorState) {
-    if (statsTimer) clearTimeout(statsTimer);
-    const isLarge = state.doc.lines > LARGE_DOC_LINES;
-    const delay = isLarge ? 2000 : 300;
+    if (statsScheduled) return; // Don't reset — let the pending callback fire
+    statsScheduled = true;
 
+    const isLarge = state.doc.lines > LARGE_DOC_LINES;
+    const isMedium = state.doc.lines > 2000;
+    const delay = isLarge ? 2000 : isMedium ? 1000 : 500;
+
+    const run = () => {
+      statsScheduled = false;
+      // Re-read the current view state (may have changed since scheduling)
+      if (!view) return;
+      const currentState = view.state;
+      if (currentState.doc.lines > LARGE_DOC_LINES) {
+        wordCount = Math.round(currentState.doc.length / 4);
+      } else {
+        wordCount = countWords(currentState.doc.toString());
+        headings = extractHeadings(currentState);
+      }
+    };
+
+    if (statsTimer) clearTimeout(statsTimer);
     statsTimer = setTimeout(() => {
       statsTimer = null;
-      if (isLarge) {
-        // Large file: skip heading extraction (forces full parse).
-        // Only update word count estimate.
-        wordCount = Math.round(state.doc.length / 4);
+      if (typeof requestIdleCallback !== 'undefined') {
+        requestIdleCallback(run, { timeout: 200 });
       } else {
-        wordCount = countWords(state.doc.toString());
-        headings = extractHeadings(state);
+        run();
       }
     }, delay);
   }
@@ -228,6 +254,9 @@
 
     if (tab.id === currentTabId && tab.version === currentTabVersion && currentZenMode === uiStore.zenMode && view) return;
 
+    // Set project dir for image resolution in WYSIWYG
+    if (projectStore.dirPath) setWysiwygProjectDir(projectStore.dirPath);
+
     cleanupCurrentView();
     currentTabId = tab.id;
     currentTabVersion = tab.version;
@@ -239,7 +268,7 @@
     isReadOnly = fileSize >= FILE_SIZE_READONLY;
     readOnlyFileSize = fileSize;
 
-    console.log(`[loadTab] ${tab.fileName}: ${fileSize} bytes, readOnly=${isReadOnly}, lines=${tab.content.split('\n').length}`);
+    console.log(`[loadTab] ${tab.fileName}: ${fileSize} bytes, readOnly=${isReadOnly}`);
 
     const extensions = [
       ...buildExtensions(fileSize),
@@ -279,8 +308,11 @@
   onMount(() => {
     loadTab();
 
+    // Auto-save: only process dirty tabs from this pane to avoid
+    // duplicate saves when split view has two Editor instances.
     const autoSaveInterval = setInterval(async () => {
-      for (const tab of tabsStore.allTabs) {
+      const paneTabs = tabsStore.getPaneTabs(effectivePaneId);
+      for (const tab of paneTabs) {
         if (!tab.isDirty) continue;
         tabsStore.syncFromView(tab.id);
         const freshTab = tabsStore.findByPath(tab.filePath);

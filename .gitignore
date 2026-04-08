@@ -1,11 +1,26 @@
+# Build artifacts
 src-tauri/target/
 node_modules/
 dist/
+
+# OS files
 .DS_Store
 Thumbs.db
+
+# IDE
 .vscode/
 .idea/
+
+# Novelist project metadata
 .novelist/workspace.json
+
+# Tauri auto-generated
 src-tauri/gen/
+
+# Research cloned repos
 research/MiaoYan/
 research/notesnook/
+
+# Test temp files
+/tmp/novelist-*
+*.novelist-tmp
