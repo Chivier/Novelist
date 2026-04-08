@@ -7,17 +7,21 @@ export interface HeadingItem {
   from: number;       // position in document (for scrolling)
 }
 
+/**
+ * Extract headings from the syntax tree.
+ * For very large documents (>10K lines), only scans the first 50K characters
+ * plus the full tree (CM6 parses lazily, so unparsed regions are skipped).
+ */
 export function extractHeadings(state: EditorState): HeadingItem[] {
   const headings: HeadingItem[] = [];
+  const tree = syntaxTree(state);
 
-  syntaxTree(state).iterate({
+  tree.iterate({
     enter(node) {
-      // ATXHeading1 through ATXHeading6
       const match = node.name.match(/^ATXHeading(\d)$/);
       if (match) {
         const level = parseInt(match[1]);
         const lineText = state.doc.lineAt(node.from).text;
-        // Remove leading # markers and whitespace
         const text = lineText.replace(/^#+\s*/, '').trim();
         if (text) {
           headings.push({ level, text, from: node.from });

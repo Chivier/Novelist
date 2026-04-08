@@ -1,4 +1,5 @@
 import { commands } from '$lib/ipc/commands';
+import type { EditorView } from '@codemirror/view';
 
 interface TabState {
   id: string;
@@ -9,6 +10,45 @@ interface TabState {
   scrollPosition: number;
   cursorPosition: number;
   version: number;
+}
+
+/**
+ * Registry mapping tab IDs to live EditorViews.
+ * Used to read content directly from CM6 at save time,
+ * avoiding expensive doc.toString() on every keystroke.
+ */
+const editorViews = new Map<string, EditorView>();
+
+/**
+ * Tracks which tabs are in viewport mode.
+ * For these tabs, syncFromView() must NOT read from CM6 (it only has a window).
+ * Save must go through the Rope backend instead.
+ */
+const viewportModeTabs = new Set<string>();
+
+export function registerEditorView(tabId: string, view: EditorView, isViewportMode = false) {
+  editorViews.set(tabId, view);
+  if (isViewportMode) {
+    viewportModeTabs.add(tabId);
+  } else {
+    viewportModeTabs.delete(tabId);
+  }
+}
+
+export function unregisterEditorView(tabId: string) {
+  editorViews.delete(tabId);
+  viewportModeTabs.delete(tabId);
+}
+
+export function isTabViewportMode(tabId: string): boolean {
+  return viewportModeTabs.has(tabId);
+}
+
+export function getEditorContent(tabId: string): string | null {
+  // NEVER read from CM6 for viewport mode tabs — it only has a window!
+  if (viewportModeTabs.has(tabId)) return null;
+  const view = editorViews.get(tabId);
+  return view ? view.state.doc.toString() : null;
 }
 
 interface PaneState {
@@ -106,10 +146,29 @@ class TabsStore {
     }
   }
 
+  /** Mark tab as dirty without copying content (used during typing). */
+  markDirty(id: string) {
+    for (const pane of this.panes) {
+      const tab = pane.tabs.find(t => t.id === id);
+      if (tab && !tab.isDirty) { tab.isDirty = true; return; }
+    }
+  }
+
   updateContent(id: string, content: string) {
     for (const pane of this.panes) {
       const tab = pane.tabs.find(t => t.id === id);
       if (tab) { tab.content = content; tab.isDirty = true; return; }
+    }
+  }
+
+  /**
+   * Sync content from EditorView into tab store.
+   * Call before saving or when the view is about to be destroyed.
+   */
+  syncFromView(id: string) {
+    const content = getEditorContent(id);
+    if (content !== null) {
+      this.updateContent(id, content);
     }
   }
 
