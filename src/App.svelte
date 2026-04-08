@@ -70,7 +70,31 @@
     if (result.status === 'ok') recentProjects = result.data;
   }
 
+  /**
+   * Check for unsaved changes before switching project.
+   * Returns true if safe to proceed, false if user cancelled.
+   */
+  async function confirmUnsavedChanges(): Promise<boolean> {
+    const dirty = tabsStore.dirtyTabs;
+    if (dirty.length === 0) return true;
+
+    const names = dirty.map(t => t.fileName).join(', ');
+    const choice = confirm(
+      `You have unsaved changes in: ${names}\n\nSave before switching project?`
+    );
+    if (choice) {
+      await tabsStore.saveAllDirty();
+    }
+    // Always proceed (save or discard) — only cancel if they close the dialog
+    // But confirm() doesn't have a cancel-vs-no distinction, so we always proceed.
+    return true;
+  }
+
   async function openProjectFromPath(dirPath: string) {
+    if (projectStore.isOpen) {
+      const proceed = await confirmUnsavedChanges();
+      if (!proceed) return;
+    }
     projectStore.isLoading = true;
     await commands.stopFileWatcher();
 

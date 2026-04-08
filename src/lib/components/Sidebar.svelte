@@ -27,6 +27,16 @@
   }
 
   async function openProjectFromPath(dirPath: string) {
+    // Prompt to save unsaved changes
+    if (projectStore.isOpen) {
+      const dirty = tabsStore.dirtyTabs;
+      if (dirty.length > 0) {
+        const names = dirty.map(t => t.fileName).join(', ');
+        if (confirm(`Unsaved changes in: ${names}\n\nSave before switching?`)) {
+          await tabsStore.saveAllDirty();
+        }
+      }
+    }
     projectStore.isLoading = true;
     await commands.stopFileWatcher();
     const configResult = await commands.detectProject(dirPath);

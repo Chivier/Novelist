@@ -211,6 +211,24 @@ class TabsStore {
   get allTabs(): TabState[] {
     return this.panes.flatMap(p => p.tabs);
   }
+
+  /** Returns list of dirty tabs across all panes. */
+  get dirtyTabs(): TabState[] {
+    return this.allTabs.filter(t => t.isDirty);
+  }
+
+  /** Sync all dirty tabs from their EditorViews and save to disk. */
+  async saveAllDirty(): Promise<void> {
+    for (const tab of this.dirtyTabs) {
+      this.syncFromView(tab.id);
+      const fresh = this.findByPath(tab.filePath);
+      if (fresh?.isDirty && fresh.content) {
+        await commands.registerWriteIgnore(fresh.filePath);
+        const result = await commands.writeFile(fresh.filePath, fresh.content);
+        if (result.status === 'ok') this.markSaved(fresh.id);
+      }
+    }
+  }
 }
 
 export const tabsStore = new TabsStore();
