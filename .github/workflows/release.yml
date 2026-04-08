@@ -9,13 +9,45 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  # ── Self-hosted macOS ARM build (M1/M2) ───────────────
+  build-macos-arm:
+    runs-on: [self-hosted, macOS, ARM64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Run tests
+        run: pnpm test && cd src-tauri && cargo test
+
+      - name: Build Tauri app
+        run: pnpm tauri build
+
+      - name: Create DMG (fallback)
+        if: always()
+        run: |
+          DMG="src-tauri/target/release/bundle/dmg/Novelist_${{ github.ref_name }}_aarch64.dmg"
+          if [ ! -f "$DMG" ]; then
+            hdiutil create -volname "Novelist" \
+              -srcfolder "src-tauri/target/release/bundle/macos/Novelist.app" \
+              -ov -format UDZO "$DMG"
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: novelist-macos-aarch64
+          path: |
+            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/macos/*.app
+
+  # ── GitHub-hosted builds (Intel Mac, Linux, Windows) ──
+  build-other:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest    # ARM (M1/M2)
-            target: aarch64-apple-darwin
           - platform: macos-13        # Intel
             target: x86_64-apple-darwin
           - platform: ubuntu-22.04
@@ -69,3 +101,23 @@ jobs:
             See the [README](https://github.com/${{ github.repository }}#readme) for details.
           releaseDraft: false
           prerelease: false
+
+  # ── Create GitHub Release with all artifacts ──────────
+  release:
+    needs: [build-macos-arm, build-other]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Download macOS ARM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: novelist-macos-aarch64
+          path: artifacts/
+        continue-on-error: true
+
+      - name: Upload to Release
+        if: hashFiles('artifacts/**/*.dmg') != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.dmg
+          tag_name: ${{ github.ref_name }}
