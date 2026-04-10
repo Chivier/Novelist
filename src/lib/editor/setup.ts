@@ -32,14 +32,26 @@ import './wysiwyg.css';
  * use flatNovelistHighlightStyle instead, which keeps headings bold and
  * colored but at uniform font-size, eliminating height-map drift entirely.
  */
+/**
+ * Heading line-height is calculated so that each heading line occupies
+ * roughly the same pixel height as a body text line (1em × 1.8 = 1.8em).
+ * This keeps vertical rhythm consistent and prevents large gaps.
+ *
+ * Formula: target_line_height = body_line_height / heading_font_size
+ *   H1: 1.8 / 1.75 ≈ 1.03 → use 1.15 (minimum readable)
+ *   H2: 1.8 / 1.4  ≈ 1.29 → use 1.3
+ *   H3: 1.8 / 1.2  ≈ 1.5  → use 1.5
+ *   H4: 1.8 / 1.05 ≈ 1.71 → use 1.7
+ *   H5/H6: ≤1.0em → keep 1.8
+ */
 const novelistHighlightStyle = HighlightStyle.define([
   { tag: tags.heading, fontWeight: 'bold' },
-  { tag: tags.heading1, fontSize: '1.75em', fontWeight: '700', lineHeight: '1.35', color: 'var(--novelist-heading-color)', letterSpacing: '-0.02em' },
-  { tag: tags.heading2, fontSize: '1.4em',  fontWeight: '600', lineHeight: '1.35', color: 'var(--novelist-heading-color)', letterSpacing: '-0.01em' },
-  { tag: tags.heading3, fontSize: '1.2em',  fontWeight: '600', lineHeight: '1.4',  color: 'var(--novelist-heading-color)' },
-  { tag: tags.heading4, fontSize: '1.05em', fontWeight: '600', lineHeight: '1.4',  color: 'var(--novelist-heading-color)' },
-  { tag: tags.heading5, fontSize: '1.0em',  fontWeight: '600', lineHeight: '1.4',  color: 'var(--novelist-text-secondary)' },
-  { tag: tags.heading6, fontSize: '0.92em', fontWeight: '600', lineHeight: '1.4',  color: 'var(--novelist-text-secondary)' },
+  { tag: tags.heading1, fontSize: '1.75em', fontWeight: '700', lineHeight: '1.15', color: 'var(--novelist-heading-color)', letterSpacing: '-0.02em' },
+  { tag: tags.heading2, fontSize: '1.4em',  fontWeight: '600', lineHeight: '1.3',  color: 'var(--novelist-heading-color)', letterSpacing: '-0.01em' },
+  { tag: tags.heading3, fontSize: '1.2em',  fontWeight: '600', lineHeight: '1.5',  color: 'var(--novelist-heading-color)' },
+  { tag: tags.heading4, fontSize: '1.05em', fontWeight: '600', lineHeight: '1.7',  color: 'var(--novelist-heading-color)' },
+  { tag: tags.heading5, fontSize: '1.0em',  fontWeight: '600', lineHeight: '1.8',  color: 'var(--novelist-text-secondary)' },
+  { tag: tags.heading6, fontSize: '0.92em', fontWeight: '600', lineHeight: '1.8',  color: 'var(--novelist-text-secondary)' },
 ]);
 
 /**
@@ -329,13 +341,14 @@ const novelistTheme = EditorView.theme({
     color: 'var(--novelist-text-tertiary, var(--novelist-text-secondary))',
     fontStyle: 'italic',
   },
-  /* Heading font-size — scoped inside CM6 theme for high specificity */
-  '.cm-novelist-h1': { fontSize: '1.75em', fontWeight: '700', lineHeight: '1.35', color: 'var(--novelist-heading-color)' },
-  '.cm-novelist-h2': { fontSize: '1.4em',  fontWeight: '600', lineHeight: '1.35', color: 'var(--novelist-heading-color)' },
-  '.cm-novelist-h3': { fontSize: '1.2em',  fontWeight: '600', lineHeight: '1.4',  color: 'var(--novelist-heading-color)' },
-  '.cm-novelist-h4': { fontSize: '1.05em', fontWeight: '600', lineHeight: '1.4',  color: 'var(--novelist-heading-color)' },
-  '.cm-novelist-h5': { fontSize: '1.0em',  fontWeight: '600', lineHeight: '1.4',  color: 'var(--novelist-text-secondary)' },
-  '.cm-novelist-h6': { fontSize: '0.92em', fontWeight: '600', lineHeight: '1.4',  color: 'var(--novelist-text-secondary)' },
+  /* Heading font-size — scoped inside CM6 theme for high specificity.
+     Line-heights tuned so each heading occupies ~1.8em (matching body rhythm). */
+  '.cm-novelist-h1': { fontSize: '1.75em', fontWeight: '700', lineHeight: '1.15', color: 'var(--novelist-heading-color)' },
+  '.cm-novelist-h2': { fontSize: '1.4em',  fontWeight: '600', lineHeight: '1.3',  color: 'var(--novelist-heading-color)' },
+  '.cm-novelist-h3': { fontSize: '1.2em',  fontWeight: '600', lineHeight: '1.5',  color: 'var(--novelist-heading-color)' },
+  '.cm-novelist-h4': { fontSize: '1.05em', fontWeight: '600', lineHeight: '1.7',  color: 'var(--novelist-heading-color)' },
+  '.cm-novelist-h5': { fontSize: '1.0em',  fontWeight: '600', lineHeight: '1.8',  color: 'var(--novelist-text-secondary)' },
+  '.cm-novelist-h6': { fontSize: '0.92em', fontWeight: '600', lineHeight: '1.8',  color: 'var(--novelist-text-secondary)' },
 });
 
 interface EditorOptions {

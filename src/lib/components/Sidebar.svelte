@@ -532,7 +532,7 @@
     border-radius: 5px;
     background: transparent;
     color: var(--novelist-sidebar-text);
-    font-size: 0.8rem;
+    font-size: 0.875rem;
     text-align: left;
     cursor: pointer;
     transition: background 80ms;
@@ -550,7 +550,7 @@
   .sidebar-item-dir {
     cursor: default;
     color: var(--novelist-text-secondary);
-    font-size: 0.78rem;
+    font-size: 0.84rem;
   }
   .sidebar-item-disabled {
     cursor: default;
