@@ -268,6 +268,8 @@
     if (view && currentTabId) {
       saveEditorState(currentTabId, view.state);
       if (!isReadOnly) {
+        // syncFromView now compares content before marking dirty,
+        // so scroll-only sessions won't trigger false dirty flags.
         tabsStore.syncFromView(currentTabId);
       }
       unregisterEditorView(currentTabId);

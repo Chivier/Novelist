@@ -294,7 +294,7 @@
 
 <aside class="sidebar">
   <!-- Project header -->
-  <div class="sidebar-header">
+  <div class="sidebar-header" data-tauri-drag-region>
     {#if projectStore.isOpen}
       <span class="sidebar-project-name">{projectStore.name}</span>
       <div class="sidebar-actions">
@@ -434,6 +434,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 12px 14px 10px;
+    padding-top: 2.25rem;
     -webkit-app-region: drag;
     user-select: none;
   }

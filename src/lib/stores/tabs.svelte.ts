@@ -1,4 +1,5 @@
 import { commands } from '$lib/ipc/commands';
+import { ask } from '@tauri-apps/plugin-dialog';
 import type { EditorView } from '@codemirror/view';
 
 interface TabState {
@@ -138,12 +139,30 @@ class TabsStore {
     pane.activeTabId = id;
   }
 
-  closeTab(id: string) {
+  async closeTab(id: string) {
     // Find which pane contains this tab
     for (const pane of this.panes) {
       const idx = pane.tabs.findIndex(t => t.id === id);
       if (idx === -1) continue;
       const tab = pane.tabs[idx];
+
+      // Prompt for unsaved changes
+      if (tab.isDirty) {
+        const shouldSave = await ask(
+          `"${tab.fileName}" has unsaved changes.\nSave before closing?`,
+          { title: 'Unsaved Changes', kind: 'warning', okLabel: 'Save', cancelLabel: "Don't Save" }
+        );
+        if (shouldSave) {
+          this.syncFromView(tab.id);
+          const fresh = this.findByPath(tab.filePath);
+          if (fresh?.content) {
+            await commands.registerWriteIgnore(fresh.filePath);
+            const result = await commands.writeFile(fresh.filePath, fresh.content);
+            if (result.status === 'ok') this.markSaved(fresh.id);
+          }
+        }
+      }
+
       commands.unregisterOpenFile(tab.filePath).catch(err => {
         console.error('Failed to unregister open file:', err);
       });
@@ -186,11 +205,20 @@ class TabsStore {
   /**
    * Sync content from EditorView into tab store.
    * Call before saving or when the view is about to be destroyed.
+   * Only marks the tab dirty if the content actually changed.
    */
   syncFromView(id: string) {
     const content = getEditorContent(id);
-    if (content !== null) {
-      this.updateContent(id, content);
+    if (content === null) return;
+    for (const pane of this.panes) {
+      const tab = pane.tabs.find(t => t.id === id);
+      if (tab) {
+        if (tab.content !== content) {
+          tab.content = content;
+          tab.isDirty = true;
+        }
+        return;
+      }
     }
   }
 

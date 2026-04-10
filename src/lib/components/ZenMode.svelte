@@ -31,6 +31,9 @@
   onmousemove={resetHudTimer}
   onkeydown={resetHudTimer}
 >
+  <!-- Drag region for window movement -->
+  <div data-tauri-drag-region class="zen-drag-strip"></div>
+
   <!-- The editor is rendered inside here by App.svelte -->
   {@render children()}
 
@@ -54,6 +57,16 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+  }
+
+  .zen-drag-strip {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 38px;
+    z-index: 1;
+    -webkit-app-region: drag;
   }
 
   .zen-hud {

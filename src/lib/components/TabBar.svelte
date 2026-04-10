@@ -32,10 +32,12 @@
 
 <div
   class="tab-bar flex items-center overflow-x-auto"
+  data-tauri-drag-region
   style="
     height: 2rem;
     background: transparent;
     border-bottom: 1px solid var(--novelist-border-subtle, var(--novelist-border));
+    padding-left: env(titlebar-area-x, 78px);
   "
 >
   {#each paneTabs as tab (tab.id)}
@@ -99,6 +101,14 @@
 </div>
 
 <style>
+  /* Hide scrollbar but keep horizontal scroll functionality */
+  .tab-bar {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+  }
+  .tab-bar::-webkit-scrollbar {
+    display: none; /* Chrome/Safari/WebKit */
+  }
   .tab-item:hover {
     color: var(--novelist-text-secondary) !important;
   }

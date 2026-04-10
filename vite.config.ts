@@ -22,6 +22,31 @@ export default defineConfig(async () => ({
       : undefined,
     watch: { ignored: ["**/src-tauri/**"] },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "codemirror-core": [
+            "@codemirror/state",
+            "@codemirror/view",
+          ],
+          "codemirror-ext": [
+            "@codemirror/commands",
+            "@codemirror/language",
+            "@codemirror/lang-markdown",
+            "@codemirror/search",
+            "@codemirror/autocomplete",
+          ],
+          "lezer": [
+            "@lezer/common",
+            "@lezer/lr",
+            "@lezer/highlight",
+            "@lezer/markdown",
+          ],
+        },
+      },
+    },
+  },
   test: {
     include: ["src/**/*.test.ts"],
   },

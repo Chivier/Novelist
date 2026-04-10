@@ -41,7 +41,7 @@
   }
 </script>
 
-<div class="welcome-root">
+<div class="welcome-root" data-tauri-drag-region>
   <div class="welcome-card">
     <div class="welcome-header">
       <h1 class="welcome-title">Novelist</h1>

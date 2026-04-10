@@ -30,28 +30,50 @@ function saveSettings(s: EditorSettings) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
 }
 
+export type RightPanel = 'draft' | 'snapshot' | 'stats' | null;
+
 class UiStore {
   sidebarVisible = $state(true);
   outlineVisible = $state(false);
-  draftVisible = $state(false);
-  snapshotVisible = $state(false);
-  statsVisible = $state(false);
+  /** Which right panel is active. Draft/Snapshot/Stats are mutually exclusive. */
+  activeRightPanel = $state<RightPanel>(null);
   sidebarWidth = $state(240);
   zenMode = $state(false);
   settingsOpen = $state(false);
   editorSettings = $state<EditorSettings>(loadSettings());
+  zoomLevel = $state(parseFloat(localStorage.getItem('novelist-zoom') || '1'));
 
   // Theme
   themeId = $state(loadThemeId());
   currentTheme = $state<Theme>(resolveTheme(loadThemeId()));
 
+  // Derived visibility for each panel
+  get draftVisible(): boolean { return this.activeRightPanel === 'draft'; }
+  get snapshotVisible(): boolean { return this.activeRightPanel === 'snapshot'; }
+  get statsVisible(): boolean { return this.activeRightPanel === 'stats'; }
+
   toggleSidebar() { this.sidebarVisible = !this.sidebarVisible; }
   toggleOutline() { this.outlineVisible = !this.outlineVisible; }
-  toggleDraft() { this.draftVisible = !this.draftVisible; }
-  toggleSnapshot() { this.snapshotVisible = !this.snapshotVisible; }
-  toggleStats() { this.statsVisible = !this.statsVisible; }
+
+  /** Toggle a right panel. If it's already active, close it. Otherwise switch to it. */
+  toggleRightPanel(panel: RightPanel) {
+    this.activeRightPanel = this.activeRightPanel === panel ? null : panel;
+  }
+
+  toggleDraft() { this.toggleRightPanel('draft'); }
+  toggleSnapshot() { this.toggleRightPanel('snapshot'); }
+  toggleStats() { this.toggleRightPanel('stats'); }
   toggleZen() { this.zenMode = !this.zenMode; }
   toggleSettings() { this.settingsOpen = !this.settingsOpen; }
+
+  zoomIn() { this.setZoom(Math.min(this.zoomLevel + 0.1, 2.0)); }
+  zoomOut() { this.setZoom(Math.max(this.zoomLevel - 0.1, 0.5)); }
+  resetZoom() { this.setZoom(1.0); }
+  setZoom(level: number) {
+    this.zoomLevel = Math.round(level * 10) / 10;
+    document.documentElement.style.zoom = `${this.zoomLevel}`;
+    localStorage.setItem('novelist-zoom', String(this.zoomLevel));
+  }
 
   setTheme(id: string) {
     this.themeId = id;
@@ -77,10 +99,11 @@ class UiStore {
 
 export const uiStore = new UiStore();
 
-// Apply saved settings and theme on load
+// Apply saved settings, theme, and zoom on load
 if (typeof document !== 'undefined') {
   uiStore.applyEditorSettings();
   applyTheme(uiStore.currentTheme);
+  if (uiStore.zoomLevel !== 1) document.documentElement.style.zoom = `${uiStore.zoomLevel}`;
 
   // Listen for system theme changes when using "system" theme
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {

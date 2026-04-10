@@ -27,8 +27,9 @@
   import { commands } from '$lib/ipc/commands';
   import { moveSection } from '$lib/editor/section-move';
   import { commandRegistry } from '$lib/stores/commands.svelte';
-  import { shortcutsStore } from '$lib/stores/shortcuts.svelte';
+  import { shortcutsStore, matchesShortcut } from '$lib/stores/shortcuts.svelte';
   import type { HeadingItem } from '$lib/editor/outline';
+  import { EditorView } from '@codemirror/view';
 
   // Per-pane editor state for status bar & outline navigation
   let pane1WordCount = $state(0);
@@ -140,6 +141,8 @@
       title: 'Novelist',
       width: 1200,
       height: 800,
+      titleBarStyle: 'overlay',
+      hiddenTitle: true,
     });
     webview.once('tauri://error', (e) => {
       console.error('Failed to open new window:', e);
@@ -180,106 +183,148 @@
     }
   }
 
+  function handleDragMouseDown(e: MouseEvent) {
+    const target = e.target as HTMLElement;
+    // Don't interfere with interactive elements or the editor
+    if (target.closest('button, input, a, [role="button"], select, textarea, .cm-editor, [contenteditable]')) return;
+    // Initiate drag if click is on a drag region or in the top titlebar area
+    const TITLEBAR_HEIGHT = 38;
+    if (target.closest('[data-tauri-drag-region]') || e.clientY <= TITLEBAR_HEIGHT) {
+      e.preventDefault();
+      getCurrentWindow().startDragging();
+    }
+  }
+
+  // --- Editor formatting helpers ---
+  function getActiveEditorView(): EditorView | null {
+    const tabId = tabsStore.activeTab?.id;
+    if (!tabId) return null;
+    return getEditorView(tabId) ?? null;
+  }
+
+  function wrapSelection(before: string, after: string) {
+    const view = getActiveEditorView();
+    if (!view) return;
+    const { from, to } = view.state.selection.main;
+    const selectedText = view.state.sliceDoc(from, to);
+    view.dispatch({
+      changes: { from, to, insert: before + selectedText + after },
+      selection: { anchor: from + before.length, head: to + before.length },
+    });
+  }
+
+  function toggleLinePrefix(prefix: string) {
+    const view = getActiveEditorView();
+    if (!view) return;
+    const { from, to } = view.state.selection.main;
+    const line = view.state.doc.lineAt(from);
+    const text = line.text;
+    if (text.startsWith(prefix + ' ')) {
+      // Remove prefix
+      view.dispatch({
+        changes: { from: line.from, to: line.from + prefix.length + 1, insert: '' },
+        selection: { anchor: from - (prefix.length + 1), head: Math.max(line.from, to - (prefix.length + 1)) },
+      });
+    } else {
+      // Add prefix (strip existing # prefix if present)
+      const existingMatch = text.match(/^(#{1,6})\s*/);
+      const removeLen = existingMatch ? existingMatch[0].length : 0;
+      view.dispatch({
+        changes: { from: line.from, to: line.from + removeLen, insert: prefix + ' ' },
+        selection: { anchor: from + (prefix.length + 1 - removeLen), head: Math.max(line.from, to + (prefix.length + 1 - removeLen)) },
+      });
+    }
+  }
+
+  // Map of customizable commandId → handler
+  const shortcutHandlers: Record<string, () => void> = {
+    'toggle-sidebar': () => uiStore.toggleSidebar(),
+    'toggle-outline': () => uiStore.toggleOutline(),
+    'toggle-draft': () => uiStore.toggleDraft(),
+    'toggle-snapshot': () => uiStore.toggleSnapshot(),
+    'toggle-stats': () => uiStore.toggleStats(),
+    'toggle-zen': () => uiStore.toggleZen(),
+    'command-palette': () => { paletteOpen = !paletteOpen; },
+    'toggle-split': () => tabsStore.toggleSplit(),
+    'new-file': () => handleNewFile(),
+    'export-project': () => { exportDialogOpen = true; },
+    'close-tab': () => { const tab = tabsStore.activeTab; if (tab) tabsStore.closeTab(tab.id); },
+    'open-settings': () => uiStore.toggleSettings(),
+    'go-to-line': () => handleGoToLine(),
+
+    // Editor formatting
+    'editor-bold': () => wrapSelection('**', '**'),
+    'editor-italic': () => wrapSelection('*', '*'),
+    'editor-link': () => wrapSelection('[', '](url)'),
+    'editor-heading': () => toggleLinePrefix('#'),
+    'editor-code-inline': () => wrapSelection('`', '`'),
+    'editor-strikethrough': () => wrapSelection('~~', '~~'),
+  };
+
   function handleKeydown(e: KeyboardEvent) {
     const mod = e.metaKey || e.ctrlKey;
 
-    // Cmd+Shift+N: new window
+    // Non-customizable shortcuts: new window, zoom, project switch, escape
+
+    // Cmd+Shift+N: new window (non-customizable)
     if (mod && e.shiftKey && e.key === 'N') {
       e.preventDefault();
       openNewWindow();
       return;
     }
-    // Cmd+B: toggle sidebar
-    if (mod && e.key === 'b') {
-      e.preventDefault();
-      uiStore.toggleSidebar();
-      return;
-    }
-    // Cmd+Shift+O: toggle outline
-    if (mod && e.shiftKey && e.key === 'O') {
-      e.preventDefault();
-      uiStore.toggleOutline();
-      return;
-    }
-    // Cmd+Shift+D: toggle draft note
-    if (mod && e.shiftKey && e.key === 'D') {
-      e.preventDefault();
-      uiStore.toggleDraft();
-      return;
-    }
-    // F11 or Cmd+Shift+Z: zen mode
-    if (e.key === 'F11' || (mod && e.shiftKey && e.key === 'Z')) {
-      e.preventDefault();
-      uiStore.toggleZen();
-      return;
-    }
-    // Cmd+Shift+F: project search
+
+    // Cmd+Shift+F: project search (non-customizable)
     if (mod && e.shiftKey && e.key === 'F') {
       e.preventDefault();
       projectSearchOpen = !projectSearchOpen;
       return;
     }
-    // Cmd+Shift+P: command palette
-    if (mod && e.shiftKey && e.key === 'P') {
-      e.preventDefault();
-      paletteOpen = !paletteOpen;
-      return;
-    }
-    // Escape: exit zen mode
+
+    // Escape: exit zen mode (non-customizable)
     if (e.key === 'Escape' && uiStore.zenMode) {
       e.preventDefault();
       uiStore.toggleZen();
       return;
     }
-    // Cmd+\: toggle split view
-    if (mod && e.key === '\\') {
+
+    // Zoom (non-customizable)
+    if (mod && (e.key === '=' || e.key === '+')) {
       e.preventDefault();
-      tabsStore.toggleSplit();
+      uiStore.zoomIn();
       return;
     }
-    // Cmd+N: new file
-    if (mod && e.key === 'n') {
+    if (mod && e.key === '-') {
       e.preventDefault();
-      handleNewFile();
+      uiStore.zoomOut();
       return;
     }
-    // Cmd+P: export project
-    if (mod && !e.shiftKey && e.key === 'p') {
+    if (mod && e.key === '0') {
       e.preventDefault();
-      exportDialogOpen = true;
+      uiStore.resetZoom();
       return;
     }
-    // Cmd+W: close tab
-    if (mod && e.key === 'w') {
-      e.preventDefault();
-      const tab = tabsStore.activeTab;
-      if (tab) tabsStore.closeTab(tab.id);
-      return;
-    }
-    // Cmd+,: settings
-    if (mod && e.key === ',') {
-      e.preventDefault();
-      uiStore.toggleSettings();
-      return;
-    }
-    // Cmd+G: go to line
-    if (mod && e.key === 'g') {
-      e.preventDefault();
-      handleGoToLine();
-      return;
-    }
-    // Cmd+1~9: switch to recent project (Notion-style)
+
+    // Cmd+1~9: switch to recent project (non-customizable)
     if (mod && !e.shiftKey && e.key >= '1' && e.key <= '9') {
       const idx = parseInt(e.key) - 1;
       if (idx < recentProjects.length) {
         const target = recentProjects[idx];
-        // Don't switch if already on this project
         if (target.path !== projectStore.dirPath) {
           e.preventDefault();
           openProjectFromPath(target.path);
         }
       }
       return;
+    }
+
+    // Customizable shortcuts — match against shortcutsStore
+    for (const cmdId of shortcutsStore.allCommandIds) {
+      const shortcut = shortcutsStore.get(cmdId);
+      if (shortcut && matchesShortcut(e, shortcut)) {
+        e.preventDefault();
+        shortcutHandlers[cmdId]?.();
+        return;
+      }
     }
   }
 
@@ -332,7 +377,8 @@
     commandRegistry.register({ id: 'toggle-outline', label: 'Toggle Outline', shortcut: shortcutsStore.get('toggle-outline'), handler: () => uiStore.toggleOutline() });
     commandRegistry.register({ id: 'toggle-zen', label: 'Toggle Zen Mode', shortcut: shortcutsStore.get('toggle-zen'), handler: () => uiStore.toggleZen() });
     commandRegistry.register({ id: 'toggle-draft', label: 'Toggle Draft Note', shortcut: shortcutsStore.get('toggle-draft'), handler: () => uiStore.toggleDraft() });
-    commandRegistry.register({ id: 'toggle-stats', label: 'Toggle Writing Stats', handler: () => uiStore.toggleStats() });
+    commandRegistry.register({ id: 'toggle-snapshot', label: 'Toggle Snapshots', shortcut: shortcutsStore.get('toggle-snapshot'), handler: () => uiStore.toggleSnapshot() });
+    commandRegistry.register({ id: 'toggle-stats', label: 'Toggle Writing Stats', shortcut: shortcutsStore.get('toggle-stats'), handler: () => uiStore.toggleStats() });
     commandRegistry.register({ id: 'command-palette', label: 'Command Palette', shortcut: shortcutsStore.get('command-palette'), handler: () => { paletteOpen = !paletteOpen; } });
     commandRegistry.register({ id: 'project-search', label: 'Search in Project', shortcut: 'Cmd+Shift+F', handler: () => { projectSearchOpen = !projectSearchOpen; } });
     commandRegistry.register({ id: 'toggle-split', label: 'Toggle Split View', shortcut: shortcutsStore.get('toggle-split'), handler: () => tabsStore.toggleSplit() });
@@ -341,6 +387,13 @@
     commandRegistry.register({ id: 'close-tab', label: 'Close Tab', shortcut: shortcutsStore.get('close-tab'), handler: () => { const tab = tabsStore.activeTab; if (tab) tabsStore.closeTab(tab.id); } });
     commandRegistry.register({ id: 'open-settings', label: 'Open Settings', shortcut: shortcutsStore.get('open-settings'), handler: () => uiStore.toggleSettings() });
     commandRegistry.register({ id: 'go-to-line', label: 'Go to Line', shortcut: shortcutsStore.get('go-to-line'), handler: () => handleGoToLine() });
+    // Editor formatting commands
+    commandRegistry.register({ id: 'editor-bold', label: 'Bold', shortcut: shortcutsStore.get('editor-bold'), handler: () => wrapSelection('**', '**') });
+    commandRegistry.register({ id: 'editor-italic', label: 'Italic', shortcut: shortcutsStore.get('editor-italic'), handler: () => wrapSelection('*', '*') });
+    commandRegistry.register({ id: 'editor-link', label: 'Insert Link', shortcut: shortcutsStore.get('editor-link'), handler: () => wrapSelection('[', '](url)') });
+    commandRegistry.register({ id: 'editor-heading', label: 'Toggle Heading', shortcut: shortcutsStore.get('editor-heading'), handler: () => toggleLinePrefix('#') });
+    commandRegistry.register({ id: 'editor-code-inline', label: 'Inline Code', shortcut: shortcutsStore.get('editor-code-inline'), handler: () => wrapSelection('`', '`') });
+    commandRegistry.register({ id: 'editor-strikethrough', label: 'Strikethrough', shortcut: shortcutsStore.get('editor-strikethrough'), handler: () => wrapSelection('~~', '~~') });
     commandRegistry.register({ id: 'run-benchmark', label: 'Run Performance Benchmark (150K lines)', handler: async () => {
       const { runBenchmark } = await import('$lib/utils/benchmark');
       const result = await runBenchmark(150000);
@@ -463,7 +516,7 @@
   });
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} onmousedown={handleDragMouseDown} />
 
 {#if !projectStore.isOpen}
   <Welcome onOpenDirectory={handleOpenDirectory} onOpenRecent={handleOpenRecent} />
@@ -557,26 +610,24 @@
       <StatusBar {wordCount} {cursorLine} {cursorCol} />
     </div>
 
-    <!-- Right panels (Outline / Draft) + toggle tabs -->
+    <!-- Right panels (Outline + one of Draft/Snapshot/Stats) + toggle tabs -->
     <div class="shrink-0 flex">
       <!-- Panel content -->
       {#if uiStore.outlineVisible}
-        <div class="overflow-y-auto" style="width: 200px; border-left: 1px solid var(--novelist-border-subtle, var(--novelist-border));">
+        <div class="overflow-y-auto" style="width: 280px; border-left: 1px solid var(--novelist-border-subtle, var(--novelist-border));">
           <Outline {headings} onNavigate={(from) => activeEditorRef?.scrollToPosition(from)} onMoveSection={handleMoveSection} />
         </div>
       {/if}
       {#if uiStore.draftVisible && tabsStore.activeTab}
-        <div style="width: 300px; border-left: 1px solid var(--novelist-border-subtle, var(--novelist-border));">
+        <div style="width: 280px; border-left: 1px solid var(--novelist-border-subtle, var(--novelist-border));">
           <DraftNote filePath={tabsStore.activeTab.filePath} />
         </div>
-      {/if}
-      {#if uiStore.snapshotVisible}
+      {:else if uiStore.snapshotVisible}
         <div style="width: 280px; border-left: 1px solid var(--novelist-border-subtle, var(--novelist-border));">
           <SnapshotPanel />
         </div>
-      {/if}
-      {#if uiStore.statsVisible && projectStore.dirPath}
-        <div style="width: 300px; border-left: 1px solid var(--novelist-border-subtle, var(--novelist-border));">
+      {:else if uiStore.statsVisible && projectStore.dirPath}
+        <div style="width: 280px; border-left: 1px solid var(--novelist-border-subtle, var(--novelist-border));">
           <StatsPanel
             projectDir={projectStore.dirPath}
             chapters={projectChapters}
@@ -607,7 +658,7 @@
           class="flex items-center justify-center cursor-pointer"
           style="width: 20px; flex: 1; background: {uiStore.snapshotVisible ? 'color-mix(in srgb, var(--novelist-accent) 10%, transparent)' : 'transparent'}; color: {uiStore.snapshotVisible ? 'var(--novelist-accent)' : 'var(--novelist-text-tertiary, var(--novelist-text-secondary))'}; border: none; writing-mode: vertical-rl; font-size: 9px; letter-spacing: 0.08em; user-select: none; transition: color 100ms, background 100ms;"
           onclick={() => uiStore.toggleSnapshot()}
-          title="Toggle Snapshots"
+          title="Toggle Snapshots (Cmd+Shift+S)"
         >
           SNAPS
         </button>
@@ -616,7 +667,7 @@
           class="flex items-center justify-center cursor-pointer"
           style="width: 20px; flex: 1; background: {uiStore.statsVisible ? 'color-mix(in srgb, var(--novelist-accent) 10%, transparent)' : 'transparent'}; color: {uiStore.statsVisible ? 'var(--novelist-accent)' : 'var(--novelist-text-tertiary, var(--novelist-text-secondary))'}; border: none; writing-mode: vertical-rl; font-size: 9px; letter-spacing: 0.08em; user-select: none; transition: color 100ms, background 100ms;"
           onclick={() => uiStore.toggleStats()}
-          title="Toggle Writing Stats"
+          title="Toggle Writing Stats (Cmd+Shift+T)"
         >
           STATS
         </button>

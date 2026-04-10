@@ -3,7 +3,7 @@
   import { uiStore } from '$lib/stores/ui.svelte';
   import { builtinThemes } from '$lib/themes';
   import { commands } from '$lib/ipc/commands';
-  import { shortcutsStore } from '$lib/stores/shortcuts.svelte';
+  import { shortcutsStore, editorCommandIds } from '$lib/stores/shortcuts.svelte';
   import { projectStore } from '$lib/stores/project.svelte';
 
   interface Props {
@@ -205,8 +205,8 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="rounded-lg shadow-xl w-full max-w-lg flex"
-    style="background: var(--novelist-bg); color: var(--novelist-text); border: 1px solid var(--novelist-border); height: 480px;"
+    class="rounded-lg shadow-xl w-full flex"
+    style="max-width: 650px; background: var(--novelist-bg); color: var(--novelist-text); border: 1px solid var(--novelist-border); height: 520px;"
     onclick={(e) => e.stopPropagation()}
   >
     <!-- Left nav -->
@@ -310,37 +310,78 @@
       {:else if activeSection === 'shortcuts'}
         <h3 class="text-xs font-semibold uppercase tracking-wide mb-4" style="color: var(--novelist-text-secondary);">Keyboard Shortcuts</h3>
 
-        <div class="space-y-1">
-          {#each shortcutsStore.allCommandIds as cmdId}
-            {@const currentShortcut = shortcutsStore.get(cmdId)}
-            {@const isCustom = shortcutsStore.isCustomized(cmdId)}
-            {@const isRecording = recordingCommandId === cmdId}
-            <div class="flex items-center justify-between py-2 px-2 rounded" style="background: {isRecording ? 'color-mix(in srgb, var(--novelist-accent) 10%, transparent)' : 'transparent'};">
-              <span class="text-sm" style="color: var(--novelist-text);">{shortcutsStore.labels[cmdId]}</span>
-              <div class="flex items-center gap-2">
-                {#if isRecording}
-                  <span class="text-xs px-2 py-1 rounded" style="background: var(--novelist-accent); color: #fff; animation: pulse 1s infinite;">Press keys...</span>
-                {:else}
-                  <!-- svelte-ignore a11y_click_events_have_key_events -->
-                  <!-- svelte-ignore a11y_no_static_element_interactions -->
-                  <span
-                    class="text-xs px-2 py-1 rounded cursor-pointer"
-                    style="background: rgba(255, 255, 255, 0.08); color: {isCustom ? 'var(--novelist-accent)' : 'var(--novelist-text-secondary)'}; font-family: monospace; border: 1px solid {isCustom ? 'var(--novelist-accent)' : 'transparent'};"
-                    onclick={() => startRecording(cmdId)}
-                    title="Click to change shortcut"
-                  >{currentShortcut}</span>
-                {/if}
-                {#if isCustom && !isRecording}
-                  <button
-                    class="text-xs px-1 py-0.5 rounded cursor-pointer"
-                    style="background: none; border: 1px solid var(--novelist-border); color: var(--novelist-text-secondary); font-size: 10px;"
-                    onclick={() => shortcutsStore.reset(cmdId)}
-                    title="Reset to default"
-                  >reset</button>
-                {/if}
+        <!-- App shortcuts -->
+        <div class="mb-4">
+          <div class="text-xs font-semibold mb-2" style="color: var(--novelist-text-tertiary, var(--novelist-text-secondary)); text-transform: uppercase; letter-spacing: 0.05em;">Application</div>
+          <div class="space-y-1">
+            {#each shortcutsStore.appCommandIds as cmdId}
+              {@const currentShortcut = shortcutsStore.get(cmdId)}
+              {@const isCustom = shortcutsStore.isCustomized(cmdId)}
+              {@const isRecording = recordingCommandId === cmdId}
+              <div class="flex items-center justify-between py-2 px-2 rounded" style="background: {isRecording ? 'color-mix(in srgb, var(--novelist-accent) 10%, transparent)' : 'transparent'};">
+                <span class="text-sm" style="color: var(--novelist-text);">{shortcutsStore.labels[cmdId]}</span>
+                <div class="flex items-center gap-2">
+                  {#if isRecording}
+                    <span class="text-xs px-2 py-1 rounded" style="background: var(--novelist-accent); color: #fff; animation: pulse 1s infinite;">Press keys...</span>
+                  {:else}
+                    <!-- svelte-ignore a11y_click_events_have_key_events -->
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                    <span
+                      class="text-xs px-2 py-1 rounded cursor-pointer"
+                      style="background: rgba(255, 255, 255, 0.08); color: {isCustom ? 'var(--novelist-accent)' : 'var(--novelist-text-secondary)'}; font-family: monospace; border: 1px solid {isCustom ? 'var(--novelist-accent)' : 'transparent'};"
+                      onclick={() => startRecording(cmdId)}
+                      title="Click to change shortcut"
+                    >{currentShortcut || '—'}</span>
+                  {/if}
+                  {#if isCustom && !isRecording}
+                    <button
+                      class="text-xs px-1 py-0.5 rounded cursor-pointer"
+                      style="background: none; border: 1px solid var(--novelist-border); color: var(--novelist-text-secondary); font-size: 10px;"
+                      onclick={() => shortcutsStore.reset(cmdId)}
+                      title="Reset to default"
+                    >reset</button>
+                  {/if}
+                </div>
               </div>
-            </div>
-          {/each}
+            {/each}
+          </div>
+        </div>
+
+        <!-- Editor shortcuts -->
+        <div class="mb-4">
+          <div class="text-xs font-semibold mb-2" style="color: var(--novelist-text-tertiary, var(--novelist-text-secondary)); text-transform: uppercase; letter-spacing: 0.05em;">Editor Formatting</div>
+          <div class="space-y-1">
+            {#each editorCommandIds as cmdId}
+              {@const currentShortcut = shortcutsStore.get(cmdId)}
+              {@const isCustom = shortcutsStore.isCustomized(cmdId)}
+              {@const isRecording = recordingCommandId === cmdId}
+              <div class="flex items-center justify-between py-2 px-2 rounded" style="background: {isRecording ? 'color-mix(in srgb, var(--novelist-accent) 10%, transparent)' : 'transparent'};">
+                <span class="text-sm" style="color: var(--novelist-text);">{shortcutsStore.labels[cmdId]}</span>
+                <div class="flex items-center gap-2">
+                  {#if isRecording}
+                    <span class="text-xs px-2 py-1 rounded" style="background: var(--novelist-accent); color: #fff; animation: pulse 1s infinite;">Press keys...</span>
+                  {:else}
+                    <!-- svelte-ignore a11y_click_events_have_key_events -->
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                    <span
+                      class="text-xs px-2 py-1 rounded cursor-pointer"
+                      style="background: rgba(255, 255, 255, 0.08); color: {isCustom ? 'var(--novelist-accent)' : 'var(--novelist-text-secondary)'}; font-family: monospace; border: 1px solid {isCustom ? 'var(--novelist-accent)' : 'transparent'};"
+                      onclick={() => startRecording(cmdId)}
+                      title="Click to change shortcut"
+                    >{currentShortcut || '—'}</span>
+                  {/if}
+                  {#if isCustom && !isRecording}
+                    <button
+                      class="text-xs px-1 py-0.5 rounded cursor-pointer"
+                      style="background: none; border: 1px solid var(--novelist-border); color: var(--novelist-text-secondary); font-size: 10px;"
+                      onclick={() => shortcutsStore.reset(cmdId)}
+                      title="Reset to default"
+                    >reset</button>
+                  {/if}
+                </div>
+              </div>
+            {/each}
+          </div>
         </div>
 
         <div class="mt-4 flex justify-end">
