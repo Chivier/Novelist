@@ -461,7 +461,7 @@
   }
 
   .sidebar-project-name {
-    font-size: 0.8rem;
+    font-size: 0.9rem;
     font-weight: 600;
     color: var(--novelist-text);
     letter-spacing: 0.01em;
@@ -533,7 +533,7 @@
     border-radius: 5px;
     background: transparent;
     color: var(--novelist-sidebar-text);
-    font-size: 0.875rem;
+    font-size: 0.95rem;
     text-align: left;
     cursor: pointer;
     transition: background 80ms;
@@ -551,7 +551,7 @@
   .sidebar-item-dir {
     cursor: default;
     color: var(--novelist-text-secondary);
-    font-size: 0.84rem;
+    font-size: 0.92rem;
   }
   .sidebar-item-disabled {
     cursor: default;
@@ -573,7 +573,7 @@
 
   .sidebar-item-ext {
     color: var(--novelist-text-tertiary, var(--novelist-text-secondary));
-    font-size: 0.72rem;
+    font-size: 0.78rem;
     flex-shrink: 0;
   }
   .sidebar-item-active .sidebar-item-ext {

@@ -99,8 +99,12 @@
     const project = projectStore.name;
     let title = t('app.name');
     if (tab) {
-      title = `${tab.isDirty ? '● ' : ''}${tab.fileName} — ${project} — ${t('app.name')}`;
-    } else if (projectStore.isOpen) {
+      if (projectStore.singleFileMode) {
+        title = `${tab.isDirty ? '● ' : ''}${tab.fileName} — ${t('app.name')}`;
+      } else {
+        title = `${tab.isDirty ? '● ' : ''}${tab.fileName} — ${project} — ${t('app.name')}`;
+      }
+    } else if (projectStore.isOpen && !projectStore.singleFileMode) {
       title = `${project} — ${t('app.name')}`;
     }
     getCurrentWindow().setTitle(title);
@@ -145,6 +149,7 @@
     const files = filesResult.status === 'ok' ? filesResult.data : [];
 
     projectStore.setProject(dirPath, config, files);
+    uiStore.sidebarVisible = true;
     tabsStore.closeAll();
 
     // Track as recent project
@@ -183,6 +188,20 @@
 
   async function handleOpenRecent(path: string) {
     await openProjectFromPath(path);
+  }
+
+  async function handleNewScratchFile() {
+    const result = await commands.createScratchFile();
+    if (result.status === 'ok') {
+      const filePath = result.data;
+      const readResult = await commands.readFile(filePath);
+      if (readResult.status === 'ok') {
+        projectStore.enterSingleFileMode();
+        uiStore.sidebarVisible = false;
+        tabsStore.openTab(filePath, readResult.data);
+        await commands.registerOpenFile(filePath);
+      }
+    }
   }
 
   async function handleNewFile() {
@@ -272,7 +291,8 @@
     'toggle-zen': () => uiStore.toggleZen(),
     'command-palette': () => { paletteOpen = !paletteOpen; },
     'toggle-split': () => tabsStore.toggleSplit(),
-    'new-file': () => handleNewFile(),
+    'new-file': () => { projectStore.dirPath ? handleNewFile() : handleNewScratchFile(); },
+    'open-directory': () => handleOpenDirectory(),
     'export-project': () => { exportDialogOpen = true; },
     'close-tab': () => { const tab = tabsStore.activeTab; if (tab) tabsStore.closeTab(tab.id); },
     'open-settings': () => uiStore.toggleSettings(),
@@ -414,7 +434,8 @@
     commandRegistry.register({ id: 'command-palette', label: t('command.commandPalette'), shortcut: shortcutsStore.get('command-palette'), handler: () => { paletteOpen = !paletteOpen; } });
     commandRegistry.register({ id: 'project-search', label: t('command.projectSearch'), shortcut: 'Cmd+Shift+F', handler: () => { projectSearchOpen = !projectSearchOpen; } });
     commandRegistry.register({ id: 'toggle-split', label: t('command.toggleSplit'), shortcut: shortcutsStore.get('toggle-split'), handler: () => tabsStore.toggleSplit() });
-    commandRegistry.register({ id: 'new-file', label: t('command.newFile'), shortcut: shortcutsStore.get('new-file'), handler: () => handleNewFile() });
+    commandRegistry.register({ id: 'new-file', label: t('command.newFile'), shortcut: shortcutsStore.get('new-file'), handler: () => { projectStore.dirPath ? handleNewFile() : handleNewScratchFile(); } });
+    commandRegistry.register({ id: 'open-directory', label: t('command.openDirectory'), shortcut: shortcutsStore.get('open-directory'), handler: () => handleOpenDirectory() });
     commandRegistry.register({ id: 'export-project', label: t('command.exportProject'), shortcut: shortcutsStore.get('export-project'), handler: () => { exportDialogOpen = true; } });
     commandRegistry.register({ id: 'close-tab', label: t('command.closeTab'), shortcut: shortcutsStore.get('close-tab'), handler: () => { const tab = tabsStore.activeTab; if (tab) tabsStore.closeTab(tab.id); } });
     commandRegistry.register({ id: 'open-settings', label: t('command.openSettings'), shortcut: shortcutsStore.get('open-settings'), handler: () => uiStore.toggleSettings() });
@@ -446,6 +467,25 @@
     let unlistenFileChanged: (() => void) | null = null;
     let unlistenDragDrop: (() => void) | null = null;
     let unlistenCloseRequested: (() => void) | null = null;
+    let unlistenOpenFile: (() => void) | null = null;
+
+    // Listen for open-file events from Rust (CLI args, macOS Finder "Open With")
+    listen<string>('open-file', async (event) => {
+      const filePath = event.payload;
+      const lower = filePath.toLowerCase();
+      const textExtensions = ['.md', '.markdown', '.txt'];
+      if (!textExtensions.some(ext => lower.endsWith(ext))) return;
+
+      const result = await commands.readFile(filePath);
+      if (result.status === 'ok') {
+        if (!projectStore.isOpen) {
+          projectStore.enterSingleFileMode();
+          uiStore.sidebarVisible = false;
+        }
+        tabsStore.openTab(filePath, result.data);
+        await commands.registerOpenFile(filePath);
+      }
+    }).then(fn => { unlistenOpenFile = fn; });
 
     listen<{ path: string }>('file-changed', async (event) => {
       const { path } = event.payload;
@@ -471,6 +511,11 @@
           if (textExtensions.some(ext => lower.endsWith(ext))) {
             const result = await commands.readFile(filePath);
             if (result.status === 'ok') {
+              // Enter single-file mode if no project is open
+              if (!projectStore.isOpen) {
+                projectStore.enterSingleFileMode();
+                uiStore.sidebarVisible = false;
+              }
               tabsStore.openTab(filePath, result.data);
               await commands.registerOpenFile(filePath);
             }
@@ -508,23 +553,13 @@
     // Set up sync timer for the current project
     setupSyncTimer();
 
-    // Cmd+W on macOS triggers window close via native menu.
-    // Convert it to "close active tab" when tabs are open.
-    // Only actually close the window when no tabs remain.
+    // Window close (Cmd+Q or title-bar close button).
+    // If there are unsaved files, prompt the user before closing.
     getCurrentWindow().onCloseRequested(async (event) => {
-      // If there's an active tab, close it instead of the window
-      const activeTab = tabsStore.activeTab;
-      if (activeTab) {
-        event.preventDefault();
-        await tabsStore.closeTab(activeTab.id);
-        return;
-      }
-
-      // No open tabs — check for dirty tabs in other panes before closing window
       const dirty = tabsStore.dirtyTabs;
       if (dirty.length > 0) {
         event.preventDefault();
-        const names = dirty.map(t => t.fileName).join(', ');
+        const names = dirty.map(dt => dt.fileName).join(', ');
         const shouldSave = await ask(
           t('dialog.unsavedBeforeClose', { names }),
           { title: t('dialog.unsavedChanges'), kind: 'warning', okLabel: t('dialog.save'), cancelLabel: t('dialog.dontSave') }
@@ -532,9 +567,9 @@
         if (shouldSave) {
           await tabsStore.saveAllDirty();
         }
-        // Now actually close the window
         await getCurrentWindow().close();
       }
+      // No dirty tabs — let the window close normally
     }).then(fn => { unlistenCloseRequested = fn; });
 
     // Sync on app close
@@ -561,6 +596,7 @@
       unlistenFileChanged?.();
       unlistenDragDrop?.();
       unlistenCloseRequested?.();
+      unlistenOpenFile?.();
       window.removeEventListener('novelist-goto-line', handleGotoLine);
       window.removeEventListener('beforeunload', handleBeforeUnload);
       if (syncIntervalId) clearInterval(syncIntervalId);
@@ -571,7 +607,7 @@
 <svelte:window onkeydown={handleKeydown} onmousedown={handleDragMouseDown} />
 
 {#if !projectStore.isOpen}
-  <Welcome onOpenDirectory={handleOpenDirectory} onOpenRecent={handleOpenRecent} />
+  <Welcome onOpenDirectory={handleOpenDirectory} onOpenRecent={handleOpenRecent} onNewFile={handleNewScratchFile} />
 {:else if uiStore.zenMode}
   <ZenMode {wordCount}>
     <div class="flex-1 min-h-0 overflow-hidden w-full">
@@ -628,8 +664,8 @@
             {:else}
               <div class="flex items-center justify-center h-full" style="color: var(--novelist-text-tertiary, var(--novelist-text-secondary));">
                 <div class="text-center">
-                  <p style="font-size: 1.1rem; font-weight: 500; margin-bottom: 6px; color: var(--novelist-text-secondary);">{t('app.name')}</p>
-                  <p style="font-size: 0.8rem;">{t('app.openFolder')}</p>
+                  <p style="font-size: 1.3rem; font-weight: 500; margin-bottom: 6px; color: var(--novelist-text-secondary);">{t('app.name')}</p>
+                  <p style="font-size: 0.95rem;">{t('app.openFolder')}</p>
                 </div>
               </div>
             {/if}
@@ -667,7 +703,7 @@
               {:else}
                 <div class="flex items-center justify-center h-full" style="color: var(--novelist-text-tertiary, var(--novelist-text-secondary));">
                   <div class="text-center">
-                    <p style="font-size: 0.85rem;">{t('app.openFile')}</p>
+                    <p style="font-size: 0.95rem;">{t('app.openFile')}</p>
                   </div>
                 </div>
               {/if}

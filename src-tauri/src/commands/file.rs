@@ -123,6 +123,29 @@ pub async fn create_file(parent_dir: String, filename: String) -> Result<String,
     Ok(file_path.to_string_lossy().to_string())
 }
 
+/// Create a scratch file in ~/.cache/novelist/ for single-file mode.
+/// Filename pattern: `novelist_scratch_<unix_millis>.md`
+/// This pattern is checked by the frontend to detect unsaved scratch files.
+/// Returns the absolute path of the created file.
+#[tauri::command]
+#[specta::specta]
+pub async fn create_scratch_file() -> Result<String, AppError> {
+    let cache_dir = dirs::cache_dir()
+        .ok_or_else(|| AppError::Custom("Cannot determine cache directory".into()))?
+        .join("novelist");
+    tokio::fs::create_dir_all(&cache_dir).await?;
+
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let file_name = format!("novelist_scratch_{}.md", ts);
+    let file_path = cache_dir.join(&file_name);
+
+    tokio::fs::write(&file_path, "").await?;
+    Ok(file_path.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn create_directory(parent_dir: String, name: String) -> Result<String, AppError> {

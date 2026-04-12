@@ -11,6 +11,13 @@ export const commands = {
 	writeFile: (path: string, content: string) => typedError<null, string>(__TAURI_INVOKE("write_file", { path, content })),
 	listDirectory: (path: string) => typedError<FileEntry[], string>(__TAURI_INVOKE("list_directory", { path })),
 	createFile: (parentDir: string, filename: string) => typedError<string, string>(__TAURI_INVOKE("create_file", { parentDir, filename })),
+	/**
+	 *  Create a scratch file in ~/.cache/novelist/ for single-file mode.
+	 *  Filename pattern: `novelist_scratch_<unix_millis>.md`
+	 *  This pattern is checked by the frontend to detect unsaved scratch files.
+	 *  Returns the absolute path of the created file.
+	 */
+	createScratchFile: () => typedError<string, string>(__TAURI_INVOKE("create_scratch_file")),
 	createDirectory: (parentDir: string, name: string) => typedError<string, string>(__TAURI_INVOKE("create_directory", { parentDir, name })),
 	renameItem: (oldPath: string, newName: string) => typedError<string, string>(__TAURI_INVOKE("rename_item", { oldPath, newName })),
 	deleteItem: (path: string) => typedError<null, string>(__TAURI_INVOKE("delete_item", { path })),

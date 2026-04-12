@@ -11,6 +11,7 @@ export const zhCN: TranslationMap = {
   'welcome.recentProjects': '最近项目',
   'welcome.noRecent': '暂无最近项目。',
   'welcome.openDirectory': '打开目录...',
+  'welcome.newFile': '新建文件',
 
   // --- Sidebar ---
   'sidebar.openFolder': '打开文件夹',
@@ -145,6 +146,7 @@ export const zhCN: TranslationMap = {
   'command.projectSearch': '在项目中搜索',
   'command.toggleSplit': '切换分屏',
   'command.newFile': '新建文件',
+  'command.openDirectory': '打开目录',
   'command.exportProject': '导出项目',
   'command.closeTab': '关闭标签',
   'command.openSettings': '打开设置',

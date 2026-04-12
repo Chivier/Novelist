@@ -1,5 +1,6 @@
 import { commands } from '$lib/ipc/commands';
-import { ask } from '@tauri-apps/plugin-dialog';
+import { ask, save as saveDialog } from '@tauri-apps/plugin-dialog';
+import { isScratchFile, nextScratchDisplayName } from '$lib/utils/scratch';
 import type { EditorView } from '@codemirror/view';
 
 interface TabState {
@@ -159,7 +160,8 @@ class TabsStore {
     const existing = pane.tabs.find(t => t.filePath === filePath);
     if (existing) { pane.activeTabId = existing.id; return; }
 
-    const fileName = filePath.split('/').pop() || filePath;
+    const rawName = filePath.split('/').pop() || filePath;
+    const fileName = isScratchFile(filePath) ? nextScratchDisplayName() : rawName;
     const id = crypto.randomUUID();
     pane.tabs.push({ id, filePath, fileName, content, isDirty: false, scrollPosition: 0, cursorPosition: 0, version: 0 });
     pane.activeTabId = id;
@@ -211,17 +213,30 @@ class TabsStore {
 
       // Prompt for unsaved changes
       if (tab.isDirty) {
+        const scratch = isScratchFile(tab.filePath);
         const shouldSave = await ask(
           `"${tab.fileName}" has unsaved changes.\nSave before closing?`,
-          { title: 'Unsaved Changes', kind: 'warning', okLabel: 'Save', cancelLabel: "Don't Save" }
+          { title: 'Unsaved Changes', kind: 'warning', okLabel: scratch ? 'Save As...' : 'Save', cancelLabel: "Don't Save" }
         );
         if (shouldSave) {
           this.syncFromView(tab.id);
           const fresh = this.findByPath(tab.filePath);
           if (fresh?.content) {
-            await commands.registerWriteIgnore(fresh.filePath);
-            const result = await commands.writeFile(fresh.filePath, fresh.content);
-            if (result.status === 'ok') this.markSaved(fresh.id);
+            if (scratch) {
+              const savePath = await saveDialog({
+                defaultPath: fresh.fileName,
+                filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'txt'] }],
+              });
+              if (savePath) {
+                await commands.registerWriteIgnore(savePath);
+                const result = await commands.writeFile(savePath, fresh.content);
+                if (result.status === 'ok') this.markSaved(fresh.id);
+              }
+            } else {
+              await commands.registerWriteIgnore(fresh.filePath);
+              const result = await commands.writeFile(fresh.filePath, fresh.content);
+              if (result.status === 'ok') this.markSaved(fresh.id);
+            }
           }
         }
       }
@@ -289,6 +304,18 @@ class TabsStore {
     for (const pane of this.panes) {
       const tab = pane.tabs.find(t => t.id === id);
       if (tab) { tab.isDirty = false; return; }
+    }
+  }
+
+  /** Update a tab's file path (used by Save As to re-point a scratch file). */
+  updateFilePath(id: string, newPath: string) {
+    for (const pane of this.panes) {
+      const tab = pane.tabs.find(t => t.id === id);
+      if (tab) {
+        tab.filePath = newPath;
+        tab.fileName = newPath.split('/').pop() || newPath;
+        return;
+      }
     }
   }
 

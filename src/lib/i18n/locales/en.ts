@@ -11,6 +11,7 @@ export const en: TranslationMap = {
   'welcome.recentProjects': 'Recent Projects',
   'welcome.noRecent': 'No recent projects yet.',
   'welcome.openDirectory': 'Open Directory...',
+  'welcome.newFile': 'New File',
 
   // --- Sidebar ---
   'sidebar.openFolder': 'Open Folder',
@@ -145,6 +146,7 @@ export const en: TranslationMap = {
   'command.projectSearch': 'Search in Project',
   'command.toggleSplit': 'Toggle Split View',
   'command.newFile': 'New File',
+  'command.openDirectory': 'Open Directory',
   'command.exportProject': 'Export Project',
   'command.closeTab': 'Close Tab',
   'command.openSettings': 'Open Settings',

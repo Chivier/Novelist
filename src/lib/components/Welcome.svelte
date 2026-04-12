@@ -7,8 +7,9 @@
   interface Props {
     onOpenDirectory: () => void;
     onOpenRecent: (path: string) => void;
+    onNewFile: () => void;
   }
-  let { onOpenDirectory, onOpenRecent }: Props = $props();
+  let { onOpenDirectory, onOpenRecent, onNewFile }: Props = $props();
 
   let recentProjects = $state<RecentProject[]>([]);
 
@@ -73,6 +74,9 @@
     {/if}
 
     <div class="welcome-actions">
+      <button class="new-file-btn" onclick={onNewFile}>
+        {t('welcome.newFile')}
+      </button>
       <button class="open-btn" onclick={onOpenDirectory}>
         {t('welcome.openDirectory')}
       </button>
@@ -103,7 +107,7 @@
   }
 
   .welcome-title {
-    font-size: 2rem;
+    font-size: 2.4rem;
     font-weight: 300;
     letter-spacing: 0.05em;
     margin: 0 0 0.25rem 0;
@@ -111,7 +115,7 @@
   }
 
   .welcome-subtitle {
-    font-size: 0.85rem;
+    font-size: 0.95rem;
     margin: 0;
     color: var(--novelist-text-secondary);
   }
@@ -125,7 +129,7 @@
   }
 
   .recent-heading {
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -164,12 +168,12 @@
   }
 
   .recent-name {
-    font-size: 0.9rem;
+    font-size: 1rem;
     font-weight: 500;
   }
 
   .recent-path {
-    font-size: 0.75rem;
+    font-size: 0.82rem;
     color: var(--novelist-text-secondary);
     margin-top: 0.15rem;
     overflow: hidden;
@@ -181,26 +185,43 @@
     text-align: center;
     padding: 1.5rem 0;
     color: var(--novelist-text-secondary);
-    font-size: 0.85rem;
+    font-size: 0.95rem;
   }
 
   .welcome-actions {
     display: flex;
     justify-content: center;
+    gap: 0.75rem;
   }
 
-  .open-btn {
+  .new-file-btn {
     padding: 0.5rem 1.5rem;
     background: var(--novelist-accent);
     color: #fff;
     border: none;
     border-radius: 4px;
-    font-size: 0.85rem;
+    font-size: 0.95rem;
     cursor: pointer;
     transition: opacity 0.1s;
   }
 
-  .open-btn:hover {
+  .new-file-btn:hover {
     opacity: 0.85;
+  }
+
+  .open-btn {
+    padding: 0.5rem 1.5rem;
+    background: transparent;
+    color: var(--novelist-text-secondary);
+    border: 1px solid var(--novelist-border);
+    border-radius: 4px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: border-color 0.1s, color 0.1s;
+  }
+
+  .open-btn:hover {
+    border-color: var(--novelist-accent);
+    color: var(--novelist-text);
   }
 </style>

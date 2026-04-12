@@ -10,6 +10,8 @@
   import { projectStore } from '$lib/stores/project.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
   import { commands } from '$lib/ipc/commands';
+  import { save as saveDialog } from '@tauri-apps/plugin-dialog';
+  import { isScratchFile } from '$lib/utils/scratch';
   import { invoke } from '@tauri-apps/api/core';
   import { countWords } from '$lib/utils/wordcount';
   import { extractHeadings, type HeadingItem } from '$lib/editor/outline';
@@ -210,6 +212,30 @@
     if (!tab || !tab.isDirty || !view) return;
 
     const content = view.state.doc.toString();
+
+    // Scratch files (pattern-based) → prompt Save As
+    if (isScratchFile(tab.filePath)) {
+      const savePath = await saveDialog({
+        defaultPath: tab.fileName,
+        filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'txt'] }],
+      });
+      if (!savePath) return; // user cancelled
+
+      await commands.registerWriteIgnore(savePath);
+      const result = await commands.writeFile(savePath, content);
+      if (result.status === 'ok') {
+        // Update the tab to point to the new path
+        tabsStore.updateFilePath(tab.id, savePath);
+        tabsStore.updateContent(tab.id, content);
+        tabsStore.markSavedByPath(savePath);
+        await commands.registerOpenFile(savePath);
+        flushWritingStats();
+      } else {
+        console.error('[Save As] Failed:', result.error);
+      }
+      return;
+    }
+
     await commands.registerWriteIgnore(tab.filePath);
     const result = await commands.writeFile(tab.filePath, content);
     if (result.status === 'ok') {
@@ -345,7 +371,10 @@
     const extensions = [
       ...buildExtensions(fileSize, lineCount),
       buildUpdateListener(),
-      ...(!isReadOnly ? [keymap.of([{ key: 'Mod-s', run: () => { saveCurrentFile(); return true; } }])] : []),
+      ...(!isReadOnly ? [keymap.of([
+        { key: 'Mod-s', run: () => { saveCurrentFile(); return true; } },
+        { key: 'Mod-w', run: () => { const tab = tabsStore.activeTab; if (tab) tabsStore.closeTab(tab.id); return true; } },
+      ])] : []),
     ];
 
     const savedState = getSavedEditorState(tab.id);
@@ -357,6 +386,8 @@
       view = new EditorView({ state, parent: editorContainer });
     }
     registerEditorView(tab.id, view);
+    // Auto-focus the editor so the user can type immediately
+    requestAnimationFrame(() => view?.focus());
 
     (window as any).__novelist_view = view;
     (window as any).__novelist_save = saveCurrentFile;

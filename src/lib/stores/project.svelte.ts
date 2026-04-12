@@ -5,8 +5,9 @@ class ProjectStore {
   config = $state<ProjectConfig | null>(null);
   files = $state<FileEntry[]>([]);
   isLoading = $state(false);
+  singleFileMode = $state(false);
 
-  get isOpen() { return this.dirPath !== null; }
+  get isOpen() { return this.dirPath !== null || this.singleFileMode; }
 
   get name() {
     if (this.config) return this.config.project.name;
@@ -17,11 +18,19 @@ class ProjectStore {
     return 'No Project';
   }
 
+  enterSingleFileMode() {
+    this.singleFileMode = true;
+    this.dirPath = null;
+    this.config = null;
+    this.files = [];
+  }
+
   setProject(dirPath: string, config: ProjectConfig | null, files: FileEntry[]) {
     this.dirPath = dirPath;
     this.config = config;
     this.files = files;
     this.isLoading = false;
+    this.singleFileMode = false;
   }
 
   updateFiles(files: FileEntry[]) { this.files = files; }
@@ -30,6 +39,7 @@ class ProjectStore {
     this.dirPath = null;
     this.config = null;
     this.files = [];
+    this.singleFileMode = false;
   }
 }
 

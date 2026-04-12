@@ -8,8 +8,8 @@ pub use error::AppError;
 use commands::draft::{delete_draft_note, has_draft_note, read_draft_note, write_draft_note};
 use commands::export::{check_pandoc, export_project};
 use commands::file::{
-    create_directory, create_file, delete_item, list_directory, read_file, rename_item,
-    search_in_project, write_file,
+    create_directory, create_file, create_scratch_file, delete_item, list_directory, read_file,
+    rename_item, search_in_project, write_file,
 };
 use commands::plugin::{
     get_plugin_commands, invoke_plugin_command, list_plugins, load_plugin,
@@ -29,6 +29,7 @@ use services::rope_document::{
     rope_apply_edit, rope_close, rope_get_lines, rope_line_to_char, rope_open, rope_save,
     RopeDocumentState,
 };
+use tauri::Emitter;
 use tauri_specta::{collect_commands, Builder};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -45,6 +46,7 @@ pub fn run() {
         write_file,
         list_directory,
         create_file,
+        create_scratch_file,
         create_directory,
         rename_item,
         delete_item,
@@ -106,8 +108,56 @@ pub fn run() {
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);
+
+            // Check CLI args for a file path to open in single-file mode
+            let handle = app.handle().clone();
+            let args: Vec<String> = std::env::args().skip(1).collect();
+            let text_extensions = [".md", ".markdown", ".txt"];
+            for arg in &args {
+                let path = std::path::Path::new(arg);
+                if path.exists()
+                    && text_extensions
+                        .iter()
+                        .any(|ext| arg.to_lowercase().ends_with(ext))
+                {
+                    let file_path = path
+                        .canonicalize()
+                        .unwrap_or_else(|_| path.to_path_buf())
+                        .to_string_lossy()
+                        .to_string();
+                    // Emit after a short delay so the frontend listener is ready
+                    tokio::spawn(async move {
+                        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                        let _ = handle.emit("open-file", file_path);
+                    });
+                    break;
+                }
+            }
+
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // macOS: handle file-open Apple Events (Finder "Open With", double-click)
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = &event {
+                let text_extensions = ["md", "markdown", "txt"];
+                for url in urls {
+                    if let Ok(path) = url.to_file_path() {
+                        if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                            if text_extensions.contains(&ext.to_lowercase().as_str()) {
+                                let _ = app.emit(
+                                    "open-file",
+                                    path.to_string_lossy().to_string(),
+                                );
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            // Suppress unused variable warnings on non-macOS
+            let _ = (app, event);
+        });
 }
