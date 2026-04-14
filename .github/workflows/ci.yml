@@ -36,8 +36,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            src-tauri/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+            core/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('core/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
 
@@ -50,14 +50,20 @@ jobs:
       - name: Vitest
         run: pnpm test
 
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps webkit
+
+      - name: Run E2E tests (browser mode)
+        run: pnpm test:e2e:browser
+
       - name: Cargo format check
-        working-directory: src-tauri
+        working-directory: core
         run: cargo fmt --all -- --check
 
       - name: Cargo clippy
-        working-directory: src-tauri
+        working-directory: core
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Cargo test
-        working-directory: src-tauri
+        working-directory: core
         run: cargo test

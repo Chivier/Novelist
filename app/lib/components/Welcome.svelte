@@ -1,0 +1,288 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { commands } from '$lib/ipc/commands';
+  import type { RecentProject } from '$lib/ipc/commands';
+  import { t } from '$lib/i18n';
+
+  interface Props {
+    onOpenDirectory: () => void;
+    onOpenRecent: (path: string) => void;
+    onNewFile: () => void;
+    onNewProject?: () => void;
+  }
+  let { onOpenDirectory, onOpenRecent, onNewFile, onNewProject }: Props = $props();
+
+  let recentProjects = $state<RecentProject[]>([]);
+
+  onMount(async () => {
+    const result = await commands.getRecentProjects();
+    if (result.status === 'ok') {
+      recentProjects = result.data;
+    }
+  });
+
+  async function removeProject(e: Event, path: string) {
+    e.stopPropagation();
+    await commands.removeRecentProject(path);
+    recentProjects = recentProjects.filter(p => p.path !== path);
+  }
+
+  function displayPath(path: string): string {
+    const home = '/Users/';
+    if (path.startsWith(home)) {
+      const rest = path.slice(home.length);
+      const slashIdx = rest.indexOf('/');
+      if (slashIdx !== -1) {
+        return '~' + rest.slice(slashIdx);
+      }
+      return '~';
+    }
+    const homeLinux = '/home/';
+    if (path.startsWith(homeLinux)) {
+      const rest = path.slice(homeLinux.length);
+      const slashIdx = rest.indexOf('/');
+      if (slashIdx !== -1) {
+        return '~' + rest.slice(slashIdx);
+      }
+      return '~';
+    }
+    return path;
+  }
+</script>
+
+<div class="welcome-root" data-testid="welcome-screen" data-tauri-drag-region>
+  <div class="welcome-card">
+    <div class="welcome-header">
+      <h1 class="welcome-title">{t('app.name')}</h1>
+      <p class="welcome-subtitle">{t('app.subtitle')}</p>
+    </div>
+
+    {#if recentProjects.length > 0}
+      <div class="recent-section">
+        <div class="recent-header">
+          <h2 class="recent-heading">{t('welcome.recentProjects')}</h2>
+        </div>
+        <ul class="recent-list">
+          {#each recentProjects as project, index}
+            <li class="recent-row">
+              <button
+                class="recent-item"
+                data-testid="recent-project-{index}"
+                onclick={() => onOpenRecent(project.path)}
+              >
+                <span class="recent-name">{project.name}</span>
+                <span class="recent-path">{displayPath(project.path)}</span>
+              </button>
+              <button
+                class="recent-remove-btn"
+                onclick={(e) => removeProject(e, project.path)}
+                title={t('sidebar.removeProject')}
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      </div>
+    {:else}
+      <div class="empty-state">
+        <p>{t('welcome.noRecent')}</p>
+      </div>
+    {/if}
+
+    <div class="welcome-actions">
+      {#if onNewProject}
+        <button class="new-file-btn" onclick={onNewProject}>
+          {t('welcome.newProject')}
+        </button>
+      {/if}
+      <button class="open-btn" data-testid="welcome-new-file" onclick={onNewFile}>
+        {t('welcome.newFile')}
+      </button>
+      <button class="open-btn" data-testid="welcome-open-folder" onclick={onOpenDirectory}>
+        {t('welcome.openDirectory')}
+      </button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .welcome-root {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    width: 100%;
+    background: var(--novelist-bg);
+  }
+
+  .welcome-card {
+    width: 480px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .welcome-header {
+    text-align: center;
+  }
+
+  .welcome-title {
+    font-size: 2.4rem;
+    font-weight: 300;
+    letter-spacing: 0.05em;
+    margin: 0 0 0.25rem 0;
+    color: var(--novelist-text);
+  }
+
+  .welcome-subtitle {
+    font-size: 0.95rem;
+    margin: 0;
+    color: var(--novelist-text-secondary);
+  }
+
+  .recent-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .recent-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .recent-heading {
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0;
+    color: var(--novelist-text-secondary);
+  }
+
+  .recent-row {
+    display: flex;
+    align-items: center;
+    position: relative;
+  }
+
+  .recent-remove-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--novelist-text-tertiary, #b0b0b0);
+    cursor: pointer;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s, background 0.15s;
+  }
+  .recent-row:hover .recent-remove-btn {
+    opacity: 1;
+  }
+  .recent-remove-btn:hover {
+    color: #e5484d;
+    background: #e5484d12;
+  }
+
+  .recent-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    max-height: 320px;
+  }
+
+  .recent-list li + li {
+    border-top: 1px solid var(--novelist-border);
+  }
+
+  .recent-item {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    background: transparent;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 4px;
+    color: var(--novelist-text);
+    transition: background 0.1s;
+  }
+
+  .recent-item:hover {
+    background: var(--novelist-bg-secondary);
+  }
+
+  .recent-name {
+    font-size: 1rem;
+    font-weight: 500;
+  }
+
+  .recent-path {
+    font-size: 0.82rem;
+    color: var(--novelist-text-secondary);
+    margin-top: 0.15rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 1.5rem 0;
+    color: var(--novelist-text-secondary);
+    font-size: 0.95rem;
+  }
+
+  .welcome-actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+  }
+
+  .new-file-btn {
+    padding: 0.5rem 1.5rem;
+    background: var(--novelist-accent);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: opacity 0.1s;
+  }
+
+  .new-file-btn:hover {
+    opacity: 0.85;
+  }
+
+  .open-btn {
+    padding: 0.5rem 1.5rem;
+    background: transparent;
+    color: var(--novelist-text-secondary);
+    border: 1px solid var(--novelist-border);
+    border-radius: 4px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: border-color 0.1s, color 0.1s;
+  }
+
+  .open-btn:hover {
+    border-color: var(--novelist-accent);
+    color: var(--novelist-text);
+  }
+</style>

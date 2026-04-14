@@ -1,5 +1,5 @@
 # Build artifacts
-src-tauri/target/
+core/target/
 node_modules/
 dist/
 
@@ -20,7 +20,7 @@ Thumbs.db
 .novelist/workspace.json
 
 # Tauri auto-generated
-src-tauri/gen/
+core/gen/
 
 # Research cloned repos
 research/MiaoYan/
@@ -29,3 +29,8 @@ research/notesnook/
 # Test temp files
 /tmp/novelist-*
 *.novelist-tmp
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/

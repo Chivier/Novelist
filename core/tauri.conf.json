@@ -1,0 +1,62 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/schema.json",
+  "productName": "Novelist",
+  "version": "0.0.5",
+  "identifier": "com.novelist.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Novelist",
+        "width": 1200,
+        "height": 800,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost https: data:; media-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' asset:; font-src 'self' data:; connect-src ipc: http://ipc.localhost https://github.com https://api.github.com https://objects.githubusercontent.com; frame-src 'self' asset: blob:"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/Chivier/Novelist/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ2OTdGQjcwODg4MDIzOUMKUldTY0k0Q0ljUHVYUmh4TWhiclNmY0g4aWJxNldXM0xPdFNzLzVsZWdUb3c1eHBzZ1dpTmRuSEUK"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown"],
+        "name": "Markdown Document",
+        "role": "Editor",
+        "mimeType": "text/markdown"
+      },
+      {
+        "ext": ["txt"],
+        "name": "Text Document",
+        "role": "Editor",
+        "mimeType": "text/plain"
+      }
+    ]
+  }
+}
