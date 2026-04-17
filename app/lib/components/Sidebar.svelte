@@ -367,6 +367,22 @@
     e.dataTransfer.setData('application/x-novelist-path', node.path);
   }
 
+  function handleDragEnd() {
+    if (draggedNode) {
+      // Clear any dragOver flags along the path from root to the node's deepest folder.
+      clearAllDragOverFlags(projectStore.files);
+    }
+    draggedNode = null;
+    rootDragOver = false;
+  }
+
+  function clearAllDragOverFlags(nodes: FileNode[]) {
+    for (const n of nodes) {
+      if (n.dragOver) n.dragOver = false;
+      if (n.children) clearAllDragOverFlags(n.children);
+    }
+  }
+
   function isDescendant(source: FileNode, targetPath: string): boolean {
     if (!source.is_dir) return false;
     return targetPath === source.path || targetPath.startsWith(source.path + '/');
@@ -426,6 +442,11 @@
   let rootDragOver = $state(false);
 
   function handleDragOverRoot(e: DragEvent) {
+    // If a child folder's handler already accepted the drop, don't steal focus/highlight.
+    if (e.defaultPrevented) {
+      rootDragOver = false;
+      return;
+    }
     if (!draggedNode || !projectStore.dirPath) return;
     const parentPath = draggedNode.path.slice(0, draggedNode.path.lastIndexOf('/'));
     if (parentPath === projectStore.dirPath) {
@@ -449,7 +470,10 @@
     if (parentPath === projectStore.dirPath) return;
 
     const result = await commands.moveItem(source.path, projectStore.dirPath);
-    if (result.status !== 'ok') return;
+    if (result.status !== 'ok') {
+      console.error('Move failed:', result.error);
+      return;
+    }
     const newPath = result.data;
     for (const pane of tabsStore.panes) {
       for (const tab of pane.tabs) {
@@ -465,7 +489,10 @@
 </script>
 
 <!-- Close context menu and project switcher on click anywhere -->
-<svelte:window onclick={() => { closeContextMenu(); switcherOpen = false; }} />
+<svelte:window
+  onclick={() => { closeContextMenu(); switcherOpen = false; }}
+  ondragend={handleDragEnd}
+/>
 
 <aside class="sidebar" data-testid="sidebar">
   <!-- Project header -->
