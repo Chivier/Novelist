@@ -62,6 +62,18 @@ Four tiers based on file size and line count:
 
 **Why tall doc mode exists**: CM6 estimates heights for off-screen lines. WYSIWYG decorations (heading font-size changes, blockquote styling, etc.) only apply within the viewport. The difference between estimated and actual heights accumulates as the user scrolls, causing `posAtCoords` (click → document position) to land on the wrong line. For documents > 5000 lines, this drift becomes user-visible. The fix: disable all height-changing decorations and use uniform heading font sizes via `flatNovelistHighlightStyle` in `app/lib/editor/setup.ts`.
 
+### CM6 Block Widget Decorations (Images)
+
+Image rendering uses `Decoration.replace({block: true, widget})` via a `StateField` in `app/lib/editor/wysiwyg.ts`. Key lessons learned:
+
+- **Use single block replace, not widget+hide**: A single `Decoration.replace({block: true, widget}).range(line.from, line.to)` produces one height-map entry. The old approach (3 decorations: widget + line class + inline replace) created misaligned height-map entries causing `posAtCoords` click offsets proportional to image height.
+- **Block decorations must NOT toggle on cursor position**: Toggling changes the height map between mousedown/mouseup, causing infinite cursor oscillation.
+- **Block decorations must be provided via StateField**: Only `StateField.provide(f => EditorView.decorations.from(f))` makes CM6 account for block widget heights in its height map. `ViewPlugin` decorations don't.
+- **No CSS vertical margin on block widgets**: CM6 cannot see CSS margin. Use `padding` inside the widget instead.
+- **CSS `zoom` breaks CM6**: The app's zoom feature must use `transform: scale()` (which CM6 detects via `scaleX`/`scaleY`), NOT `document.documentElement.style.zoom` (which CM6 doesn't understand). CSS zoom causes `posAtCoords` to return wrong positions because `getBoundingClientRect` and internal height-map coordinates become inconsistent. See `app/lib/stores/ui.svelte.ts` `setZoom()`.
+- **`requestMeasure()` after async image load**: When image loads asynchronously, call `view.requestMeasure()` followed by `view.dispatch({ effects: [] })` to force CM6 to re-measure block heights. `requestMeasure()` alone may skip height measurement if `contentDOMHeight` hasn't visibly changed.
+- **No duplicate gutter markers**: With `Decoration.replace({block: true})`, CM6's line number gutter automatically generates a line number for the replaced range. Do NOT add a `lineNumberWidgetMarker` — it creates duplicate line numbers.
+
 ### Plugin System
 - Plugins live in `~/.novelist/plugins/<id>/` with `manifest.toml` + `index.js`
 - Sandboxed via QuickJS with permission tiers: read, write, execute
@@ -84,7 +96,7 @@ Four tiers based on file size and line count:
 Three-tier automated testing — run all three before pushing:
 
 ### Tier 1: Unit Tests (Vitest) — `pnpm test`
-- **237 tests** in `tests/unit/**/*.test.ts`
+- **258 tests** in `tests/unit/**/*.test.ts`
 - Tests pure functions: word counting, markdown parsing, editor logic, store behavior
 - Naming convention: describe the behavior being tested, not the function name
 
@@ -175,3 +187,5 @@ playwright.config.ts          # Playwright config (browser-mode E2E)
 - **CI/CD**: GitHub Actions workflow for type-check + vitest + Playwright E2E + cargo test
 - **Playwright E2E**: 38 browser-mode tests replacing old bash+cliclick GUI tests
 - **Test API bridge**: `window.__test_api__` for testing browser-intercepted shortcuts
+- **Image block decoration fix**: Single `Decoration.replace({block: true})` for images, CSS zoom→transform migration, async height refresh, gutter dedup
+- **Image block tests**: 21 tests in `tests/unit/editor/image-block-deco.test.ts` covering decoration strategy, height map, coordinate mapping, zoom impact

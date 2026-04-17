@@ -1,176 +1,74 @@
-# Novelist
+<div align="center">
+  <img src="assets/branding/novelist-icon.png" alt="Novelist" width="128">
 
-A lightweight, extensible, WYSIWYG Markdown writing tool for desktop.
+  # Novelist
 
-**Core idea**: No existing product simultaneously satisfies "lightweight (<15MB) + plugin system + multi-project + plain Markdown + WYSIWYG". Novelist fills this gap.
+  **A lightweight WYSIWYG Markdown editor for novelists.**
 
-## Design Philosophy: Prompt as UI, Prompt as Plugin
+  **轻量级所见即所得 Markdown 写作工具。**
 
-Novelist is built around a radical idea: **your AI assistant is your customization engine**.
+  [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Instead of complex settings panels or learning a plugin API, you describe what you want in natural language, and your AI coding tool (Claude Code, Cursor, etc.) makes it happen directly in the source.
+  [Features](#features--特性) | [Download](#download--下载) | [Development](docs/development.md) | [Plugins](docs/creating-plugins.md)
 
-- **Prompt as Theme**: *"Make the editor look like a vintage typewriter — cream paper, dark brown text, monospace font"* → AI edits `src/lib/themes.ts`, adds a new theme.
-- **Prompt as Plugin**: *"Create a plugin that counts sentences and shows a readability score"* → AI scaffolds a plugin in `~/.novelist/plugins/`.
-- **Prompt as Feature**: *"Add a Pomodoro timer to the status bar"* → AI modifies the Svelte components directly.
+</div>
 
-This makes Novelist infinitely customizable without a plugin marketplace, theme store, or extension API documentation. The source code IS the API.
+---
 
-## Features
+## Screenshot / 截图
 
-- **WYSIWYG Markdown editing** — Typora-style: syntax markers hidden when cursor is away
-- **GFM support** — tables, strikethrough, autolinks, task lists
-- **Image preview** — inline image rendering, paste/drag-drop images
-- **Link click** — Cmd+Click to open URLs in browser
-- **Split view** — two-pane editing (Cmd+\\)
-- **Draft notes** — per-file scratchpad in right panel (Cmd+Shift+D)
-- **Theme system** — Light, Dark, Sepia, Nord, GitHub, Dracula + System auto
-- **Outline panel** — heading navigation (Cmd+Shift+O)
-- **Zen Mode** — fullscreen writing with typewriter scrolling (F11)
-- **Command palette** — keyboard-driven actions (Cmd+Shift+P)
-- **Plugin system** — QuickJS sandbox with read/write permissions
-- **Export** — HTML, PDF, DOCX, EPUB via Pandoc with theme CSS
-- **Auto-save** — 5-minute interval with atomic writes
-- **File watching** — external edit detection with conflict resolution
-- **CJK-aware** — proper word counting, IME composition guard
-- **Large file support** — performance tiers: normal / stripped WYSIWYG / read-only
-- **Project switching** — quick switch via sidebar bottom button
+> TODO: Add screenshot here
 
-## Tech Stack
+## Features / 特性
 
-| Layer | Technology |
-|-------|-----------|
-| App Framework | [Tauri v2](https://v2.tauri.app/) |
-| Frontend | [Svelte 5](https://svelte.dev/) (Runes) |
-| Editor | [CodeMirror 6](https://codemirror.net/) |
-| CSS | [Tailwind CSS 4](https://tailwindcss.com/) |
-| Build | [Vite 6](https://vite.dev/) |
-| Backend | Rust |
-| IPC | [tauri-specta](https://github.com/oscartbeaumont/tauri-specta) |
+- **WYSIWYG Markdown** — Typora-style live preview / 类 Typora 实时预览
+- **GFM & Extensions** — Tables, task lists, strikethrough / 表格、任务列表、删除线
+- **Split View** — Two-pane editing (Cmd+\\) / 双栏编辑
+- **Zen Mode** — Fullscreen + typewriter scrolling (F11) / 全屏 + 打字机滚动
+- **Themes** — Light, Dark, Sepia, Nord, GitHub, Dracula / 多主题切换
+- **Plugin System** — QuickJS sandbox / QuickJS 沙箱插件
+- **Export** — HTML, PDF, DOCX, EPUB via Pandoc / 多格式导出
+- **CJK-Aware** — Proper word count & IME handling / 中日韩文字支持
+- **Large Files** — Tiered performance up to 10MB+ / 大文件分级优化
+- **Project Management** — Multi-project switching / 多项目管理
 
-## Getting Started
+## Download / 下载
 
-### Prerequisites
+> Coming soon — Currently build from source only.
+>
+> 即将发布 — 目前仅支持从源码构建。
 
-- [Node.js](https://nodejs.org/) >= 20
-- [pnpm](https://pnpm.io/) >= 9
-- [Rust](https://rustup.rs/) >= 1.77
-- System dependencies for Tauri v2:
-  - **macOS**: Xcode Command Line Tools
-  - **Linux**: `libcairo2-dev libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev`
-  - **Windows**: [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
-
-### Development
+## Quick Start / 快速开始
 
 ```bash
 pnpm install
 pnpm tauri dev
 ```
 
-### Testing
+See [Development Guide](docs/development.md) for prerequisites and details.
 
-```bash
-pnpm test          # Frontend unit tests (vitest)
-pnpm test:rust     # Rust backend tests (cargo test)
-pnpm test:all      # Both
-```
+开发环境配置详见 [开发指南](docs/development.md)。
 
-### Build
+## Documentation / 文档
 
-```bash
-pnpm tauri build
-```
+| Document | Description |
+|----------|-------------|
+| [Development Guide / 开发指南](docs/development.md) | Prerequisites, commands, project structure |
+| [Keyboard Shortcuts / 快捷键](docs/keyboard-shortcuts.md) | All keyboard shortcuts |
+| [Creating Themes / 创建主题](docs/creating-themes.md) | How to add custom themes |
+| [Creating Plugins / 创建插件](docs/creating-plugins.md) | Plugin system guide |
+| [Design Overview / 设计概览](docs/design/design-overview.md) | Architecture & design decisions |
 
-## Keyboard Shortcuts
+## Design Philosophy / 设计理念
 
-| Shortcut | Action |
-|----------|--------|
-| Cmd+S | Save file |
-| Cmd+B | Toggle sidebar |
-| Cmd+Shift+O | Toggle outline |
-| Cmd+Shift+D | Toggle draft note |
-| Cmd+Shift+P | Command palette |
-| Cmd+\\ | Toggle split view |
-| Cmd+N | New file |
-| Cmd+W | Close tab |
-| Cmd+G | Go to line |
-| Cmd+, | Settings |
-| Cmd+Click | Open link in browser |
-| F11 | Toggle Zen Mode |
-| Escape | Exit Zen Mode |
+**"Prompt as UI"** — Novelist is designed to be customized by AI coding assistants editing the source directly, rather than through complex configuration UIs. The source code IS the API.
 
-## Creating Themes
+**"Prompt 即 UI"** — Novelist 的设计理念是通过 AI 编程助手直接修改源码来定制，而非复杂的配置界面。源码即接口。
 
-Edit `src/lib/themes.ts` to add a theme:
+## Contributing / 贡献
 
-```typescript
-{
-  id: 'my-theme',
-  name: 'My Theme',
-  dark: false,
-  vars: {
-    '--novelist-bg': '#ffffff',
-    '--novelist-text': '#333333',
-    '--novelist-accent': '#0066cc',
-    // ... see existing themes for all variables
-  },
-}
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Or ask your AI assistant: *"Add a solarized theme to Novelist"*
-
-## Creating Plugins
-
-Plugins live in `~/.novelist/plugins/<id>/`:
-
-```
-~/.novelist/plugins/word-frequency/
-  manifest.toml
-  index.js
-```
-
-**manifest.toml**:
-```toml
-[plugin]
-id = "word-frequency"
-name = "Word Frequency"
-version = "1.0.0"
-permissions = ["read"]
-```
-
-**index.js**:
-```javascript
-novelist.registerCommand("word-freq", "Show Word Frequency", function() {
-  const doc = novelist.getDocument();
-  const words = doc.split(/\s+/).filter(w => w.length > 0);
-  // ... your logic here
-});
-```
-
-Or ask your AI: *"Create a Novelist plugin that highlights overused words"*
-
-## Project Structure
-
-```
-src/                          # Frontend (Svelte 5 + TypeScript)
-├── lib/
-│   ├── components/           # UI components
-│   ├── editor/               # CodeMirror 6 setup + WYSIWYG
-│   ├── stores/               # Svelte 5 rune stores
-│   ├── ipc/                  # Tauri IPC bindings
-│   ├── themes.ts             # Theme definitions
-│   └── utils/                # Utilities
-├── App.svelte                # Root layout
-tests/                        # Test files + README
-scripts/                      # GUI automation tests
-src-tauri/                    # Backend (Rust)
-├── src/
-│   ├── commands/             # Tauri IPC commands
-│   ├── services/             # File watcher, rope, plugins
-│   └── models/               # Data models
-design/                       # Design docs + logo prompts
-```
-
-## License
+## License / 许可
 
 [MIT](LICENSE) - Copyright (c) 2026 Chivier
