@@ -6,13 +6,14 @@ status: draft
 
 # Design — Sidebar Folder Tree, Drag-Drop, Plugin Add Button, Help Tooltip
 
-Three related UX improvements:
+Four related UX improvements:
 
 1. **Sidebar folder tree** — expandable sub-folders (lazy-loaded) + drag-and-drop to move files or folders into folders (or back to project root).
 2. **Plugins `+` button** — adds a "+" button to the Plugins section of Settings with two actions: open plugins folder, or scaffold a new plugin from a minimal template.
 3. **Help tooltip (`?` hover card)** — inline help explaining where plugins live and offering a one-click "Copy prompt" for Claude Code.
+4. **Language picker scoped to Editor tab** — the language `<select>` currently shows on every Settings tab; move it into Settings > Editor only.
 
-Each piece is small and self-contained. They share one file (`Sidebar.svelte` for #1, `Settings.svelte` for #2 and #3) so we'll land them in sequence.
+Each piece is small and self-contained. They share two files (`Sidebar.svelte` for #1, `Settings.svelte` for #2/#3/#4) so we'll land them in sequence.
 
 ---
 
@@ -393,6 +394,59 @@ Existing keys `pluginPath`, `pluginNeeds`, `manifest`, `indexJs`, `aiSuggestion`
 - Hover `?` → verify card visible.
 - Click Copy → read `navigator.clipboard` via a test hook → assert content matches the prompt string.
 - Verify button label becomes "Copied".
+
+---
+
+---
+
+## 4. Move Language Picker Into Settings > Editor
+
+### Current state
+
+`Settings.svelte` renders the Language / 语言 `<select>` at the top of the right-hand content pane (lines ~363-376), *outside* every `{#if activeSection === '…'}` branch. It therefore shows on every tab — Editor, Theme, Shortcuts, Templates, Plugins, Sync — which is redundant.
+
+### Change
+
+Move the language `<select>` block inside the `{#if activeSection === 'editor'}` branch, placed above the Font / Size rows, so it appears only on the Editor tab. Delete the copy from the outer wrapper.
+
+The hardcoded label `"Language / 语言"` is replaced with `{t('settings.language')}` — the key already exists in both `en.ts` (`Language`) and `zh-CN.ts` (`语言`) and is currently unused.
+
+### Before / after
+
+```svelte
+<!-- BEFORE (lines ~361-376) — shown on every tab -->
+<div class="flex-1 overflow-y-auto px-5 py-4">
+  <div class="flex items-center justify-between mb-3">
+    <label>Language / 语言</label>
+    <select>...</select>
+  </div>
+  {#if activeSection === 'editor'}
+    ...
+  {/if}
+  ...
+</div>
+
+<!-- AFTER — only shown in the Editor section -->
+<div class="flex-1 overflow-y-auto px-5 py-4">
+  {#if activeSection === 'editor'}
+    <h3>{t('settings.editor')}</h3>
+    <div class="flex items-center justify-between mb-3">
+      <label for="settings-language">{t('settings.language')}</label>
+      <select id="settings-language">...</select>
+    </div>
+    <!-- existing Font / Size / ... rows follow -->
+  {/if}
+  ...
+</div>
+```
+
+### Tests
+
+**Playwright** (extend `tests/e2e/specs/settings.spec.ts`):
+
+- Open Settings → default tab is Editor → verify `#settings-language` exists.
+- Click Theme tab → verify `#settings-language` is no longer in the DOM.
+- Click Editor again → verify it is back.
 
 ---
 
