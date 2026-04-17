@@ -20,7 +20,7 @@
     "test:rust": "cd core && cargo test",
     "test:bench": "bash tests/bench/bundle-size.sh",
     "test:all": "vitest run && cd core && cargo test",
-    "tauri": "tauri"
+    "tauri": "dotenv -- tauri"
   },
   "devDependencies": {
     "@lezer/common": "^1.5.2",
@@ -32,6 +32,7 @@
     "@tauri-apps/cli": "^2",
     "@tsconfig/svelte": "^5.0.4",
     "@types/katex": "^0.16.8",
+    "dotenv-cli": "^11.0.0",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",
     "tailwindcss": "^4.2.2",
