@@ -1,10 +1,11 @@
 <script lang="ts">
   import { open } from '@tauri-apps/plugin-dialog';
   import { commands } from '$lib/ipc/commands';
-  import type { FileEntry, RecentProject } from '$lib/ipc/commands';
-  import { projectStore } from '$lib/stores/project.svelte';
+  import type { RecentProject } from '$lib/ipc/commands';
+  import { projectStore, type FileNode } from '$lib/stores/project.svelte';
   import { tabsStore } from '$lib/stores/tabs.svelte';
   import { t } from '$lib/i18n';
+  import FileTreeNode from '$lib/components/FileTreeNode.svelte';
 
   // --- Project switcher popup (Notion-style) ---
   let switcherOpen = $state(false);
@@ -72,7 +73,7 @@
 
   let filesContainer = $state<HTMLDivElement | null>(null);
 
-  let sortedFiles = $derived.by(() => {
+  let sortedFiles = $derived.by<FileNode[]>(() => {
     const dirs = projectStore.files.filter(f => f.is_dir).sort((a, b) => a.name.localeCompare(b.name));
     const files = projectStore.files.filter(f => !f.is_dir).sort((a, b) => a.name.localeCompare(b.name));
     return [...dirs, ...files];
@@ -119,7 +120,7 @@
   }
 
   // --- Open file ---
-  async function openFile(entry: FileEntry) {
+  async function openFile(entry: FileNode) {
     if (entry.is_dir || !isTextFile(entry.name)) return;
 
     // Always read full content. Editor decides mode based on size.
@@ -132,7 +133,7 @@
     await commands.registerOpenFile(entry.path);
   }
 
-  async function openInOtherPane(entry: FileEntry) {
+  async function openInOtherPane(entry: FileNode) {
     closeContextMenu();
     if (entry.is_dir || !isTextFile(entry.name)) return;
     // Determine the "other" pane
@@ -235,12 +236,12 @@
   }
 
   // --- Context menu ---
-  let contextMenu = $state<{ x: number; y: number; entry: FileEntry } | null>(null);
-  let renaming = $state<FileEntry | null>(null);
+  let contextMenu = $state<{ x: number; y: number; entry: FileNode } | null>(null);
+  let renaming = $state<FileNode | null>(null);
   let renameValue = $state('');
   let renameInput = $state<HTMLInputElement | null>(null);
 
-  function handleContextMenu(e: MouseEvent, entry: FileEntry) {
+  function handleContextMenu(e: MouseEvent, entry: FileNode) {
     e.preventDefault();
     const zoom = parseFloat(document.documentElement.style.transform.match(/scale\(([^)]+)\)/)?.[1] || '1');
     contextMenu = { x: e.clientX / zoom, y: e.clientY / zoom, entry };
@@ -250,7 +251,7 @@
     contextMenu = null;
   }
 
-  function startRename(entry: FileEntry) {
+  function startRename(entry: FileNode) {
     closeContextMenu();
     renaming = entry;
     renameValue = entry.name;
@@ -300,17 +301,17 @@
     }
   }
 
-  async function revealInFinder(entry: FileEntry) {
+  async function revealInFinder(entry: FileNode) {
     closeContextMenu();
     await commands.revealInFileManager(entry.path);
   }
 
-  async function copyPath(entry: FileEntry) {
+  async function copyPath(entry: FileNode) {
     closeContextMenu();
     await navigator.clipboard.writeText(entry.path);
   }
 
-  async function copyRelativePath(entry: FileEntry) {
+  async function copyRelativePath(entry: FileNode) {
     closeContextMenu();
     const base = projectStore.dirPath;
     if (base && entry.path.startsWith(base)) {
@@ -321,7 +322,7 @@
     }
   }
 
-  async function handleDuplicate(entry: FileEntry) {
+  async function handleDuplicate(entry: FileNode) {
     closeContextMenu();
     const result = await commands.duplicateFile(entry.path);
     if (result.status === 'ok') {
@@ -337,7 +338,7 @@
     }
   }
 
-  async function handleDelete(entry: FileEntry) {
+  async function handleDelete(entry: FileNode) {
     closeContextMenu();
     const confirmed = confirm(t('sidebar.deleteConfirm', { name: entry.name }));
     if (!confirmed) return;
@@ -354,6 +355,112 @@
     } else {
       console.error('Failed to delete:', result.error);
     }
+  }
+
+  // --- Drag-drop ---
+  let draggedNode = $state<FileNode | null>(null);
+
+  function handleDragStart(e: DragEvent, node: FileNode) {
+    if (!e.dataTransfer) return;
+    draggedNode = node;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/x-novelist-path', node.path);
+  }
+
+  function isDescendant(source: FileNode, targetPath: string): boolean {
+    if (!source.is_dir) return false;
+    return targetPath === source.path || targetPath.startsWith(source.path + '/');
+  }
+
+  function handleDragOverFolder(e: DragEvent, target: FileNode) {
+    if (!draggedNode) return;
+    if (!target.is_dir) return;
+    if (isDescendant(draggedNode, target.path)) {
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
+      return;
+    }
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    target.dragOver = true;
+  }
+
+  function handleDragLeaveFolder(_e: DragEvent, target: FileNode) {
+    target.dragOver = false;
+  }
+
+  async function handleDropOnFolder(e: DragEvent, target: FileNode) {
+    e.preventDefault();
+    target.dragOver = false;
+    const source = draggedNode;
+    draggedNode = null;
+    if (!source || !target.is_dir) return;
+    if (isDescendant(source, target.path)) return;
+    if (source.path === target.path) return;
+
+    const parentPath = source.path.slice(0, source.path.lastIndexOf('/'));
+    if (parentPath === target.path) return; // no-op: already in that folder
+
+    const result = await commands.moveItem(source.path, target.path);
+    if (result.status !== 'ok') {
+      console.error('Move failed:', result.error);
+      return;
+    }
+    const newPath = result.data;
+
+    // Update any open tab whose path starts with the moved source.
+    for (const pane of tabsStore.panes) {
+      for (const tab of pane.tabs) {
+        if (tab.filePath === source.path) {
+          tabsStore.updateFilePath(tab.id, newPath);
+        } else if (tab.filePath.startsWith(source.path + '/')) {
+          tabsStore.updateFilePath(tab.id, newPath + tab.filePath.slice(source.path.length));
+        }
+      }
+    }
+
+    await projectStore.refreshFolder(parentPath);
+    await projectStore.refreshFolder(target.path);
+  }
+
+  // Root drop zone handlers (drop onto empty sidebar area = move to project root).
+  let rootDragOver = $state(false);
+
+  function handleDragOverRoot(e: DragEvent) {
+    if (!draggedNode || !projectStore.dirPath) return;
+    const parentPath = draggedNode.path.slice(0, draggedNode.path.lastIndexOf('/'));
+    if (parentPath === projectStore.dirPath) {
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
+      return;
+    }
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    rootDragOver = true;
+  }
+
+  function handleDragLeaveRoot() { rootDragOver = false; }
+
+  async function handleDropOnRoot(e: DragEvent) {
+    e.preventDefault();
+    rootDragOver = false;
+    const source = draggedNode;
+    draggedNode = null;
+    if (!source || !projectStore.dirPath) return;
+    const parentPath = source.path.slice(0, source.path.lastIndexOf('/'));
+    if (parentPath === projectStore.dirPath) return;
+
+    const result = await commands.moveItem(source.path, projectStore.dirPath);
+    if (result.status !== 'ok') return;
+    const newPath = result.data;
+    for (const pane of tabsStore.panes) {
+      for (const tab of pane.tabs) {
+        if (tab.filePath === source.path || tab.filePath.startsWith(source.path + '/')) {
+          const rest = tab.filePath.slice(source.path.length);
+          tabsStore.updateFilePath(tab.id, newPath + rest);
+        }
+      }
+    }
+    await projectStore.refreshFolder(parentPath);
+    await projectStore.refreshFolder(projectStore.dirPath);
   }
 </script>
 
@@ -379,7 +486,15 @@
   </div>
 
   {#if projectStore.isOpen}
-    <div class="sidebar-files" bind:this={filesContainer}>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="sidebar-files"
+      class:drag-over-root={rootDragOver}
+      bind:this={filesContainer}
+      ondragover={handleDragOverRoot}
+      ondragleave={handleDragLeaveRoot}
+      ondrop={handleDropOnRoot}
+    >
       {#if creatingFile || creatingFolder}
         <div class="sidebar-input-row">
           <input
@@ -394,7 +509,7 @@
         </div>
       {/if}
 
-      {#each sortedFiles as entry}
+      {#each sortedFiles as entry (entry.path)}
         {#if renaming && renaming.path === entry.path}
           <div class="sidebar-input-row">
             <input
@@ -406,33 +521,18 @@
               data-testid="sidebar-input"
             />
           </div>
-        {:else if entry.is_dir}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-          <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-          <div role="listitem" tabindex="0" class="sidebar-item sidebar-item-dir" data-testid="sidebar-file-{entry.name}" oncontextmenu={(e) => handleContextMenu(e, entry)} onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); startRename(entry); } }}>
-            <svg class="sidebar-item-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 4h4l2 2h6v7H2z"/></svg>
-            <span class="sidebar-item-name">{entry.name}</span>
-          </div>
-        {:else if isTextFile(entry.name)}
-          <button
-            class="sidebar-item"
-            class:sidebar-item-active={tabsStore.activeTab?.filePath === entry.path}
-            data-testid="sidebar-file-{entry.name}"
-            onclick={() => openFile(entry)}
-            onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); startRename(entry); } }}
-            oncontextmenu={(e) => handleContextMenu(e, entry)}
-          >
-            <svg class="sidebar-item-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M4 2h5l3 3v9H4z"/><path d="M9 2v3h3"/></svg>
-            <span class="sidebar-item-name">{entry.name.replace(/\.(md|markdown|txt|json|jsonl|csv)$/i, '')}</span>
-            <span class="sidebar-item-ext">.{entry.name.split('.').pop()}</span>
-          </button>
         {:else}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div role="listitem" class="sidebar-item sidebar-item-disabled" oncontextmenu={(e) => handleContextMenu(e, entry)}>
-            <svg class="sidebar-item-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M4 2h5l3 3v9H4z"/><path d="M9 2v3h3"/></svg>
-            <span class="sidebar-item-name">{entry.name}</span>
-          </div>
+          <FileTreeNode
+            node={entry}
+            depth={0}
+            onContextMenu={handleContextMenu}
+            onFileOpen={openFile}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOverFolder}
+            onDragLeave={handleDragLeaveFolder}
+            onDrop={handleDropOnFolder}
+            {isTextFile}
+          />
         {/if}
       {/each}
     </div>
@@ -593,61 +693,8 @@
     overflow-y: auto;
     padding: 4px 6px;
   }
-
-  .sidebar-item {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    padding: 5px 8px;
-    border: none;
-    border-radius: 5px;
-    background: transparent;
-    color: var(--novelist-sidebar-text);
-    font-size: 0.95rem;
-    text-align: left;
-    cursor: pointer;
-    transition: background 80ms;
-    white-space: nowrap;
-    overflow: hidden;
-    gap: 6px;
-  }
-  .sidebar-item:hover {
-    background: var(--novelist-sidebar-hover);
-  }
-  .sidebar-item-active {
-    background: var(--novelist-sidebar-active) !important;
-    color: var(--novelist-text);
-  }
-  .sidebar-item-dir {
-    cursor: default;
-    color: var(--novelist-text-secondary);
-    font-size: 0.92rem;
-  }
-  .sidebar-item-disabled {
-    cursor: default;
-    opacity: 0.35;
-  }
-
-  .sidebar-item-icon {
-    flex-shrink: 0;
-    opacity: 0.5;
-  }
-  .sidebar-item-active .sidebar-item-icon {
-    opacity: 0.75;
-  }
-
-  .sidebar-item-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .sidebar-item-ext {
-    color: var(--novelist-text-tertiary, var(--novelist-text-secondary));
-    font-size: 0.78rem;
-    flex-shrink: 0;
-  }
-  .sidebar-item-active .sidebar-item-ext {
-    color: var(--novelist-text-secondary);
+  .sidebar-files.drag-over-root {
+    box-shadow: inset 0 0 0 2px var(--novelist-accent);
   }
 
   .sidebar-input-row {
