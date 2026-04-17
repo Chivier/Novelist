@@ -283,7 +283,7 @@ const novelistTheme = EditorView.theme({
     backgroundColor: 'color-mix(in srgb, var(--novelist-accent) 16%, transparent) !important',
   },
   '.cm-line': {
-    padding: '0 4px',
+    padding: '0',
   },
   '.cm-placeholder': {
     color: 'var(--novelist-text-tertiary, var(--novelist-text-secondary))',
