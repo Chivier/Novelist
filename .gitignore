@@ -21,10 +21,14 @@ Thumbs.db
 
 # Tauri auto-generated
 core/gen/
+core/bundled-plugins/
 
-# Research cloned repos
+# Research cloned repos (legacy location)
 research/MiaoYan/
 research/notesnook/
+
+# Local workspace files
+.sisyphus/
 
 # Test temp files
 /tmp/novelist-*

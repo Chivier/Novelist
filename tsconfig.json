@@ -12,9 +12,9 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "$lib/*": ["./src/lib/*"]
+      "$lib/*": ["./app/lib/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.svelte"],
+  "include": ["app/**/*.ts", "app/**/*.svelte"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

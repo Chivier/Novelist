@@ -5,10 +5,10 @@
 #
 set -euo pipefail
 
-APP="${1:-src-tauri/target/release/bundle/macos/Novelist.app}"
-OUTPUT="${2:-src-tauri/target/release/bundle/dmg/Novelist.dmg}"
-BACKGROUND="design/dmg-background.png"
-BACKGROUND_RETINA="design/dmg-background@2x.png"
+APP="${1:-core/target/release/bundle/macos/Novelist.app}"
+OUTPUT="${2:-core/target/release/bundle/dmg/Novelist.dmg}"
+BACKGROUND="assets/dmg/dmg-background.png"
+BACKGROUND_RETINA="assets/dmg/dmg-background@2x.png"
 
 # Ensure output directory exists
 mkdir -p "$(dirname "$OUTPUT")"

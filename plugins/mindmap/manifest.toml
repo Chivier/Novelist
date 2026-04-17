@@ -2,6 +2,8 @@
 id = "mindmap"
 name = "Mindmap"
 version = "1.0.0"
+description = "Auto-generated mindmap panel from document headings"
+author = "Novelist Team"
 permissions = ["read", "ui"]
 
 [ui]

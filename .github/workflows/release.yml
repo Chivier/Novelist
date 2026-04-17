@@ -19,16 +19,18 @@ jobs:
         run: pnpm install
 
       - name: Run tests
-        run: pnpm test && cd src-tauri && cargo test
+        run: pnpm test && cd core && cargo test
 
       - name: Build Tauri app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: pnpm tauri build
 
       - name: Create styled DMG
         if: always()
         run: |
-          APP="src-tauri/target/release/bundle/macos/Novelist.app"
-          DMG="src-tauri/target/release/bundle/dmg/Novelist_${{ github.ref_name }}_aarch64.dmg"
+          APP="core/target/release/bundle/macos/Novelist.app"
+          DMG="core/target/release/bundle/dmg/Novelist_${{ github.ref_name }}_aarch64.dmg"
           if [ ! -f "$DMG" ]; then
             bash scripts/create-dmg.sh "$APP" "$DMG"
           fi
@@ -38,8 +40,9 @@ jobs:
         with:
           name: novelist-macos-aarch64
           path: |
-            src-tauri/target/release/bundle/dmg/*.dmg
-            src-tauri/target/release/bundle/macos/*.app
+            core/target/release/bundle/dmg/*.dmg
+            core/target/release/bundle/macos/*.app.tar.gz
+            core/target/release/bundle/macos/*.app.tar.gz.sig
 
   # ── GitHub-hosted builds (Intel Mac, Linux, Windows) ──
   build-other:
@@ -89,19 +92,25 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install
 
+      - name: Run tests
+        run: pnpm test && cd core && cargo test
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         with:
+          projectPath: core
           tagName: ${{ github.ref_name }}
-          releaseName: '${{ github.ref_name }}'
+          releaseName: 'Novelist ${{ github.ref_name }}'
           releaseBody: |
-            See the [README](https://github.com/${{ github.repository }}#readme) for details.
+            See the [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
           releaseDraft: false
           prerelease: false
+          includeUpdaterJson: true
 
-  # ── Create GitHub Release with all artifacts ──────────
+  # ── Create GitHub Release with ARM artifacts + updater JSON ──
   release:
     needs: [build-macos-arm, build-other]
     runs-on: ubuntu-latest
@@ -114,9 +123,12 @@ jobs:
           path: artifacts/
         continue-on-error: true
 
-      - name: Upload to Release
-        if: hashFiles('artifacts/**/*.dmg') != ''
+      - name: Upload ARM DMG + updater files to Release
+        if: hashFiles('artifacts/**/*.dmg') != '' || hashFiles('artifacts/**/*.tar.gz') != ''
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*.dmg
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.tar.gz
+            artifacts/**/*.tar.gz.sig
           tag_name: ${{ github.ref_name }}
