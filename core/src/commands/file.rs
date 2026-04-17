@@ -430,6 +430,14 @@ pub async fn move_item(source_path: String, target_dir: String) -> Result<String
         ));
     }
 
+    // Reject no-op: source is already directly inside target.
+    // Use canonicalized paths so trailing slashes / symlinks don't spoof the check.
+    if src_canon.parent().map(|p| p == tgt_canon).unwrap_or(false) {
+        return Err(AppError::InvalidInput(
+            "Source is already in the target directory".to_string(),
+        ));
+    }
+
     let file_name = source
         .file_name()
         .ok_or_else(|| AppError::InvalidInput("Source has no file name".to_string()))?;
@@ -934,6 +942,43 @@ mod tests {
         )
         .await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_move_item_into_own_parent_fails() {
+        let dir = TempDir::new().unwrap();
+        let src = dir.path().join("a.md");
+        fs::write(&src, "content").unwrap();
+
+        let result = move_item(
+            src.to_string_lossy().to_string(),
+            dir.path().to_string_lossy().to_string(),
+        )
+        .await;
+        assert!(result.is_err(), "moving into own parent should fail");
+        assert!(src.exists(), "source must not have been renamed");
+        assert_eq!(fs::read_to_string(&src).unwrap(), "content");
+    }
+
+    #[tokio::test]
+    async fn test_move_item_extensionless_filename_collision() {
+        let dir = TempDir::new().unwrap();
+        let src = dir.path().join("Makefile");
+        fs::write(&src, "src").unwrap();
+        let subdir = dir.path().join("sub");
+        fs::create_dir(&subdir).unwrap();
+        fs::write(subdir.join("Makefile"), "existing").unwrap();
+
+        let new_path = move_item(
+            src.to_string_lossy().to_string(),
+            subdir.to_string_lossy().to_string(),
+        )
+        .await
+        .unwrap();
+
+        assert!(new_path.ends_with("Makefile 2"));
+        assert_eq!(fs::read_to_string(subdir.join("Makefile")).unwrap(), "existing");
+        assert_eq!(fs::read_to_string(&new_path).unwrap(), "src");
     }
 
     #[tokio::test]
