@@ -699,9 +699,9 @@
       // Also refresh the sidebar folder containing the changed path, IF it's
       // been loaded (expanded at least once). refreshFolder is a no-op for
       // folders whose children are still undefined.
-      const parentPath = path.slice(0, path.lastIndexOf('/'));
-      if (parentPath) {
-        await projectStore.refreshFolder(parentPath);
+      const slashIdx = path.lastIndexOf('/');
+      if (slashIdx > 0) {
+        await projectStore.refreshFolder(path.slice(0, slashIdx));
       }
     }).then(fn => { unlistenFileChanged = fn; });
 
