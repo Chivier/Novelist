@@ -12,11 +12,11 @@ use commands::export::{check_pandoc, export_project};
 use commands::file::{
     create_directory, create_file, create_scratch_file, delete_item, duplicate_file,
     get_file_encoding, list_directory, read_file, read_image_data_uri, rename_item,
-    reveal_in_file_manager, search_in_project, write_file, EncodingState,
+    reveal_in_file_manager, search_in_project, write_binary_file, write_file, EncodingState,
 };
 use commands::plugin::{
     get_plugin_commands, invoke_plugin_command, list_plugins, load_plugin,
-    set_plugin_document_state, unload_plugin,
+    set_plugin_document_state, set_plugin_enabled, unload_plugin,
 };
 use commands::project::{detect_project, read_project_config};
 use commands::recent::{add_recent_project, get_recent_projects, remove_recent_project};
@@ -50,10 +50,10 @@ impl PendingOpenFiles {
         Self(Mutex::new(Vec::new()))
     }
     pub fn push(&self, path: String) {
-        self.0.lock().unwrap().push(path);
+        self.0.lock().unwrap_or_else(|e| e.into_inner()).push(path);
     }
     pub fn drain(&self) -> Vec<String> {
-        std::mem::take(&mut *self.0.lock().unwrap())
+        std::mem::take(&mut *self.0.lock().unwrap_or_else(|e| e.into_inner()))
     }
 }
 
@@ -101,6 +101,7 @@ pub fn run() {
         get_plugin_commands,
         invoke_plugin_command,
         set_plugin_document_state,
+        set_plugin_enabled,
         rope_open,
         rope_get_lines,
         rope_apply_edit,
@@ -125,6 +126,7 @@ pub fn run() {
         import_template_zip,
         get_pending_open_files,
         read_image_data_uri,
+        write_binary_file,
         reveal_in_file_manager,
         duplicate_file,
         get_sync_config,
@@ -161,6 +163,7 @@ pub fn run() {
         get_plugin_commands,
         invoke_plugin_command,
         set_plugin_document_state,
+        set_plugin_enabled,
         rope_open,
         rope_get_lines,
         rope_apply_edit,
@@ -185,6 +188,7 @@ pub fn run() {
         import_template_zip,
         get_pending_open_files,
         read_image_data_uri,
+        write_binary_file,
         reveal_in_file_manager,
         duplicate_file,
     ]);
@@ -198,6 +202,7 @@ pub fn run() {
         )
         .expect("Failed to export typescript bindings");
 
+    #[allow(unused_mut)]
     let mut app_builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
