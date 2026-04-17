@@ -312,6 +312,28 @@ export const en: TranslationMap = {
   'settings.plugins.community': 'Community',
   'settings.plugins.builtinBadge': 'Built-in',
 
+  'settings.plugins.add': 'Add plugin',
+  'settings.plugins.openFolder': 'Open plugins folder',
+  'settings.plugins.createFromTemplate': 'Create from template…',
+
+  'settings.plugins.scaffold.title': 'New plugin',
+  'settings.plugins.scaffold.id': 'Plugin ID',
+  'settings.plugins.scaffold.name': 'Display name (optional)',
+  'settings.plugins.scaffold.invalidId': 'ID must be lowercase letters, digits, or hyphens, starting with a letter or digit',
+  'settings.plugins.scaffold.idTaken': 'A plugin with this ID already exists',
+  'settings.plugins.scaffold.create': 'Create',
+  'settings.plugins.scaffold.cancel': 'Cancel',
+
+  'settings.plugins.helpTitle': 'Creating plugins',
+  'settings.plugins.helpIntro': 'Plugins live in:',
+  'settings.plugins.helpNeeds': 'Each plugin needs:',
+  'settings.plugins.helpManifest': 'manifest.toml — metadata & permissions',
+  'settings.plugins.helpIndex': 'index.js — plugin code',
+  'settings.plugins.helpLetClaude': 'Let Claude Code do it for you:',
+  'settings.plugins.helpPrompt': 'Create a Novelist plugin that counts sentences.',
+  'settings.plugins.copy': 'Copy',
+  'settings.plugins.copied': 'Copied',
+
   'settings.sync.webdav': 'WebDAV Sync',
   'settings.sync.openProject': 'Open a project to configure sync.',
   'settings.sync.enabled': 'Enabled',

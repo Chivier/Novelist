@@ -343,6 +343,15 @@ pub async fn set_plugin_document_state(
     Ok(())
 }
 
+/// Return the absolute path of ~/.novelist/plugins/, creating it if missing.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_plugins_dir() -> Result<String, AppError> {
+    let dir = plugins_dir();
+    tokio::fs::create_dir_all(&dir).await?;
+    Ok(dir.to_string_lossy().to_string())
+}
+
 /// Create a minimal plugin at ~/.novelist/plugins/<id>/ with manifest.toml + index.js.
 /// ID must match `[a-z0-9][a-z0-9-]*`. display_name defaults to id.
 #[tauri::command]

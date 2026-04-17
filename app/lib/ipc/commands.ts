@@ -69,6 +69,8 @@ export const commands = {
 	 *  ID must match `[a-z0-9][a-z0-9-]*`. display_name defaults to id.
 	 */
 	scaffoldPlugin: (id: string, displayName: string | null) => typedError<string, string>(__TAURI_INVOKE("scaffold_plugin", { id, displayName })),
+	// Return the absolute path of ~/.novelist/plugins/, creating it if missing.
+	getPluginsDir: () => typedError<string, string>(__TAURI_INVOKE("get_plugins_dir")),
 	// Open a large file into a Rope. Returns metadata.
 	ropeOpen: (path: string) => typedError<RopeDocumentMeta, string>(__TAURI_INVOKE("rope_open", { path })),
 	/**

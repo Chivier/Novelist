@@ -125,6 +125,8 @@
 
   // Plugins
   import type { PluginInfo } from '$lib/ipc/commands';
+  import PluginScaffoldDialog from '$lib/components/PluginScaffoldDialog.svelte';
+  import HelpTooltip from '$lib/components/HelpTooltip.svelte';
   let plugins = $state<PluginInfo[]>([]);
   let pluginsLoaded = $state(false);
 
@@ -143,6 +145,38 @@
     const newEnabled = !plugin.enabled;
     await commands.setPluginEnabled(plugin.id, newEnabled);
     await loadPlugins();
+  }
+
+  let pluginAddMenuOpen = $state(false);
+  let scaffoldDialogOpen = $state(false);
+
+  async function openPluginsFolder() {
+    pluginAddMenuOpen = false;
+    const result = await commands.getPluginsDir();
+    if (result.status === 'ok') {
+      await commands.revealInFileManager(result.data);
+    }
+  }
+
+  function openScaffoldDialog() {
+    pluginAddMenuOpen = false;
+    scaffoldDialogOpen = true;
+  }
+
+  async function onPluginScaffolded(pluginPath: string) {
+    scaffoldDialogOpen = false;
+    await loadPlugins();
+    await commands.revealInFileManager(pluginPath);
+  }
+
+  let copyBtnLabel = $state('');
+  $effect(() => { if (copyBtnLabel === '') copyBtnLabel = t('settings.plugins.copy'); });
+
+  async function copyPromptToClipboard(e: MouseEvent) {
+    e.stopPropagation();
+    await navigator.clipboard.writeText(t('settings.plugins.helpPrompt'));
+    copyBtnLabel = t('settings.plugins.copied');
+    setTimeout(() => { copyBtnLabel = t('settings.plugins.copy'); }, 1500);
   }
 
   // Sync settings
@@ -284,7 +318,7 @@
   });
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} onclick={() => { pluginAddMenuOpen = false; }} />
 
 {#snippet pluginCard(plugin: PluginInfo)}
   <div class="rounded p-3" style="background: var(--novelist-bg-secondary); border: 1px solid var(--novelist-border);">
@@ -660,7 +694,36 @@
         {/if}
 
       {:else if activeSection === 'plugins'}
-        <h3 class="text-xs font-semibold uppercase tracking-wide mb-4" style="color: var(--novelist-text-secondary);">{t('settings.plugins')}</h3>
+        <div class="flex items-center justify-between mb-4" style="position: relative;">
+          <h3 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--novelist-text-secondary);">{t('settings.plugins')}</h3>
+          <button
+            class="plugin-add-btn"
+            data-testid="plugin-add-btn"
+            onclick={(e) => { e.stopPropagation(); pluginAddMenuOpen = !pluginAddMenuOpen; }}
+            title={t('settings.plugins.add')}
+            aria-label={t('settings.plugins.add')}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M8 3v10M3 8h10" />
+            </svg>
+          </button>
+          {#if pluginAddMenuOpen}
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="plugin-add-menu" data-testid="plugin-add-menu" onclick={(e) => e.stopPropagation()}>
+              <button class="plugin-add-menu-item" onclick={openPluginsFolder}>{t('settings.plugins.openFolder')}</button>
+              <button class="plugin-add-menu-item" onclick={openScaffoldDialog}>{t('settings.plugins.createFromTemplate')}</button>
+            </div>
+          {/if}
+        </div>
+
+        {#if scaffoldDialogOpen}
+          <PluginScaffoldDialog
+            existingIds={plugins.map(p => p.id)}
+            onCancel={() => scaffoldDialogOpen = false}
+            onCreated={onPluginScaffolded}
+          />
+        {/if}
 
         {#if !pluginsLoaded}
           <p class="text-sm" style="color: var(--novelist-text-secondary);">{t('settings.plugins.loading')}</p>
@@ -690,8 +753,36 @@
           {/if}
 
           <div class="rounded p-3 mt-3" style="background: var(--novelist-bg-secondary); border: 1px solid var(--novelist-border);">
-            <p class="text-xs font-medium mb-1">{t('settings.plugins.createPlugin')}</p>
-            <p class="text-xs" style="color: var(--novelist-text-secondary);">
+            <div class="flex items-center">
+              <p class="text-xs font-medium">{t('settings.plugins.createPlugin')}</p>
+              <HelpTooltip label={t('settings.plugins.helpTitle')}>
+                {#snippet children()}
+                  <div class="help-body">
+                    <p class="help-title">{t('settings.plugins.helpTitle')}</p>
+
+                    <p class="help-small">{t('settings.plugins.helpIntro')}</p>
+                    <pre class="help-code">~/.novelist/plugins/&lt;id&gt;/</pre>
+
+                    <p class="help-small">{t('settings.plugins.helpNeeds')}</p>
+                    <ul class="help-list">
+                      <li>{t('settings.plugins.helpManifest')}</li>
+                      <li>{t('settings.plugins.helpIndex')}</li>
+                    </ul>
+
+                    <p class="help-small">{t('settings.plugins.helpLetClaude')}</p>
+                    <div class="help-prompt">
+                      <code>{t('settings.plugins.helpPrompt')}</code>
+                      <button
+                        class="help-copy-btn"
+                        data-testid="help-copy-btn"
+                        onclick={(e) => copyPromptToClipboard(e)}
+                      >{copyBtnLabel}</button>
+                    </div>
+                  </div>
+                {/snippet}
+              </HelpTooltip>
+            </div>
+            <p class="text-xs mt-1" style="color: var(--novelist-text-secondary);">
               {t('settings.plugins.pluginPath')} <code style="background: var(--novelist-code-bg); padding: 1px 4px; border-radius: 3px;">~/.novelist/plugins/&lt;id&gt;/</code>
             </p>
             <p class="text-xs mt-1" style="color: var(--novelist-text-secondary);">{t('settings.plugins.aiSuggestion')}</p>
@@ -812,3 +903,91 @@
     </div>
   </div>
 </div>
+
+<style>
+.plugin-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--novelist-text-tertiary, var(--novelist-text-secondary));
+  cursor: pointer;
+  transition: background 100ms, color 100ms;
+}
+.plugin-add-btn:hover {
+  background: var(--novelist-sidebar-hover);
+  color: var(--novelist-accent);
+}
+.plugin-add-menu {
+  position: absolute;
+  top: 28px;
+  right: 0;
+  z-index: 30;
+  min-width: 180px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--novelist-bg);
+  border: 1px solid var(--novelist-border);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+.plugin-add-menu-item {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--novelist-text);
+  font-size: 0.78rem;
+  text-align: left;
+  cursor: pointer;
+}
+.plugin-add-menu-item:hover { background: var(--novelist-sidebar-hover); }
+
+.help-body { max-width: 340px; }
+.help-title { font-weight: 600; margin-bottom: 6px; }
+.help-small {
+  font-size: 0.72rem;
+  color: var(--novelist-text-secondary);
+  margin-top: 8px;
+  margin-bottom: 2px;
+}
+.help-code {
+  margin: 0;
+  padding: 4px 6px;
+  background: var(--novelist-code-bg, var(--novelist-bg-secondary));
+  border-radius: 4px;
+  font-size: 0.72rem;
+  overflow-x: auto;
+}
+.help-list {
+  margin: 4px 0 0 16px;
+  padding: 0;
+  list-style: disc;
+}
+.help-list li { font-size: 0.72rem; margin: 2px 0; }
+.help-prompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--novelist-code-bg, var(--novelist-bg-secondary));
+  border-radius: 4px;
+  font-size: 0.72rem;
+}
+.help-prompt code { flex: 1; font-family: inherit; }
+.help-copy-btn {
+  padding: 2px 8px;
+  border: 1px solid var(--novelist-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--novelist-text);
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+.help-copy-btn:hover { border-color: var(--novelist-accent); color: var(--novelist-accent); }
+</style>

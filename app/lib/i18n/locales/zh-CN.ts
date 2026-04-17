@@ -312,6 +312,28 @@ export const zhCN: TranslationMap = {
   'settings.plugins.community': '社区插件',
   'settings.plugins.builtinBadge': '内置',
 
+  'settings.plugins.add': '添加插件',
+  'settings.plugins.openFolder': '打开插件目录',
+  'settings.plugins.createFromTemplate': '从模板创建…',
+
+  'settings.plugins.scaffold.title': '新建插件',
+  'settings.plugins.scaffold.id': '插件 ID',
+  'settings.plugins.scaffold.name': '显示名称（可选）',
+  'settings.plugins.scaffold.invalidId': 'ID 只能包含小写字母、数字或连字符，必须以字母或数字开头',
+  'settings.plugins.scaffold.idTaken': '已存在同 ID 的插件',
+  'settings.plugins.scaffold.create': '创建',
+  'settings.plugins.scaffold.cancel': '取消',
+
+  'settings.plugins.helpTitle': '创建插件',
+  'settings.plugins.helpIntro': '插件位于：',
+  'settings.plugins.helpNeeds': '每个插件需要：',
+  'settings.plugins.helpManifest': 'manifest.toml — 元数据和权限',
+  'settings.plugins.helpIndex': 'index.js — 插件代码',
+  'settings.plugins.helpLetClaude': '让 Claude Code 帮你做：',
+  'settings.plugins.helpPrompt': '创建一个 Novelist 插件，用于统计句子数。',
+  'settings.plugins.copy': '复制',
+  'settings.plugins.copied': '已复制',
+
   'settings.sync.webdav': 'WebDAV 同步',
   'settings.sync.openProject': '打开项目以配置同步。',
   'settings.sync.enabled': '已启用',
