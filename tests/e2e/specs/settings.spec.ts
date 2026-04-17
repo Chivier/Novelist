@@ -93,4 +93,21 @@ test.describe('Settings Dialog', () => {
     const clip = await app.evaluate(() => navigator.clipboard.readText());
     expect(clip).toContain('counts sentences');
   });
+
+  test('language picker is only visible in the Editor tab', async ({ app }) => {
+    await app.evaluate(() => (window as any).__test_api__.toggleSettings());
+    await app.getByTestId('settings-dialog').waitFor({ state: 'visible' });
+
+    // Editor is the default section.
+    await app.getByTestId('settings-section-editor').click();
+    await expect(app.locator('#settings-language')).toBeVisible();
+
+    // Switch to Theme — picker should disappear.
+    await app.getByTestId('settings-section-theme').click();
+    await expect(app.locator('#settings-language')).toHaveCount(0);
+
+    // Back to Editor — picker returns.
+    await app.getByTestId('settings-section-editor').click();
+    await expect(app.locator('#settings-language')).toBeVisible();
+  });
 });

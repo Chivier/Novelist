@@ -394,23 +394,23 @@
     <!-- Right content -->
     <div class="flex-1 overflow-y-auto px-5 py-4">
 
-      <div class="flex items-center justify-between mb-3">
-        <label for="settings-language" class="text-sm" style="color: var(--novelist-text-secondary);">Language / 语言</label>
-        <select
-          id="settings-language"
-          class="text-sm px-2 py-1 rounded cursor-pointer"
-          style="background: var(--novelist-bg-secondary); color: var(--novelist-text); border: 1px solid var(--novelist-border);"
-          value={i18n.locale}
-          onchange={(e) => i18n.setLocale((e.target as HTMLSelectElement).value as Locale)}
-        >
-          {#each i18n.availableLocales as loc}
-            <option value={loc.code}>{loc.nativeName}</option>
-          {/each}
-        </select>
-      </div>
-
       {#if activeSection === 'editor'}
         <h3 class="text-xs font-semibold uppercase tracking-wide mb-4" style="color: var(--novelist-text-secondary);">{t('settings.editor')}</h3>
+
+        <div class="flex items-center justify-between mb-3">
+          <label for="settings-language" class="text-sm">{t('settings.language')}</label>
+          <select
+            id="settings-language"
+            class="text-sm px-2 py-1 rounded cursor-pointer"
+            style="background: var(--novelist-bg-secondary); color: var(--novelist-text); border: 1px solid var(--novelist-border);"
+            value={i18n.locale}
+            onchange={(e) => i18n.setLocale((e.target as HTMLSelectElement).value as Locale)}
+          >
+            {#each i18n.availableLocales as loc}
+              <option value={loc.code}>{loc.nativeName}</option>
+            {/each}
+          </select>
+        </div>
 
         <div class="flex items-center justify-between mb-3">
           <label for="settings-font" class="text-sm">{t('settings.font')}</label>
