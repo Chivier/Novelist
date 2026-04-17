@@ -59,4 +59,40 @@ test.describe('Sidebar', () => {
 
     await app.keyboard.press('Escape');
   });
+
+  test('folder tree: expand shows children, collapse hides them', async ({ app }) => {
+    const folder = app.getByTestId('sidebar-folder-Notes');
+    await expect(folder).toBeVisible();
+
+    // Child file is hidden before expand.
+    await expect(app.getByTestId('sidebar-file-outline.md')).toHaveCount(0);
+
+    // Click the chevron (the Expand/Collapse button inside the folder row).
+    const chevron = folder.getByRole('button', { name: /Expand|Collapse/i });
+    await chevron.click();
+    await expect(app.getByTestId('sidebar-file-outline.md')).toBeVisible();
+
+    // Collapsing again hides it.
+    await chevron.click();
+    await expect(app.getByTestId('sidebar-file-outline.md')).toHaveCount(0);
+  });
+
+  test('folder tree: drag a root file into a subfolder', async ({ app }) => {
+    const folder = app.getByTestId('sidebar-folder-Notes');
+    const chevron = folder.getByRole('button', { name: /Expand|Collapse/i });
+
+    // Expand first.
+    await chevron.click();
+    await expect(app.getByTestId('sidebar-file-outline.md')).toBeVisible();
+
+    // Drag "Chapter 3.md" (currently at project root) onto Notes folder.
+    const rootFile = app.getByTestId('sidebar-file-Chapter 3.md');
+    await rootFile.dragTo(folder);
+
+    // Give the reactive refresh a moment, then verify Chapter 3 is now inside Notes.
+    // Assertion: Chapter 3.md testid still exists (file-level id is the filename, not the path).
+    await expect(app.getByTestId('sidebar-file-Chapter 3.md')).toBeVisible();
+    // And the Notes subfolder still shows outline.md.
+    await expect(app.getByTestId('sidebar-file-outline.md')).toBeVisible();
+  });
 });

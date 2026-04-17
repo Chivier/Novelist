@@ -19,6 +19,7 @@ export const MOCK_FILES: MockFileEntry[] = [
   { name: 'Chapter 1.md', path: `${MOCK_PROJECT_DIR}/Chapter 1.md`, is_dir: false, size: 1024 },
   { name: 'Chapter 2.md', path: `${MOCK_PROJECT_DIR}/Chapter 2.md`, is_dir: false, size: 2048 },
   { name: 'Notes', path: `${MOCK_PROJECT_DIR}/Notes`, is_dir: true, size: 0 },
+  { name: 'outline.md', path: `${MOCK_PROJECT_DIR}/Notes/outline.md`, is_dir: false, size: 128 },
   { name: 'Chapter 3.md', path: `${MOCK_PROJECT_DIR}/Chapter 3.md`, is_dir: false, size: 512 },
 ];
 
@@ -26,6 +27,7 @@ export const MOCK_FILE_CONTENTS: Record<string, string> = {
   [`${MOCK_PROJECT_DIR}/Chapter 1.md`]: '# Chapter 1\n\nIt was a dark and stormy night.\n\nThe wind howled through the trees.\n',
   [`${MOCK_PROJECT_DIR}/Chapter 2.md`]: '# Chapter 2\n\nThe next morning dawned bright and clear.\n',
   [`${MOCK_PROJECT_DIR}/Chapter 3.md`]: '# Chapter 3\n\n这是第三章的内容。\n\n中文测试文本。\n',
+  [`${MOCK_PROJECT_DIR}/Notes/outline.md`]: '# Outline\n\nNotes on story arc.\n',
 };
 
 export const MOCK_RECENT_PROJECTS: MockRecentProject[] = [

@@ -26,7 +26,14 @@ export function buildTauriMockScript(config: TauriMockConfig): string {
           case 'read_file': return writtenFiles[args.path] ?? fileContents[args.path] ?? '';
           case 'write_file': writtenFiles[args.path] = args.content; return null;
           case 'get_file_encoding': return 'utf-8';
-          case 'list_directory': return files;
+          case 'list_directory': {
+            const prefix = args.path.endsWith('/') ? args.path : args.path + '/';
+            return files.filter(f => {
+              if (!f.path.startsWith(prefix)) return false;
+              const rest = f.path.slice(prefix.length);
+              return rest.length > 0 && !rest.includes('/');
+            });
+          }
           case 'create_file': {
             const p = args.parentDir + '/' + args.filename;
             createdFiles.push(p);
@@ -41,6 +48,20 @@ export function buildTauriMockScript(config: TauriMockConfig): string {
           }
           case 'create_directory': return args.parentDir + '/' + args.name;
           case 'rename_item': return args.oldPath.replace(/[^\\/]+$/, args.newName);
+          case 'move_item': {
+            const src = args.sourcePath;
+            const parent = args.targetDir.endsWith('/') ? args.targetDir : args.targetDir + '/';
+            const name = src.slice(src.lastIndexOf('/') + 1);
+            const dest = parent + name;
+            for (let i = 0; i < files.length; i++) {
+              if (files[i].path === src) {
+                files[i] = { ...files[i], path: dest };
+              } else if (files[i].path.startsWith(src + '/')) {
+                files[i] = { ...files[i], path: dest + files[i].path.slice(src.length) };
+              }
+            }
+            return dest;
+          }
           case 'delete_item': deletedFiles.push(args.path); return null;
           case 'duplicate_file': return args.path.replace('.md', ' copy.md');
           case 'detect_project': return projectConfig;
