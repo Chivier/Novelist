@@ -405,6 +405,63 @@ pub async fn rename_item(old_path: String, new_name: String) -> Result<String, A
     Ok(new_path.to_string_lossy().to_string())
 }
 
+/// Move a file or folder into `target_dir`. Auto-numbers on collision
+/// ("a.md" -> "a 2.md"). Rejects moving a folder into its own descendant.
+#[tauri::command]
+#[specta::specta]
+pub async fn move_item(source_path: String, target_dir: String) -> Result<String, AppError> {
+    let source = validate_path(&source_path)?;
+    let target = validate_path(&target_dir)?;
+
+    if !source.exists() {
+        return Err(AppError::FileNotFound(source_path));
+    }
+    if !target.is_dir() {
+        return Err(AppError::NotADirectory(target_dir));
+    }
+
+    // Reject moving a folder into its own descendant.
+    // Canonicalize both so symlinks and trailing slashes don't spoof the check.
+    let src_canon = tokio::fs::canonicalize(&source).await?;
+    let tgt_canon = tokio::fs::canonicalize(&target).await?;
+    if tgt_canon.starts_with(&src_canon) {
+        return Err(AppError::InvalidInput(
+            "Cannot move a folder into its own descendant".to_string(),
+        ));
+    }
+
+    let file_name = source
+        .file_name()
+        .ok_or_else(|| AppError::InvalidInput("Source has no file name".to_string()))?;
+    let mut dest = target.join(file_name);
+
+    // Auto-number on collision: "foo.md" -> "foo 2.md" -> "foo 3.md".
+    if dest.exists() {
+        let stem = dest
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        let ext = dest
+            .extension()
+            .map(|e| format!(".{}", e.to_string_lossy()))
+            .unwrap_or_default();
+        let mut counter = 2u32;
+        loop {
+            dest = target.join(format!("{stem} {counter}{ext}"));
+            if !dest.exists() {
+                break;
+            }
+            counter += 1;
+        }
+    }
+
+    // Source & target are both inside the project tree (frontend guarantees this via
+    // validate_path). Same filesystem -> plain rename is enough.
+    tokio::fs::rename(&source, &dest).await?;
+    Ok(dest.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn delete_item(path: String) -> Result<(), AppError> {
@@ -798,6 +855,82 @@ mod tests {
         let result = rename_item(
             dir.path().join("a.md").to_string_lossy().to_string(),
             "b.md".to_string(),
+        )
+        .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_move_item_basic() {
+        let dir = TempDir::new().unwrap();
+        let src_file = dir.path().join("a.md");
+        fs::write(&src_file, "hello").unwrap();
+        let subdir = dir.path().join("sub");
+        fs::create_dir(&subdir).unwrap();
+
+        let new_path = move_item(
+            src_file.to_string_lossy().to_string(),
+            subdir.to_string_lossy().to_string(),
+        )
+        .await
+        .unwrap();
+
+        assert!(!src_file.exists());
+        assert!(Path::new(&new_path).exists());
+        assert_eq!(fs::read_to_string(&new_path).unwrap(), "hello");
+        assert!(new_path.ends_with("sub/a.md"));
+    }
+
+    #[tokio::test]
+    async fn test_move_item_collision_auto_numbers() {
+        let dir = TempDir::new().unwrap();
+        let src = dir.path().join("a.md");
+        fs::write(&src, "src").unwrap();
+        let subdir = dir.path().join("sub");
+        fs::create_dir(&subdir).unwrap();
+        fs::write(subdir.join("a.md"), "existing").unwrap();
+
+        let new_path = move_item(
+            src.to_string_lossy().to_string(),
+            subdir.to_string_lossy().to_string(),
+        )
+        .await
+        .unwrap();
+
+        assert!(new_path.ends_with("a 2.md"));
+        assert_eq!(fs::read_to_string(subdir.join("a.md")).unwrap(), "existing");
+        assert_eq!(fs::read_to_string(&new_path).unwrap(), "src");
+    }
+
+    #[tokio::test]
+    async fn test_move_item_into_own_descendant_fails() {
+        let dir = TempDir::new().unwrap();
+        let parent = dir.path().join("parent");
+        fs::create_dir(&parent).unwrap();
+        let child = parent.join("child");
+        fs::create_dir(&child).unwrap();
+
+        let result = move_item(
+            parent.to_string_lossy().to_string(),
+            child.to_string_lossy().to_string(),
+        )
+        .await;
+        assert!(result.is_err());
+        assert!(parent.exists());
+        assert!(child.exists());
+    }
+
+    #[tokio::test]
+    async fn test_move_item_target_not_a_directory() {
+        let dir = TempDir::new().unwrap();
+        let src = dir.path().join("a.md");
+        fs::write(&src, "").unwrap();
+        let not_dir = dir.path().join("b.md");
+        fs::write(&not_dir, "").unwrap();
+
+        let result = move_item(
+            src.to_string_lossy().to_string(),
+            not_dir.to_string_lossy().to_string(),
         )
         .await;
         assert!(result.is_err());
