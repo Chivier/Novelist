@@ -457,6 +457,27 @@ const imageBlockDecoField = StateField.define<DecorationSet>({
   provide: f => EditorView.decorations.from(f),
 });
 
+/**
+ * Clamp a replace-decoration range to a single line.
+ *
+ * CM6 rejects `Decoration.replace` from a ViewPlugin when `to` extends past
+ * the end of the line containing `from` ("Decorations that replace line
+ * breaks may not be specified via plugins"). This helper guarantees the
+ * invariant for every ViewPlugin-scoped replace in this file.
+ *
+ * Returns null when the clamped range is empty (caller should skip).
+ */
+function clampReplaceRange(
+  state: EditorState,
+  from: number,
+  to: number,
+): { from: number; to: number } | null {
+  const lineEnd = state.doc.lineAt(from).to;
+  const clamped = Math.min(to, lineEnd);
+  if (clamped <= from) return null;
+  return { from, to: clamped };
+}
+
 function buildDecorations(view: EditorView): DecorationSet {
   const { state } = view;
   const decos: Range<Decoration>[] = [];
@@ -496,7 +517,8 @@ function buildDecorations(view: EditorView): DecorationSet {
                     );
                   } else {
                     // Cursor elsewhere: collapse markers to zero width (Typora-style)
-                    decos.push(Decoration.replace({}).range(cursor.from, cursor.to));
+                    const r = clampReplaceRange(state, cursor.from, cursor.to);
+                    if (r) decos.push(Decoration.replace({}).range(r.from, r.to));
                   }
                 }
                 if (cursor.to > markerEnd) {
@@ -523,7 +545,8 @@ function buildDecorations(view: EditorView): DecorationSet {
                 Decoration.mark({ class: 'cm-novelist-marker-visible' }).range(afterMarker, contentStart)
               );
             } else {
-              decos.push(Decoration.replace({}).range(afterMarker, contentStart));
+              const r = clampReplaceRange(state, afterMarker, contentStart);
+              if (r) decos.push(Decoration.replace({}).range(r.from, r.to));
             }
           }
 
@@ -566,9 +589,19 @@ function buildDecorations(view: EditorView): DecorationSet {
             do {
               if (cursor.name === 'LinkMark') {
                 if (cursor.from < cursor.to) {
-                  decos.push(
-                    Decoration.mark({ class: markerClass }).range(cursor.from, cursor.to)
-                  );
+                  if (cursorInside) {
+                    // Cursor on link line: dim the marker with opacity so the
+                    // user can still see/edit the syntax.
+                    decos.push(
+                      Decoration.mark({ class: 'cm-novelist-marker-visible' }).range(cursor.from, cursor.to)
+                    );
+                  } else {
+                    // Cursor elsewhere: fully remove the bracket/paren from
+                    // layout (otherwise `visibility: hidden` leaves a 1-char
+                    // gap per `[`, `]`, `(`, `)` — 4 chars total per link).
+                    const r = clampReplaceRange(state, cursor.from, cursor.to);
+                    if (r) decos.push(Decoration.replace({}).range(r.from, r.to));
+                  }
                 }
                 // First LinkMark is "[", second is "]" — use count instead of sliceString
                 linkMarkCount++;
@@ -579,9 +612,16 @@ function buildDecorations(view: EditorView): DecorationSet {
                 }
               } else if (cursor.name === 'URL') {
                 if (cursor.from < cursor.to) {
-                  decos.push(
-                    Decoration.mark({ class: markerClass }).range(cursor.from, cursor.to)
-                  );
+                  if (cursorInside) {
+                    decos.push(
+                      Decoration.mark({ class: 'cm-novelist-marker-visible' }).range(cursor.from, cursor.to)
+                    );
+                  } else {
+                    // URL is long — must truly remove from layout. Markdown
+                    // inline links don't cross newlines; clamp is defensive.
+                    const r = clampReplaceRange(state, cursor.from, cursor.to);
+                    if (r) decos.push(Decoration.replace({}).range(r.from, r.to));
+                  }
                 }
               }
             } while (cursor.nextSibling());
@@ -704,20 +744,25 @@ function buildDecorations(view: EditorView): DecorationSet {
               if (listItem) {
                 const listMark = listItem.getChild('ListMark');
                 if (listMark && listMark.from < listMark.to) {
-                  decos.push(Decoration.replace({}).range(listMark.from, listMark.to));
+                  const lm = clampReplaceRange(state, listMark.from, listMark.to);
+                  if (lm) decos.push(Decoration.replace({}).range(lm.from, lm.to));
                   // Also hide whitespace between ListMark and TaskMarker
                   if (listMark.to < node.from) {
-                    decos.push(Decoration.replace({}).range(listMark.to, node.from));
+                    const gap = clampReplaceRange(state, listMark.to, node.from);
+                    if (gap) decos.push(Decoration.replace({}).range(gap.from, gap.to));
                   }
                 }
               }
 
               // Replace [ ]/[x] with a visual checkbox widget
-              decos.push(
-                Decoration.replace({
-                  widget: new CheckboxWidget(isChecked, node.from),
-                }).range(node.from, node.to)
-              );
+              const cb = clampReplaceRange(state, node.from, node.to);
+              if (cb) {
+                decos.push(
+                  Decoration.replace({
+                    widget: new CheckboxWidget(isChecked, node.from),
+                  }).range(cb.from, cb.to)
+                );
+              }
 
               // Apply strikethrough to the content after the checkbox for checked items
               if (isChecked && node.to < (node.node.parent?.to ?? node.to)) {
