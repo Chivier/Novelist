@@ -13,6 +13,7 @@ import { tags } from '@lezer/highlight';
 import { searchKeymap, highlightSelectionMatches, openSearchPanel } from '@codemirror/search';
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { wysiwygPlugin, linkClickPlugin, imagePastePlugin } from './wysiwyg';
+import { unifiedLineSelectionPlugin } from './selection-line';
 import { mermaidPlugin } from './mermaid';
 import { mathPlugin } from './math';
 import { tablePlugin } from './table';
@@ -279,11 +280,25 @@ const novelistTheme = EditorView.theme({
   '.cm-activeLine': {
     backgroundColor: 'transparent',
   },
-  '.cm-selectionBackground, ::selection': {
-    backgroundColor: 'color-mix(in srgb, var(--novelist-accent) 16%, transparent) !important',
+  // CM6's drawSelection paints rectangles for multi-line selections using
+  // two different coordinate frames: the first line's rect is anchored to
+  // `.cm-line` while middle/last lines are anchored to `.cm-content`, which
+  // leaves a ~19.75px stair-step on the left edge. We suppress those rects
+  // and let `.cm-novelist-selected-line` (a line decoration) paint a
+  // uniformly-aligned background on `.cm-line` instead.
+  '.cm-selectionBackground, .cm-selectionBackground:focus': {
+    backgroundColor: 'transparent !important',
+  },
+  '::selection': {
+    backgroundColor: 'color-mix(in srgb, var(--novelist-accent) 30%, transparent)',
   },
   '.cm-line': {
-    padding: '0',
+    padding: '0 0.25rem',
+  },
+  // No border-radius on the per-line background: keeps the left/right edges
+  // of a multi-line run as a continuous straight line (no zigzag).
+  '.cm-line.cm-novelist-selected-line': {
+    backgroundColor: 'color-mix(in srgb, var(--novelist-accent) 18%, transparent)',
   },
   '.cm-placeholder': {
     color: 'var(--novelist-text-tertiary, var(--novelist-text-secondary))',
@@ -348,6 +363,7 @@ export function createEditorExtensions(options?: EditorOptions): Extension[] {
     highlightActiveLine(),
     history(),
     drawSelection(),
+    unifiedLineSelectionPlugin,
     dropCursor(),
     rectangularSelection(),
     bracketMatching(),
@@ -431,6 +447,7 @@ function createLargeFileExtensions(): Extension[] {
     lineNumbers(),
     history({ minDepth: 50 }),
     drawSelection(),
+    unifiedLineSelectionPlugin,
     // NO lineWrapping for large files — CM6's line-height estimation is
     // inaccurate for unseen wrapped lines, causing scroll jumps on click
     // after scrolling tens of thousands of lines. Fixed-width lines have
@@ -455,6 +472,7 @@ function createReadOnlyExtensions(): Extension[] {
     EditorState.readOnly.of(true),
     EditorView.editable.of(false),
     drawSelection(),
+    unifiedLineSelectionPlugin,
     EditorView.lineWrapping,
     novelistTheme,
     keymap.of([
