@@ -98,7 +98,9 @@ const PLACEHOLDER_PATTERNS: RegExp[] = [
   /^Ch\.?\d+\.md$/,
   /^Part \d+\.md$/,
   /^\d+[-_. ]Untitled\.md$/,
-  /^novelist_scratch_\d+\.md$/, // legacy migration
+  // Legacy: pre-v0.1.x timestamp-scratch naming. Kept so existing files in
+  // user folders auto-rename on first save. Remove after v0.3.x.
+  /^novelist_scratch_\d+\.md$/,
 ];
 
 /** True if the filename (basename, with .md) is in the auto-generated placeholder set. */
