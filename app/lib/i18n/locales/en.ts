@@ -266,6 +266,17 @@ export const en: TranslationMap = {
   'settings.on': 'On',
   'settings.off': 'Off',
 
+  'settings.editor.newFile.heading': 'New file in project',
+  'settings.editor.newFile.detectFromFolder': 'Detect chapter patterns from folder',
+  'settings.editor.newFile.detectFromFolderHint': 'When on, scans the folder and picks the next number in the existing series.',
+  'settings.editor.newFile.template': 'Default filename template',
+  'settings.editor.newFile.templateHint': 'Used when no folder pattern is detected.',
+  'settings.editor.newFile.templatePreview': 'Preview',
+  'settings.editor.newFile.templateInvalid': 'Template must contain {N} exactly once.',
+  'settings.editor.newFile.autoRename': 'Auto-rename placeholder files from H1',
+  'settings.editor.newFile.autoRenameHint': 'Only affects auto-generated names. Stops once you manually rename.',
+  'settings.editor.newFile.presetCustom': 'Custom…',
+
   'settings.theme.system': 'System (Auto)',
   'settings.theme.dark': 'Dark',
   'settings.theme.light': 'Light',

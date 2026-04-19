@@ -9,6 +9,8 @@
   import { convertTyporaTheme } from '$lib/utils/typora-theme';
   import { t, i18n } from '$lib/i18n';
   import type { Locale } from '$lib/i18n';
+  import { newFileSettings } from '$lib/stores/new-file-settings.svelte';
+  import { parseTemplate, inferNextName } from '$lib/utils/placeholder';
 
   interface Props {
     onClose: () => void;
@@ -121,6 +123,46 @@
     } else {
       templateError = result.error;
     }
+  }
+
+  // New file in project settings
+  const NEW_FILE_PRESETS = [
+    'Untitled {N}',
+    '第{N}章',
+    'Chapter {N}',
+    '{N}-{title}',
+    '{N}.{title}',
+  ];
+
+  let newFileTemplateInput = $state(newFileSettings.template);
+  let newFileTemplateError = $state<string | null>(null);
+
+  let newFileTemplatePreview = $derived.by<string>(() => {
+    const tmpl = parseTemplate(newFileTemplateInput);
+    if (!tmpl) return '';
+    const names: string[] = [];
+    const folder: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const next = inferNextName(folder, tmpl);
+      names.push(next);
+      folder.push(next);
+    }
+    return names.join(', ');
+  });
+
+  function applyNewFileTemplate() {
+    try {
+      newFileSettings.setTemplate(newFileTemplateInput);
+      newFileTemplateError = null;
+    } catch (e) {
+      newFileTemplateError = (e as Error).message;
+    }
+  }
+
+  function selectNewFilePreset(p: string) {
+    if (!p) return; // "Custom..." → leave input alone
+    newFileTemplateInput = p;
+    applyNewFileTemplate();
   }
 
   // Plugins
@@ -484,6 +526,77 @@
         <div class="mt-4 rounded p-3 text-sm" style="background: var(--novelist-bg-secondary); font-family: {settings.fontFamily}; font-size: {settings.fontSize}px; line-height: {settings.lineHeight}; border: 1px solid var(--novelist-border);">
           The quick brown fox jumps over the lazy dog.<br/>
           落霞与孤鹜齐飞，秋水共长天一色。
+        </div>
+
+        <div class="mt-8" data-testid="settings-newfile-section">
+          <h4 class="text-sm font-semibold mb-3" style="color: var(--novelist-text);">
+            {t('settings.editor.newFile.heading')}
+          </h4>
+
+          <label class="flex items-start gap-2 mb-4">
+            <input
+              type="checkbox"
+              data-testid="settings-newfile-detect"
+              checked={newFileSettings.detectFromFolder}
+              onchange={(e) => newFileSettings.setDetectFromFolder(e.currentTarget.checked)}
+            />
+            <div>
+              <div>{t('settings.editor.newFile.detectFromFolder')}</div>
+              <div class="text-xs" style="color: var(--novelist-text-secondary);">
+                {t('settings.editor.newFile.detectFromFolderHint')}
+              </div>
+            </div>
+          </label>
+
+          <div class="mb-4">
+            <div class="text-sm mb-1">{t('settings.editor.newFile.template')}</div>
+            <div class="flex gap-2 items-center">
+              <input
+                type="text"
+                data-testid="settings-newfile-template"
+                bind:value={newFileTemplateInput}
+                onblur={applyNewFileTemplate}
+                class="flex-1 px-2 py-1 rounded"
+                style="background: var(--novelist-input-bg); color: var(--novelist-text); border: 1px solid var(--novelist-border);"
+              />
+              <select
+                data-testid="settings-newfile-preset"
+                onchange={(e) => selectNewFilePreset(e.currentTarget.value)}
+                class="px-2 py-1 rounded"
+                style="background: var(--novelist-input-bg); color: var(--novelist-text); border: 1px solid var(--novelist-border);"
+              >
+                <option value="">{t('settings.editor.newFile.presetCustom')}</option>
+                {#each NEW_FILE_PRESETS as p}
+                  <option value={p}>{p}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="text-xs mt-1" style="color: var(--novelist-text-secondary);">
+              {t('settings.editor.newFile.templateHint')}
+            </div>
+            {#if newFileTemplateError}
+              <div class="text-xs mt-1" style="color: var(--novelist-error, #c44);">{newFileTemplateError}</div>
+            {:else if newFileTemplatePreview}
+              <div class="text-xs mt-1" style="color: var(--novelist-text-secondary);">
+                {t('settings.editor.newFile.templatePreview')}: {newFileTemplatePreview}
+              </div>
+            {/if}
+          </div>
+
+          <label class="flex items-start gap-2">
+            <input
+              type="checkbox"
+              data-testid="settings-newfile-autorename"
+              checked={newFileSettings.autoRenameFromH1}
+              onchange={(e) => newFileSettings.setAutoRenameFromH1(e.currentTarget.checked)}
+            />
+            <div>
+              <div>{t('settings.editor.newFile.autoRename')}</div>
+              <div class="text-xs" style="color: var(--novelist-text-secondary);">
+                {t('settings.editor.newFile.autoRenameHint')}
+              </div>
+            </div>
+          </label>
         </div>
 
       {:else if activeSection === 'theme'}

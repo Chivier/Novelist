@@ -266,6 +266,17 @@ export const zhCN: TranslationMap = {
   'settings.on': '开',
   'settings.off': '关',
 
+  'settings.editor.newFile.heading': '项目内新建文件',
+  'settings.editor.newFile.detectFromFolder': '自动从文件夹推断章节命名',
+  'settings.editor.newFile.detectFromFolderHint': '关闭后总是用下方的默认模板。',
+  'settings.editor.newFile.template': '默认文件名模板',
+  'settings.editor.newFile.templateHint': '在未检测到文件夹章节模式时使用。',
+  'settings.editor.newFile.templatePreview': '预览',
+  'settings.editor.newFile.templateInvalid': '模板必须且只能包含一个 {N}。',
+  'settings.editor.newFile.autoRename': '保存时根据 H1 自动重命名占位文件',
+  'settings.editor.newFile.autoRenameHint': '仅对自动生成的文件名生效，手动重命名后停止。',
+  'settings.editor.newFile.presetCustom': '自定义…',
+
   'settings.theme.system': '跟随系统',
   'settings.theme.dark': '深色',
   'settings.theme.light': '浅色',
