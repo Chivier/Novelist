@@ -24,7 +24,7 @@ export const commands = {
 	 */
 	createScratchFile: () => typedError<string, string>(__TAURI_INVOKE("create_scratch_file")),
 	createDirectory: (parentDir: string, name: string) => typedError<string, string>(__TAURI_INVOKE("create_directory", { parentDir, name })),
-	renameItem: (oldPath: string, newName: string) => typedError<string, string>(__TAURI_INVOKE("rename_item", { oldPath, newName })),
+	renameItem: (oldPath: string, newName: string, allowCollisionBump: boolean | null) => typedError<string, string>(__TAURI_INVOKE("rename_item", { oldPath, newName, allowCollisionBump })),
 	/**
 	 *  Move a file or folder into `target_dir`. Auto-numbers on collision
 	 *  ("a.md" -> "a 2.md"). Rejects moving a folder into its own descendant.

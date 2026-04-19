@@ -269,7 +269,7 @@
       cancelRename();
       return;
     }
-    const result = await commands.renameItem(renaming.path, renameValue.trim());
+    const result = await commands.renameItem(renaming.path, renameValue.trim(), null);
     if (result.status === 'ok') {
       // Update any open tab referencing the old path
       const tab = tabsStore.findByPath(renaming.path);

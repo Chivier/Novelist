@@ -382,24 +382,50 @@ pub async fn create_directory(parent_dir: String, name: String) -> Result<String
     Ok(dir_path.to_string_lossy().to_string())
 }
 
+/// Rename a file or folder in place.
+/// When `allow_collision_bump` is Some(true), appends " 2", " 3", … on collision.
+/// Defaults to error-on-collision when None or Some(false).
 #[tauri::command]
 #[specta::specta]
-pub async fn rename_item(old_path: String, new_name: String) -> Result<String, AppError> {
+pub async fn rename_item(
+    old_path: String,
+    new_name: String,
+    allow_collision_bump: Option<bool>,
+) -> Result<String, AppError> {
     let old = validate_path(&old_path)?;
     if !old.exists() {
         return Err(AppError::FileNotFound(old_path));
     }
     let safe_name = sanitize_filename(&new_name)?;
-    let new_path = old
+    let parent = old
         .parent()
-        .ok_or_else(|| AppError::Custom("Cannot determine parent directory".to_string()))?
-        .join(&safe_name);
-    if new_path.exists() {
-        return Err(AppError::Custom(format!(
-            "Already exists: {}",
-            new_path.display()
-        )));
+        .ok_or_else(|| AppError::Custom("Cannot determine parent directory".to_string()))?;
+    let mut new_path = parent.join(&safe_name);
+
+    if new_path.exists() && new_path != old {
+        if allow_collision_bump.unwrap_or(false) {
+            let p = std::path::Path::new(&safe_name);
+            let stem = p.file_stem().unwrap_or_default().to_string_lossy().to_string();
+            let ext = p
+                .extension()
+                .map(|e| format!(".{}", e.to_string_lossy()))
+                .unwrap_or_default();
+            let mut counter = 2u32;
+            loop {
+                new_path = parent.join(format!("{stem} {counter}{ext}"));
+                if !new_path.exists() || new_path == old {
+                    break;
+                }
+                counter += 1;
+            }
+        } else {
+            return Err(AppError::Custom(format!(
+                "Already exists: {}",
+                new_path.display()
+            )));
+        }
     }
+
     tokio::fs::rename(&old, &new_path).await?;
     Ok(new_path.to_string_lossy().to_string())
 }
@@ -866,7 +892,11 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let old_path = dir.path().join("old.md");
         fs::write(&old_path, "content").unwrap();
-        let new_path = rename_item(old_path.to_string_lossy().to_string(), "new.md".to_string())
+        let new_path = rename_item(
+            old_path.to_string_lossy().to_string(),
+            "new.md".to_string(),
+            None,
+        )
             .await
             .unwrap();
         assert!(!old_path.exists());
@@ -876,7 +906,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_rename_item_not_found() {
-        let result = rename_item("/nonexistent.md".to_string(), "new.md".to_string()).await;
+        let result = rename_item(
+            "/nonexistent.md".to_string(),
+            "new.md".to_string(),
+            None,
+        ).await;
         assert!(result.is_err());
     }
 
@@ -888,9 +922,44 @@ mod tests {
         let result = rename_item(
             dir.path().join("a.md").to_string_lossy().to_string(),
             "b.md".to_string(),
+            None,
         )
         .await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_rename_item_bumps_on_collision() {
+        let dir = TempDir::new().unwrap();
+        let src = dir.path().join("orig.md");
+        let conflict = dir.path().join("target.md");
+        let conflict2 = dir.path().join("target 2.md");
+        fs::write(&src, "x").unwrap();
+        fs::write(&conflict, "y").unwrap();
+        fs::write(&conflict2, "z").unwrap();
+        let result = rename_item(
+            src.to_string_lossy().to_string(),
+            "target.md".to_string(),
+            Some(true),
+        ).await.unwrap();
+        assert!(result.ends_with("target 3.md"));
+        assert!(!src.exists());
+    }
+
+    #[tokio::test]
+    async fn test_rename_item_errors_on_collision_when_disabled() {
+        let dir = TempDir::new().unwrap();
+        let src = dir.path().join("orig.md");
+        let conflict = dir.path().join("target.md");
+        fs::write(&src, "x").unwrap();
+        fs::write(&conflict, "y").unwrap();
+        let result = rename_item(
+            src.to_string_lossy().to_string(),
+            "target.md".to_string(),
+            Some(false),
+        ).await;
+        assert!(result.is_err());
+        assert!(src.exists());
     }
 
     #[tokio::test]
