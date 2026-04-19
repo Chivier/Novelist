@@ -47,7 +47,10 @@
   }
   let { onOpenProjectFromPath, recentProjects = [], onRemoveRecentProject }: Props = $props();
 
-  function toggleSwitcher() {
+  function toggleSwitcher(e: MouseEvent) {
+    // Stop propagation so the window-level onclick handler (which closes
+    // the switcher on any outside click) doesn't immediately reset this.
+    e.stopPropagation();
     switcherOpen = !switcherOpen;
   }
 
@@ -636,7 +639,7 @@
 
     <!-- Bottom bar: Notion-style project switcher -->
     <div class="sidebar-bottom" style="position: relative;">
-      <button class="sidebar-switch-btn" onclick={toggleSwitcher} title={t('sidebar.switchProject')}>
+      <button class="sidebar-switch-btn" data-testid="sidebar-switch-btn" onclick={toggleSwitcher} title={t('sidebar.switchProject')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 4h4l2 2h6v7H2z"/></svg>
         <span>{projectStore.dirPath?.split('/').pop() ?? 'Project'}</span>
         <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: auto; opacity: 0.5;"><path d="{switcherOpen ? 'M4 10l4-4 4 4' : 'M4 6l4 4 4-4'}"/></svg>

@@ -77,6 +77,19 @@ test.describe('Sidebar', () => {
     await expect(app.getByTestId('sidebar-file-outline.md')).toHaveCount(0);
   });
 
+  test('clicking bottom-bar project button opens the switcher popup', async ({ app }) => {
+    // Popup is closed by default.
+    await expect(app.getByTestId('project-switcher')).toHaveCount(0);
+
+    await app.getByTestId('sidebar-switch-btn').click();
+
+    // After the click, the switcher should be visible and list recent projects.
+    const switcher = app.getByTestId('project-switcher');
+    await expect(switcher).toBeVisible();
+    await expect(switcher).toContainText('Test Novel');
+    await expect(switcher).toContainText('Another Story');
+  });
+
   test('folder tree: drag a root file into a subfolder', async ({ app }) => {
     const folder = app.getByTestId('sidebar-folder-Notes');
     const chevron = folder.getByRole('button', { name: /Expand|Collapse/i });
