@@ -935,15 +935,24 @@ class WysiwygPluginClass {
     const wasComposing = update.startState.field(imeComposingField, false);
     const isComposing = update.state.field(imeComposingField, false);
 
-    // Skip during active IME composition
-    if (isComposing) return;
-
-    // Always rebuild on doc change, viewport change, or composition end
+    // CRITICAL: rebuild on doc change even during IME composition.
+    //
+    // If we skip rebuilding here and just let CM6 map the previous
+    // DecorationSet through the transaction, a composition that inserts
+    // a newline (or any multi-line run) into a replace range will produce
+    // a stale decoration whose [from..to] now crosses a line break — and
+    // CM6 throws `RangeError: Decorations that replace line breaks may not
+    // be specified via plugins` at the next render. Rebuilding produces a
+    // fresh set matched to the current doc, which is always safe.
     if (update.docChanged || update.viewportChanged || (wasComposing && !isComposing)) {
       this.decorations = buildDecorations(update.view);
       this.lastCursorLine = update.state.doc.lineAt(update.state.selection.main.head).number;
       return;
     }
+
+    // For non-doc updates during IME composition, leave decorations alone
+    // (cursor may jump transiently but no doc change means no cross-line risk).
+    if (isComposing) return;
 
     // For selection-only changes: skip rebuild if cursor stayed on the same line.
     if (update.selectionSet) {

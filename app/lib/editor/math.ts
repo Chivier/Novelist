@@ -222,11 +222,19 @@ function buildMathInlineDecos(view: EditorView): DecorationSet {
 
           if (!cursorInside) {
             const tex = state.doc.sliceString(node.from + 1, node.to - 1);
-            if (tex.length > 0) {
+            // Defensive: CM6 forbids ViewPlugin Decoration.replace that crosses
+            // a line break. InlineMath should never cross lines per the parser,
+            // but during IME composition the incremental tree can briefly
+            // contain a malformed InlineMath whose node.to is past the line
+            // end. Clamp to the line containing node.from and skip if the
+            // clamped range would be empty (widget would render nothing useful).
+            const lineEnd = state.doc.lineAt(node.from).to;
+            const endClamped = Math.min(node.to, lineEnd);
+            if (tex.length > 0 && endClamped > node.from && endClamped === node.to) {
               decos.push(
                 Decoration.replace({
                   widget: new InlineMathWidget(tex, () => view),
-                }).range(node.from, node.to)
+                }).range(node.from, endClamped)
               );
             }
           } else {
@@ -309,13 +317,19 @@ class MathInlinePluginClass {
     _mathEditorView = update.view;
     const wasComposing = update.startState.field(imeComposingField, false);
     const isComposing = update.state.field(imeComposingField, false);
-    if (isComposing) return;
 
+    // Rebuild on doc change even during IME — same reasoning as wysiwyg.ts:
+    // if we skip and let CM6 map the DecorationSet through a composition
+    // that inserts a newline inside a `$...$` replace range, the mapped
+    // decoration now crosses a line and CM6 throws RangeError on the next
+    // render. Rebuilding produces a fresh set consistent with the new doc.
     if (update.docChanged || update.viewportChanged || (wasComposing && !isComposing)) {
       this.decorations = buildMathInlineDecos(update.view);
       this.lastCursorLine = update.state.doc.lineAt(update.state.selection.main.head).number;
       return;
     }
+
+    if (isComposing) return;
 
     if (update.selectionSet) {
       const newLine = update.state.doc.lineAt(update.state.selection.main.head).number;

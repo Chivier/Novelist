@@ -183,6 +183,109 @@ describe('wysiwygPlugin — runtime decoration validation', () => {
     }).not.toThrow();
   });
 
+  it('simulates the user crash file (01.md from /Users/.../小说模板/) — frontmatter + inline math + links + IME-like insert', () => {
+    // Content mirrors the user's actual crash file structure. The `# c`
+    // heading simulates a mid-composition IME state.
+    const doc =
+      '---\n' +
+      'title: markmap\n' +
+      'markmap:\n' +
+      '  colorFreezeLevel: 2\n' +
+      '---\n' +
+      '\n' +
+      '# c\n' +
+      '\n' +
+      '## Links\n' +
+      '\n' +
+      '- [Website](https://markmap.js.org/)\n' +
+      '- [GitHub](https://github.com/gera2ld/markmap)\n' +
+      '\n' +
+      '## Related Projects\n' +
+      '\n' +
+      '- [coc-markmap](https://github.com/gera2ld/coc-markmap) for Neovim\n' +
+      '- [markmap-vscode](https://marketplace.visualstudio.com/items?itemName=gera2ld.markmap-vscode) for VSCode\n' +
+      '\n' +
+      '- Katex: $x = {-b \\pm \\sqrt{b^2-4ac} \\over 2a}$\n' +
+      '- [x] checkbox\n' +
+      '\n' +
+      '```js\n' +
+      "console.log('hello, JavaScript')\n" +
+      '```\n' +
+      '\n' +
+      '| Products | Price |\n' +
+      '|-|-|\n' +
+      '| Apple | 4 |\n';
+
+    const state = EditorState.create({ doc, extensions: createEditorExtensions() });
+    const parent = document.createElement('div');
+    document.body.appendChild(parent);
+    view = new EditorView({ state, parent });
+
+    expect(() => {
+      // Cursor on the "# c" heading (position where user was composing)
+      const hPos = doc.indexOf('# c') + 3; // after 'c'
+      view!.dispatch({ selection: { anchor: hPos } });
+      // Simulate IME inserting chinese chars one by one (compositionend has
+      // already committed each). The critical thing is that doc changes
+      // fire while potentially in transient tree states.
+      for (const ch of '章节标题开篇') {
+        view!.dispatch({ changes: { from: view!.state.selection.main.head, insert: ch } });
+      }
+      // Move cursor around (triggers onSelectionChange)
+      view!.dispatch({ selection: { anchor: 0 } });
+      view!.dispatch({ selection: { anchor: view!.state.doc.length } });
+      // Insert a newline inside a position that currently has a link URL
+      // — this is the pathological case that caused stale cross-line replace
+      const urlPos = view!.state.doc.toString().indexOf('https://markmap.js.org/');
+      if (urlPos > 0) {
+        view!.dispatch({ selection: { anchor: urlPos + 5 } });
+        view!.dispatch({ changes: { from: urlPos + 5, insert: '\n' } });
+      }
+    }).not.toThrow();
+  });
+
+  it('IME composition then docChange must not leak stale cross-line decorations', () => {
+    // Regression for the runtime RangeError reported with CJK IME:
+    //   "Decorations that replace line breaks may not be specified via plugins"
+    //
+    // The old WysiwygPlugin.update returned early on isComposing BEFORE the
+    // docChanged branch. CM6 would then map the stale DecorationSet through
+    // the composition's change — if that change inserted a newline inside a
+    // `Decoration.replace` range (e.g., inside a Link/TaskMarker/header),
+    // the mapped decoration now crosses a line break and CM6 throws on the
+    // next render.
+    //
+    // Fix: rebuild on docChanged even during IME. This test dispatches a
+    // compositionstart event to set the IME guard, then a docChange
+    // transaction that inserts content across/inside a link URL.
+    const doc =
+      '# Title\n' +
+      '\n' +
+      'See [link](https://example.com) for info.\n' +
+      '\n' +
+      '- [ ] task\n';
+    const state = EditorState.create({ doc, extensions: createEditorExtensions() });
+    const parent = document.createElement('div');
+    document.body.appendChild(parent);
+    view = new EditorView({ state, parent });
+
+    expect(() => {
+      // Simulate IME composition start — imeGuardPlugin listens on contentDOM.
+      view!.contentDOM.dispatchEvent(new Event('compositionstart', { bubbles: true }));
+      // Position cursor inside the link URL and insert a newline — the
+      // pathological case that creates a cross-line replace if the ViewPlugin
+      // skips rebuild.
+      const urlStart = doc.indexOf('https://');
+      view!.dispatch({ selection: { anchor: urlStart + 8 } });
+      view!.dispatch({ changes: { from: urlStart + 8, insert: '\n' } });
+      // And a plain character insert
+      view!.dispatch({ changes: { from: urlStart + 9, insert: 'x' } });
+      // End composition. imeGuardPlugin's setTimeout delay is irrelevant
+      // to the docChange rebuild path.
+      view!.contentDOM.dispatchEvent(new Event('compositionend', { bubbles: true }));
+    }).not.toThrow();
+  });
+
   it('does not emit cross-line or block Decoration.replace from the ViewPlugin', () => {
     // This is the structural assertion that backs up the runtime checks
     // above. We walk the plugin's decoration set and verify every Point
