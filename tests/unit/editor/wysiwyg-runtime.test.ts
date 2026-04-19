@@ -57,6 +57,37 @@ describe('wysiwygPlugin — runtime decoration validation', () => {
     expect(() => view!.dispatch({ selection: { anchor: 8 } })).not.toThrow();
   });
 
+  it('accepts turning a body paragraph into an H1 by typing "# "', () => {
+    // Reported scenario: user has a doc with existing content, moves cursor
+    // to a paragraph in the middle, and types "# " to promote it to H1.
+    // This triggers an incremental re-parse and a burst of new decorations.
+    const initial =
+      '# Existing title\n' +
+      '\n' +
+      'paragraph one\n' +
+      'paragraph two\n' +
+      '\n' +
+      'final paragraph\n';
+    view = makeView(initial);
+
+    // Find start of "paragraph two" line
+    const lineStart = initial.indexOf('paragraph two');
+    expect(lineStart).toBeGreaterThan(0);
+
+    expect(() => {
+      // Move cursor to start of line
+      view!.dispatch({ selection: { anchor: lineStart } });
+      // Type '#'
+      view!.dispatch({ changes: { from: lineStart, insert: '#' } });
+      // Type ' ' — this is the char that promotes the line to ATXHeading1
+      view!.dispatch({ changes: { from: lineStart + 1, insert: ' ' } });
+      // Move cursor off so the !cursorInside branch runs for both headings
+      view!.dispatch({ selection: { anchor: view!.state.doc.length } });
+      // Move cursor back onto the new heading
+      view!.dispatch({ selection: { anchor: lineStart } });
+    }).not.toThrow();
+  });
+
   it('accepts a task list (the checkbox widget path)', () => {
     view = makeView('- [ ] Task one\n- [x] Task two\n- [ ] Task three\n');
     // Move cursor off any task line so !cursorInside branch runs for ALL tasks
