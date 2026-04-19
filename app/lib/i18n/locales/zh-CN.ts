@@ -35,6 +35,13 @@ export const zhCN: TranslationMap = {
   'sidebar.done': '完成',
   'sidebar.removeProject': '从列表移除',
   'sidebar.switchProject': '切换项目 (Cmd+1~9)',
+  'sidebar.sort.button': '排序',
+  'sidebar.sort.nameAsc': '名称（A \u2192 Z）',
+  'sidebar.sort.nameDesc': '名称（Z \u2192 A）',
+  'sidebar.sort.numericAsc': '编号（1 \u2192 N）',
+  'sidebar.sort.numericDesc': '编号（N \u2192 1）',
+  'sidebar.sort.mtimeDesc': '修改时间（最新）',
+  'sidebar.sort.mtimeAsc': '修改时间（最早）',
 
   // --- TabBar ---
   'tab.unsaved': '未保存的更改',

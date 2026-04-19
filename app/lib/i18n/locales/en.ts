@@ -35,6 +35,13 @@ export const en: TranslationMap = {
   'sidebar.done': 'Done',
   'sidebar.removeProject': 'Remove from list',
   'sidebar.switchProject': 'Switch Project (Cmd+1~9)',
+  'sidebar.sort.button': 'Sort files',
+  'sidebar.sort.nameAsc': 'Name (A \u2192 Z)',
+  'sidebar.sort.nameDesc': 'Name (Z \u2192 A)',
+  'sidebar.sort.numericAsc': 'Number (1 \u2192 N)',
+  'sidebar.sort.numericDesc': 'Number (N \u2192 1)',
+  'sidebar.sort.mtimeDesc': 'Modified (newest)',
+  'sidebar.sort.mtimeAsc': 'Modified (oldest)',
 
   // --- TabBar ---
   'tab.unsaved': 'Unsaved changes',

@@ -6,10 +6,39 @@
   import { tabsStore } from '$lib/stores/tabs.svelte';
   import { t } from '$lib/i18n';
   import FileTreeNode from '$lib/components/FileTreeNode.svelte';
-  import { compareByMode } from '$lib/utils/file-sort';
+  import { compareByMode, type SortMode } from '$lib/utils/file-sort';
 
   // --- Project switcher popup (Notion-style) ---
   let switcherOpen = $state(false);
+
+  // --- Sort menu popup ---
+  let sortMenuOpen = $state(false);
+
+  const sortOptions: Array<{ id: SortMode; labelKey: string }> = [
+    { id: 'numeric-asc', labelKey: 'sidebar.sort.numericAsc' },
+    { id: 'numeric-desc', labelKey: 'sidebar.sort.numericDesc' },
+    { id: 'name-asc', labelKey: 'sidebar.sort.nameAsc' },
+    { id: 'name-desc', labelKey: 'sidebar.sort.nameDesc' },
+    { id: 'mtime-desc', labelKey: 'sidebar.sort.mtimeDesc' },
+    { id: 'mtime-asc', labelKey: 'sidebar.sort.mtimeAsc' },
+  ];
+
+  function selectSort(mode: SortMode) {
+    projectStore.setSortMode(mode);
+    sortMenuOpen = false;
+  }
+
+  $effect(() => {
+    if (!sortMenuOpen) return;
+    function onDoc(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-testid="sidebar-sort-menu"], [data-testid="sidebar-sort-button"]')) {
+        sortMenuOpen = false;
+      }
+    }
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  });
 
   interface Props {
     onOpenProjectFromPath?: (path: string) => void;
@@ -491,7 +520,7 @@
 
 <!-- Close context menu and project switcher on click anywhere -->
 <svelte:window
-  onclick={() => { closeContextMenu(); switcherOpen = false; }}
+  onclick={() => { closeContextMenu(); switcherOpen = false; sortMenuOpen = false; }}
   ondragend={handleDragEnd}
 />
 
@@ -501,6 +530,46 @@
     {#if projectStore.isOpen}
       <span class="sidebar-project-name">{projectStore.name}</span>
       <div class="sidebar-actions">
+        <div class="sidebar-sort-wrap">
+          <button
+            type="button"
+            class="sidebar-icon-btn"
+            data-testid="sidebar-sort-button"
+            title={t('sidebar.sort.button')}
+            aria-label={t('sidebar.sort.button')}
+            aria-haspopup="menu"
+            aria-expanded={sortMenuOpen}
+            onclick={(e) => { e.stopPropagation(); sortMenuOpen = !sortMenuOpen; }}
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v10M4 13l-2-2M4 13l2-2M12 13V3M12 3l-2 2M12 3l2 2"/></svg>
+          </button>
+          {#if sortMenuOpen}
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+              class="sidebar-sort-menu"
+              data-testid="sidebar-sort-menu"
+              role="menu"
+              tabindex="-1"
+              onclick={(e) => e.stopPropagation()}
+            >
+              {#each sortOptions as opt (opt.id)}
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={projectStore.sortMode === opt.id}
+                  class="sidebar-sort-item"
+                  class:sidebar-sort-item-active={projectStore.sortMode === opt.id}
+                  data-testid="sidebar-sort-{opt.id}"
+                  onclick={() => selectSort(opt.id)}
+                >
+                  <span class="sidebar-sort-check">{projectStore.sortMode === opt.id ? '\u2713' : ''}</span>
+                  <span class="sidebar-sort-label">{t(opt.labelKey)}</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
         <button class="sidebar-icon-btn" data-testid="sidebar-new-file" onclick={startCreateFile} title={t('sidebar.newFile')}>
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>
         </button>
@@ -677,8 +746,64 @@
 
   .sidebar-actions {
     display: flex;
+    align-items: center;
     gap: 2px;
     -webkit-app-region: no-drag;
+  }
+
+  .sidebar-sort-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .sidebar-sort-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    min-width: 180px;
+    padding: 4px;
+    border-radius: 8px;
+    background: var(--novelist-bg);
+    border: 1px solid var(--novelist-border);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    z-index: 50;
+  }
+
+  .sidebar-sort-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 6px 10px;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--novelist-text);
+    font-size: 0.78rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background 80ms;
+  }
+  .sidebar-sort-item:hover {
+    background: var(--novelist-sidebar-hover);
+  }
+  .sidebar-sort-item-active {
+    color: var(--novelist-accent);
+  }
+  .sidebar-sort-check {
+    display: inline-flex;
+    justify-content: center;
+    width: 12px;
+    color: var(--novelist-accent);
+    flex-shrink: 0;
+  }
+  .sidebar-sort-label {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .sidebar-icon-btn {
