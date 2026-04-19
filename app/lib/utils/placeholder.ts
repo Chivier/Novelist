@@ -3,31 +3,64 @@ import { sanitizeFilenameStem } from './filename';
 
 export interface Template {
   raw: string;
-  /** Literal text before {N} */
+  /** Literal text before the number placeholder */
   prefix: string;
-  /** Literal text after {N} (may include the literal "{title}" placeholder) */
+  /** Literal text after the number placeholder (may include "{title}") */
   suffix: string;
   /** True if the suffix contains "{title}" */
   hasTitleSlot: boolean;
   /** Where the title slot lives relative to the number; null when no slot */
   titleSlotPosition: 'after' | null;
+  /**
+   * Explicit style override extracted from the placeholder syntax:
+   *   - `{N}`         → null (natural style — driven by template/folder context)
+   *   - `{2N}`/`{3N}` → `{ kind: 'arabic', width: 2|3 }` (zero-padded)
+   *   - `{cN}`        → `{ kind: 'chinese-lower' }`
+   *   - `{CN}`        → `{ kind: 'chinese-upper' }`
+   *   - `{rN}`        → `{ kind: 'roman-upper' }`
+   */
+  forceStyle: NumberStyle | null;
+}
+
+/**
+ * Recognized placeholder tokens for the number slot:
+ *   {N}       — natural style
+ *   {<d>N}    — Arabic padded to <d> digits (e.g. {3N} → 001, 002, ...)
+ *   {cN}      — Chinese lower (一, 二, 三, ...)
+ *   {CN}      — Chinese upper (壹, 贰, ...)
+ *   {rN}      — Roman (I, II, III, ...)
+ */
+const PLACEHOLDER_TOKEN_RE = /\{(\d+|c|C|r)?N\}/g;
+
+function tokenToStyle(token: string | undefined): NumberStyle | null {
+  if (!token) return null;
+  if (/^\d+$/.test(token)) {
+    return { kind: 'arabic', width: parseInt(token, 10) };
+  }
+  if (token === 'c') return { kind: 'chinese-lower' };
+  if (token === 'C') return { kind: 'chinese-upper' };
+  if (token === 'r') return { kind: 'roman-upper' };
+  return null;
 }
 
 /**
  * Parse a user-facing template string into a descriptor.
- * Templates must contain exactly one {N}; may optionally contain {title}.
- * Returns null on validation failure.
+ * Templates must contain exactly one number placeholder (see PLACEHOLDER_TOKEN_RE);
+ * may optionally contain {title}. Returns null on validation failure.
  */
 export function parseTemplate(raw: string): Template | null {
   if (raw.length === 0) return null;
-  const numMatches = raw.match(/\{N\}/g) ?? [];
+  const numMatches = Array.from(raw.matchAll(PLACEHOLDER_TOKEN_RE));
   if (numMatches.length !== 1) return null;
   const titleMatches = raw.match(/\{title\}/g) ?? [];
   if (titleMatches.length > 1) return null;
 
-  const idx = raw.indexOf('{N}');
+  const match = numMatches[0];
+  const idx = match.index!;
+  const tokenLen = match[0].length;
   const prefix = raw.slice(0, idx);
-  const suffix = raw.slice(idx + 3);
+  const suffix = raw.slice(idx + tokenLen);
+  const forceStyle = tokenToStyle(match[1]);
 
   return {
     raw,
@@ -35,6 +68,7 @@ export function parseTemplate(raw: string): Template | null {
     suffix,
     hasTitleSlot: titleMatches.length === 1,
     titleSlotPosition: titleMatches.length === 1 ? 'after' : null,
+    forceStyle,
   };
 }
 
@@ -213,10 +247,15 @@ export function inferNextName(folderFiles: string[], userDefaultTemplate: Templa
   candidates.sort((a, b) => b.numbers.length - a.numbers.length);
   const winner = candidates[0];
   const next = Math.max(...winner.numbers) + 1;
-  return bumpUntilFree(winner.template, next, winner.style, folderFiles);
+  // Explicit forceStyle on the user's template (e.g. `{3N}`) wins over the
+  // style sampled from existing folder files.
+  const style = winner.template.forceStyle ?? winner.style;
+  return bumpUntilFree(winner.template, next, style, folderFiles);
 }
 
 function naturalStyleFor(template: Template): NumberStyle {
+  // Explicit override from the placeholder token (e.g. {3N}, {cN}) wins.
+  if (template.forceStyle) return template.forceStyle;
   // 第{N}章 / 第{N}回 etc. defaults to chinese-lower; everything else arabic width 1
   if (template.prefix === '第' && /^[章回节卷部]/.test(template.suffix)) {
     return { kind: 'chinese-lower' };

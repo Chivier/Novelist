@@ -125,13 +125,24 @@
     }
   }
 
-  // New file in project settings
+  // New file in project settings.
+  // Template tokens:
+  //   {N}       — natural style (Arabic by default; chinese-lower for 第{N}章)
+  //   {2N},{3N} — Arabic zero-padded to that width (001, 002, … for {3N})
+  //   {cN}      — Chinese lower: 一, 二, 三 …
+  //   {CN}      — Chinese upper: 壹, 贰, 叁 …
+  //   {rN}      — Roman: I, II, III …
+  //   {title}   — optional slot, filled with "Untitled" until an H1 lands
   const NEW_FILE_PRESETS = [
     'Untitled {N}',
     '第{N}章',
+    '第{CN}章',
     'Chapter {N}',
+    'Chapter {rN}',
     '{N}-{title}',
-    '{N}.{title}',
+    '{2N}-{title}',
+    '{3N}-{title}',
+    '{cN}. {title}',
   ];
 
   let newFileTemplateInput = $state(newFileSettings.template);

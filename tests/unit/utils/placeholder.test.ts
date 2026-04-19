@@ -10,6 +10,7 @@ describe('parseTemplate', () => {
       suffix: '',
       hasTitleSlot: false,
       titleSlotPosition: null,
+      forceStyle: null,
     });
   });
   it('parses 第{N}章', () => {
@@ -38,6 +39,31 @@ describe('parseTemplate', () => {
   });
   it('rejects empty', () => {
     expect(parseTemplate('')).toBeNull();
+  });
+
+  // Extended placeholder tokens for forced style / padding ({3N}, {cN}, {CN}, {rN}).
+  it('parses {2N} as Arabic width 2', () => {
+    const t = parseTemplate('{2N}-{title}');
+    expect(t?.forceStyle).toEqual({ kind: 'arabic', width: 2 });
+  });
+  it('parses {3N} as Arabic width 3', () => {
+    const t = parseTemplate('Chapter {3N}');
+    expect(t?.forceStyle).toEqual({ kind: 'arabic', width: 3 });
+    expect(t?.prefix).toBe('Chapter ');
+    expect(t?.suffix).toBe('');
+  });
+  it('parses {cN} as Chinese-lower forced', () => {
+    const t = parseTemplate('{cN}. {title}');
+    expect(t?.forceStyle).toEqual({ kind: 'chinese-lower' });
+  });
+  it('parses {CN} as Chinese-upper forced', () => {
+    expect(parseTemplate('{CN} 篇')?.forceStyle).toEqual({ kind: 'chinese-upper' });
+  });
+  it('parses {rN} as Roman forced', () => {
+    expect(parseTemplate('Part {rN}')?.forceStyle).toEqual({ kind: 'roman-upper' });
+  });
+  it('bare {N} has forceStyle null (natural)', () => {
+    expect(parseTemplate('第{N}章')?.forceStyle).toBeNull();
   });
 });
 
@@ -138,6 +164,34 @@ describe('inferNextName', () => {
   it('user template lowers threshold to 1', () => {
     const t = parseTemplate('第{N}章')!;
     expect(inferNextName(['第一章.md', 'notes.md'], t)).toBe('第二章.md');
+  });
+
+  it('{3N} template renders zero-padded width 3 on empty folder', () => {
+    const t = parseTemplate('{3N}-{title}')!;
+    expect(inferNextName([], t)).toBe('001-Untitled.md');
+  });
+
+  it('{3N} template continues series from existing files', () => {
+    const t = parseTemplate('{3N}-{title}')!;
+    expect(inferNextName(['001-intro.md', '002-rising.md'], t)).toBe('003-Untitled.md');
+  });
+
+  it('{2N} template: 09 → 10 keeps width', () => {
+    const t = parseTemplate('{2N}-{title}')!;
+    expect(inferNextName(['08-foo.md', '09-bar.md'], t)).toBe('10-Untitled.md');
+  });
+
+  it('{cN} template renders Chinese-lower regardless of folder style', () => {
+    const t = parseTemplate('{cN}. {title}')!;
+    expect(inferNextName([], t)).toBe('一. Untitled.md');
+    // Even with an Arabic-style sibling the forceStyle wins for new names
+    expect(inferNextName(['1. foo.md'], t)).toBe('二. Untitled.md');
+  });
+
+  it('{rN} template renders Roman', () => {
+    const t = parseTemplate('Chapter {rN}')!;
+    expect(inferNextName([], t)).toBe('Chapter I.md');
+    expect(inferNextName(['Chapter I.md', 'Chapter II.md'], t)).toBe('Chapter III.md');
   });
 
   it('avoids collision by bumping number', () => {
