@@ -37,6 +37,7 @@ walkdir = "2"
 chardetng = "1"
 encoding_rs = "0.8"
 base64 = "0.22"
+once_cell = "1"
 reqwest = { version = "0.12", features = ["rustls-tls"], optional = true }
 specta-typescript = { version = "0.0.11", optional = true }
 

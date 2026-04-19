@@ -426,6 +426,13 @@ pub async fn rename_item(
         }
     }
 
+    // Suppress the imminent file-watcher events for the old and new paths so
+    // the frontend doesn't reload the file (which would lose editor state).
+    crate::services::file_watcher::register_rename_ignore(
+        old.to_string_lossy().to_string(),
+        new_path.to_string_lossy().to_string(),
+    )
+    .await;
     tokio::fs::rename(&old, &new_path).await?;
     Ok(new_path.to_string_lossy().to_string())
 }

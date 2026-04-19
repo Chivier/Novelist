@@ -2383,6 +2383,7 @@ dependencies = [
  "dirs",
  "encoding_rs",
  "notify",
+ "once_cell",
  "reqwest 0.12.28",
  "ropey",
  "rquickjs",

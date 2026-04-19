@@ -8,6 +8,34 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime};
 use tauri::{Emitter, Manager};
 
+// ── Rename-ignore set (self-trigger suppression for rename_item) ────
+//
+// `register_rename_ignore(old, new)` is called by `rename_item` right before
+// the underlying `tokio::fs::rename`. The next filesystem event for either
+// path is consumed without being forwarded to listeners. This prevents the
+// frontend from receiving `file-changed` / `file-created` for a rename we
+// initiated ourselves (which would otherwise cause the open editor to reload
+// and lose its state).
+
+static RENAME_IGNORED: once_cell::sync::Lazy<
+    tokio::sync::Mutex<std::collections::HashSet<String>>,
+> = once_cell::sync::Lazy::new(|| tokio::sync::Mutex::new(std::collections::HashSet::new()));
+
+/// Register both old and new paths as expected rename targets. The next FS
+/// event for either path is consumed without forwarding to listeners.
+pub async fn register_rename_ignore(old_path: String, new_path: String) {
+    let mut set = RENAME_IGNORED.lock().await;
+    set.insert(old_path);
+    set.insert(new_path);
+}
+
+/// Returns true and removes the entry if `path` was registered as a
+/// self-initiated rename target; otherwise returns false.
+pub async fn take_rename_ignored(path: &str) -> bool {
+    let mut set = RENAME_IGNORED.lock().await;
+    set.remove(path)
+}
+
 // ── Tracked file ────────────────────────────────────────────────────
 
 struct TrackedFile {
@@ -173,6 +201,21 @@ pub async fn start_file_watcher(
                 }
             }
 
+            // Suppress paths that were registered as self-initiated rename
+            // targets. We do this BEFORE acquiring the sync mutex because
+            // `take_rename_ignored` is async. Notify may emit a rename as
+            // Modify/Create events on either old or new path depending on the
+            // platform (FSEvents vs inotify vs ReadDirectoryChangesW), so we
+            // filter every path conservatively.
+            let mut filtered_paths: Vec<PathBuf> = Vec::with_capacity(paths.len());
+            for path in paths {
+                let key = path.to_string_lossy().to_string();
+                if take_rename_ignored(&key).await {
+                    continue;
+                }
+                filtered_paths.push(path);
+            }
+
             // Process collected paths
             let watcher_state = app.state::<FileWatcherState>();
             let mut guard = match watcher_state.inner.lock() {
@@ -180,7 +223,7 @@ pub async fn start_file_watcher(
                 Err(_) => continue,
             };
 
-            for path in paths {
+            for path in filtered_paths {
                 if !path.is_file() {
                     continue;
                 }
@@ -330,5 +373,24 @@ mod tests {
         assert!(guard.watcher.is_none());
         assert!(guard.tracked_files.is_empty());
         assert!(guard.watching_dir.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_register_rename_ignore_suppresses_both_paths() {
+        let old = "/tmp/test_register_rename_ignore_foo.md".to_string();
+        let new = "/tmp/test_register_rename_ignore_bar.md".to_string();
+        register_rename_ignore(old.clone(), new.clone()).await;
+        assert!(take_rename_ignored(&old).await);
+        assert!(take_rename_ignored(&new).await);
+        // Second take returns false (already consumed)
+        assert!(!take_rename_ignored(&old).await);
+    }
+
+    #[tokio::test]
+    async fn test_register_rename_ignore_unknown_path_returns_false() {
+        let unknown = "/tmp/test_register_rename_ignore_unknown_xyz.md".to_string();
+        // Ensure clean state if a previous test leaked (shared static).
+        let _ = take_rename_ignored(&unknown).await;
+        assert!(!take_rename_ignored(&unknown).await);
     }
 }
