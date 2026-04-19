@@ -33,6 +33,17 @@ const CN_LOWER_DIGIT_MAP = new Map<string, number>(
 );
 
 function parseChineseLower(s: string): number | null {
+  const v = parseChineseLowerLoose(s);
+  if (v === null) return null;
+  try {
+    if (formatChineseLower(v) !== s) return null;
+  } catch {
+    return null;
+  }
+  return v;
+}
+
+function parseChineseLowerLoose(s: string): number | null {
   if (s.length === 0) return null;
   // Single digit
   if (s.length === 1) {
@@ -72,7 +83,7 @@ function parseChineseLower(s: string): number | null {
       return hundreds * 100 + ones;
     }
     // Y or Y十 or Y十Z
-    const sub = parseChineseLower(rest);
+    const sub = parseChineseLowerLoose(rest);
     if (sub === null) return null;
     return hundreds * 100 + sub;
   }
@@ -108,6 +119,17 @@ const CN_UPPER_DIGIT_MAP = new Map<string, number>(
 );
 
 function parseChineseUpper(s: string): number | null {
+  const v = parseChineseUpperLoose(s);
+  if (v === null) return null;
+  try {
+    if (formatChineseUpper(v) !== s) return null;
+  } catch {
+    return null;
+  }
+  return v;
+}
+
+function parseChineseUpperLoose(s: string): number | null {
   if (s === '拾') return 10;
   if (s.length === 1) {
     const d = CN_UPPER_DIGIT_MAP.get(s);

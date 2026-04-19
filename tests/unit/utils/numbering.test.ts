@@ -86,6 +86,29 @@ describe('formatNumber — Chinese lower', () => {
   });
 });
 
+describe('parseNumber — Chinese lower rejects non-canonical', () => {
+  it('rejects 十零 (double 零 via 十)', () => {
+    expect(parseNumber('十零')).toBeNull();
+  });
+  it('rejects 一百零零 (double 零)', () => {
+    expect(parseNumber('一百零零')).toBeNull();
+  });
+  it('rejects bare 一百十 (canonical is 一百一十)', () => {
+    expect(parseNumber('一百十')).toBeNull();
+  });
+  it('rejects bare 一百十一 (canonical is 一百一十一)', () => {
+    expect(parseNumber('一百十一')).toBeNull();
+  });
+  it('rejects 一百一 (canonical is 一百零一)', () => {
+    expect(parseNumber('一百一')).toBeNull();
+  });
+  it('still accepts canonical forms', () => {
+    expect(parseNumber('一百一十')?.value).toBe(110);
+    expect(parseNumber('一百一十一')?.value).toBe(111);
+    expect(parseNumber('一百零一')?.value).toBe(101);
+  });
+});
+
 describe('parseNumber — Chinese upper', () => {
   it('parses 壹 to 拾', () => {
     expect(parseNumber('壹')?.value).toBe(1);
