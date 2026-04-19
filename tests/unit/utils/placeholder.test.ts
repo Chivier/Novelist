@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseTemplate, renderTemplate, isPlaceholder } from '$lib/utils/placeholder';
+import { parseTemplate, renderTemplate, isPlaceholder, inferNextName } from '$lib/utils/placeholder';
 
 describe('parseTemplate', () => {
   it('parses Untitled {N}', () => {
@@ -97,5 +97,56 @@ describe('isPlaceholder', () => {
     expect(isPlaceholder('Hello World.md')).toBe(false);
     expect(isPlaceholder('第三章 开篇.md')).toBe(false);
     expect(isPlaceholder('03-开篇.md')).toBe(false);
+  });
+});
+
+describe('inferNextName', () => {
+  const defaultTemplate = parseTemplate('Untitled {N}')!;
+
+  it('empty folder uses default template', () => {
+    expect(inferNextName([], defaultTemplate)).toBe('Untitled 1.md');
+  });
+
+  it('user template applied to empty folder', () => {
+    const t = parseTemplate('第{N}章')!;
+    expect(inferNextName([], t)).toBe('第一章.md');
+  });
+
+  it('infers next chapter from chinese-lower series (≥2 matches)', () => {
+    expect(inferNextName(['第一章.md', '第二章.md'], defaultTemplate)).toBe('第三章.md');
+  });
+
+  it('infers next chapter from arabic series', () => {
+    expect(inferNextName(['Chapter 1.md', 'Chapter 2.md', 'Chapter 5.md'], defaultTemplate))
+      .toBe('Chapter 6.md');
+  });
+
+  it('preserves zero-padding width', () => {
+    expect(inferNextName(['01-intro.md', '02-rising.md'], defaultTemplate))
+      .toBe('03-Untitled.md');
+  });
+
+  it('skips serial members (序章, 楔子)', () => {
+    expect(inferNextName(['序章.md', '第一章.md', '第二章.md'], defaultTemplate))
+      .toBe('第三章.md');
+  });
+
+  it('falls back to default template when only 1 match (auto threshold = 2)', () => {
+    expect(inferNextName(['第一章.md', 'notes.md'], defaultTemplate)).toBe('Untitled 1.md');
+  });
+
+  it('user template lowers threshold to 1', () => {
+    const t = parseTemplate('第{N}章')!;
+    expect(inferNextName(['第一章.md', 'notes.md'], t)).toBe('第二章.md');
+  });
+
+  it('avoids collision by bumping number', () => {
+    expect(inferNextName(['第一章.md', '第二章.md', '第三章.md'], defaultTemplate))
+      .toBe('第四章.md');
+  });
+
+  it('Untitled fallback bumps number on collision', () => {
+    expect(inferNextName(['Untitled 1.md', 'Untitled 2.md'], defaultTemplate))
+      .toBe('Untitled 3.md');
   });
 });

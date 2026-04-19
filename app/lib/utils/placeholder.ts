@@ -1,4 +1,4 @@
-import { formatNumber, type NumberStyle } from './numbering';
+import { formatNumber, parseNumber, type NumberStyle } from './numbering';
 import { sanitizeFilenameStem } from './filename';
 
 export interface Template {
@@ -104,4 +104,136 @@ const PLACEHOLDER_PATTERNS: RegExp[] = [
 /** True if the filename (basename, with .md) is in the auto-generated placeholder set. */
 export function isPlaceholder(filename: string): boolean {
   return PLACEHOLDER_PATTERNS.some(re => re.test(filename));
+}
+
+/**
+ * Names that exist in chapter-like folders but are NOT part of the numeric
+ * sequence (序章, prologue, etc.). These are recognized for "skip" purposes
+ * but never advance the inferred number.
+ */
+const SKIP_TITLES = new Set([
+  '序章', '序', '楔子', '引子', '前言',
+  '终章', '尾声', '番外', '后记', '附录',
+  'Prologue', 'Epilogue', 'Foreword', 'Afterword', 'Appendix',
+]);
+
+interface FamilyMatch {
+  template: Template;
+  /** Numbers found in the folder for this family. */
+  numbers: number[];
+  /** Style detected from the dominant existing match (or template default if no match). */
+  style: NumberStyle;
+}
+
+/** Built-in template families tried in inference order (most specific first). */
+const BUILTIN_TEMPLATES: string[] = [
+  '第{N}章', '第{N}回', '第{N}节', '第{N}卷', '第{N}部',
+  'Chapter {N}', 'Ch{N}', 'Ch.{N}', 'Part {N}', 'Volume {N}', 'Vol{N}',
+  '{N}-{title}', '{N}_{title}', '{N}.{title}', '{N} {title}',
+];
+
+/** Build a regex that matches files in this family (capturing the number portion). */
+function familyMatcher(template: Template): RegExp {
+  const escRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapePrefix = escRegex(template.prefix);
+  // In the suffix, {title} means "any filename-safe content" (non-empty)
+  const escapeSuffix = template.suffix
+    .split('{title}')
+    .map(escRegex)
+    .join('(?:[^/]*?)');
+  // Number portion: digits OR Chinese numerals
+  return new RegExp(`^${escapePrefix}([\\d\\u4e00-\\u9fff]+)${escapeSuffix}\\.md$`);
+}
+
+function detectFamily(filenames: string[], template: Template): FamilyMatch | null {
+  const re = familyMatcher(template);
+  interface Match { value: number; style: NumberStyle; }
+  const matches: Match[] = [];
+  for (const f of filenames) {
+    const m = re.exec(f);
+    if (!m) continue;
+    const stem = f.replace(/\.md$/, '');
+    if (SKIP_TITLES.has(stem)) continue;
+    const parsed = parseNumber(m[1]);
+    if (parsed) matches.push({ value: parsed.value, style: parsed.style });
+  }
+  if (matches.length === 0) return null;
+  // Dominant style = most common; tie-break by first occurrence
+  const styleKey = (s: NumberStyle) => s.kind === 'arabic' ? `arabic:${s.width}` : s.kind;
+  const counts = new Map<string, { count: number; sample: NumberStyle }>();
+  for (const p of matches) {
+    const k = styleKey(p.style);
+    const cur = counts.get(k);
+    if (cur) cur.count++; else counts.set(k, { count: 1, sample: p.style });
+  }
+  let bestKey = '';
+  let bestCount = -1;
+  for (const [k, v] of counts) {
+    if (v.count > bestCount) { bestCount = v.count; bestKey = k; }
+  }
+  return {
+    template,
+    numbers: matches.map(m => m.value),
+    style: counts.get(bestKey)!.sample,
+  };
+}
+
+/**
+ * Compute the filename to use when the user creates a new file in `folderFiles`.
+ *
+ * - Built-in families require ≥2 matches in the folder to kick in (avoids false positives).
+ * - The user's default template gets threshold 1 (a single matching file activates it).
+ * - Empty folder or nothing matches → render default template at N=1 with its natural style.
+ * - Collision resolution: bump the number until free.
+ */
+export function inferNextName(folderFiles: string[], userDefaultTemplate: Template): string {
+  const candidates: FamilyMatch[] = [];
+
+  // Built-in families: threshold 2
+  for (const tmplStr of BUILTIN_TEMPLATES) {
+    const tmpl = parseTemplate(tmplStr);
+    if (!tmpl) continue;
+    const m = detectFamily(folderFiles, tmpl);
+    if (m && m.numbers.length >= 2) candidates.push(m);
+  }
+
+  // User default: threshold 1
+  const userMatch = detectFamily(folderFiles, userDefaultTemplate);
+  if (userMatch && userMatch.numbers.length >= 1) candidates.push(userMatch);
+
+  if (candidates.length === 0) {
+    // No recognizable pattern → render user default at N=1
+    const style = naturalStyleFor(userDefaultTemplate);
+    return bumpUntilFree(userDefaultTemplate, 1, style, folderFiles);
+  }
+
+  // Highest match count wins
+  candidates.sort((a, b) => b.numbers.length - a.numbers.length);
+  const winner = candidates[0];
+  const next = Math.max(...winner.numbers) + 1;
+  return bumpUntilFree(winner.template, next, winner.style, folderFiles);
+}
+
+function naturalStyleFor(template: Template): NumberStyle {
+  // 第{N}章 / 第{N}回 etc. defaults to chinese-lower; everything else arabic width 1
+  if (template.prefix === '第' && /^[章回节卷部]/.test(template.suffix)) {
+    return { kind: 'chinese-lower' };
+  }
+  return { kind: 'arabic', width: 1 };
+}
+
+function bumpUntilFree(
+  template: Template,
+  startN: number,
+  style: NumberStyle,
+  folderFiles: string[]
+): string {
+  const taken = new Set(folderFiles);
+  let n = startN;
+  for (let i = 0; i < 10000; i++) {
+    const candidate = renderTemplate(template, n, style, null);
+    if (!taken.has(candidate)) return candidate;
+    n++;
+  }
+  return `Untitled ${Date.now()}.md`;
 }
