@@ -13,6 +13,9 @@ export const en: TranslationMap = {
   'welcome.openDirectory': 'Open Directory...',
   'welcome.newFile': 'New File',
   'welcome.newProject': 'New Project',
+  'welcome.pinProject': 'Pin to top',
+  'welcome.unpinProject': 'Unpin',
+  'welcome.dragToReorder': 'Drag to reorder',
 
   // --- Sidebar ---
   'sidebar.openFolder': 'Open Folder',
@@ -117,8 +120,14 @@ export const en: TranslationMap = {
   'stats.day.6': 'Sat',
 
   // --- Mindmap ---
-  'mindmap.title': 'MAP',
+  'mindmap.title': 'Mindmap',
   'mindmap.fitToView': 'Fit to view',
+  'mindmap.reset': 'Reset view',
+  'mindmap.expandLevel': 'Expand to level {level}',
+  'mindmap.expandAll': 'Expand all',
+  'mindmap.miniMap': 'Mini map',
+  'mindmap.close': 'Close (Esc)',
+  'mindmap.empty': 'The current document has no headings',
 
   // --- Export ---
   'export.title': 'Export Project',
@@ -329,6 +338,7 @@ export const en: TranslationMap = {
   'settings.plugins.builtin': 'Built-in',
   'settings.plugins.community': 'Community',
   'settings.plugins.builtinBadge': 'Built-in',
+  'settings.plugins.reload': 'Reload plugin',
 
   'settings.plugins.add': 'Add plugin',
   'settings.plugins.openFolder': 'Open plugins folder',

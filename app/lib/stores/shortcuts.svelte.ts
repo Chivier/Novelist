@@ -25,6 +25,7 @@ const commandI18nKeys: Record<string, string> = {
   'editor-heading': 'command.toggleHeading',
   'editor-code-inline': 'command.inlineCode',
   'editor-strikethrough': 'command.strikethrough',
+  'toggle-mindmap': 'command.toggleMindmap',
 };
 
 const defaultShortcuts: Record<string, string> = {
@@ -43,6 +44,7 @@ const defaultShortcuts: Record<string, string> = {
   'rename-file': 'Cmd+Shift+R',
   'open-settings': 'Cmd+,',
   'go-to-line': 'Cmd+G',
+  'toggle-mindmap': 'Cmd+Shift+M',
 
   // Editor formatting shortcuts
   'editor-bold': 'Cmd+B',

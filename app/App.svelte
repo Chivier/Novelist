@@ -25,6 +25,7 @@
   import { extensionStore } from '$lib/stores/extensions.svelte';
   import PluginPanel from '$lib/components/PluginPanel.svelte';
   import PluginFileEditor from '$lib/components/PluginFileEditor.svelte';
+  import MindmapOverlay from '$lib/components/MindmapOverlay.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
   import { projectStore } from '$lib/stores/project.svelte';
   import { tabsStore, getEditorView } from '$lib/stores/tabs.svelte';
@@ -66,6 +67,7 @@
 
   let paletteOpen = $state(false);
   let exportDialogOpen = $state(false);
+  let mindmapOverlayOpen = $state(false);
   let projectSearchOpen = $state(false);
   let newProjectDialogOpen = $state(false);
 
@@ -206,7 +208,7 @@
 
     // Keep Cmd+number mapping stable: only append truly new projects
     if (!recentProjects.some(p => p.path === dirPath)) {
-      recentProjects = [...recentProjects, { path: dirPath, name, last_opened: String(Math.floor(Date.now() / 1000)) }];
+      recentProjects = [...recentProjects, { path: dirPath, name, last_opened: String(Math.floor(Date.now() / 1000)), pinned: false, sort_order: null }];
     }
 
     // Start watching
@@ -386,6 +388,7 @@
     'rename-file': () => { activeEditorRef?.renameCurrentFile(); },
     'open-settings': () => uiStore.toggleSettings(),
     'go-to-line': () => handleGoToLine(),
+    'toggle-mindmap': () => { mindmapOverlayOpen = !mindmapOverlayOpen; },
 
     // Editor formatting
     'editor-bold': () => wrapSelection('**', '**'),
@@ -552,6 +555,7 @@
     commandRegistry.register({ id: 'rename-file', label: t('command.renameFile'), shortcut: shortcutsStore.get('rename-file'), handler: () => { activeEditorRef?.renameCurrentFile(); } });
     commandRegistry.register({ id: 'open-settings', label: t('command.openSettings'), shortcut: shortcutsStore.get('open-settings'), handler: () => uiStore.toggleSettings() });
     commandRegistry.register({ id: 'go-to-line', label: t('command.goToLine'), shortcut: shortcutsStore.get('go-to-line'), handler: () => handleGoToLine() });
+    commandRegistry.register({ id: 'toggle-mindmap', label: t('command.toggleMindmap'), shortcut: shortcutsStore.get('toggle-mindmap'), handler: () => { mindmapOverlayOpen = !mindmapOverlayOpen; } });
     // Editor formatting commands
     commandRegistry.register({ id: 'editor-bold', label: t('command.bold'), shortcut: shortcutsStore.get('editor-bold'), handler: () => wrapSelection('**', '**') });
     commandRegistry.register({ id: 'editor-italic', label: t('command.italic'), shortcut: shortcutsStore.get('editor-italic'), handler: () => wrapSelection('*', '*') });
@@ -834,7 +838,19 @@
   });
 </script>
 
-<svelte:window onkeydown={handleKeydown} onmousedown={handleDragMouseDown} />
+<svelte:window
+  onkeydown={handleKeydown}
+  onmousedown={handleDragMouseDown}
+  oncontextmenu={(e: MouseEvent) => {
+    // Suppress the native WKWebView "Reload / Inspect Element" menu. Editable
+    // text surfaces keep their native copy/paste menu so OS text-editing
+    // affordances (suggestions, Look Up, etc.) stay usable.
+    const t = e.target as HTMLElement | null;
+    if (!t) { e.preventDefault(); return; }
+    const editable = t.closest('input, textarea, [contenteditable="true"], .cm-content') !== null;
+    if (!editable) e.preventDefault();
+  }}
+/>
 
 {#if !projectStore.isOpen}
   <Welcome onOpenDirectory={handleOpenDirectory} onOpenRecent={handleOpenRecent} onNewFile={handleNewScratchFile} onNewProject={() => { newProjectDialogOpen = true; }} />
@@ -1026,7 +1042,7 @@
         >
           {t('stats.title')}
         </button>
-        {#each extensionStore.panels as panel}
+        {#each extensionStore.panels.filter(p => p.pluginId !== 'mindmap') as panel}
           <div style="height: 1px; background: var(--novelist-border-subtle, var(--novelist-border));"></div>
           <button
             class="flex items-center justify-center cursor-pointer"
@@ -1065,6 +1081,13 @@
 
 {#if projectSearchOpen}
   <ProjectSearch onClose={() => { projectSearchOpen = false; }} />
+{/if}
+
+{#if mindmapOverlayOpen}
+  {@const activeTab = tabsStore.activeTab}
+  {@const view = activeTab ? getEditorView(activeTab.id) : undefined}
+  {@const mdContent = view?.state.doc.toString() ?? activeTab?.content ?? ''}
+  <MindmapOverlay content={mdContent} onClose={() => { mindmapOverlayOpen = false; }} />
 {/if}
 
 {#if newProjectDialogOpen}

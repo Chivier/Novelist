@@ -13,6 +13,9 @@ export const zhCN: TranslationMap = {
   'welcome.openDirectory': '打开目录...',
   'welcome.newFile': '新建文件',
   'welcome.newProject': '新建项目',
+  'welcome.pinProject': '置顶此项目',
+  'welcome.unpinProject': '取消置顶',
+  'welcome.dragToReorder': '拖动以排序',
 
   // --- Sidebar ---
   'sidebar.openFolder': '打开文件夹',
@@ -117,8 +120,14 @@ export const zhCN: TranslationMap = {
   'stats.day.6': '六',
 
   // --- Mindmap ---
-  'mindmap.title': '导图',
+  'mindmap.title': '思维导图',
   'mindmap.fitToView': '适应视图',
+  'mindmap.reset': '重置视图',
+  'mindmap.expandLevel': '展开到 {level} 级',
+  'mindmap.expandAll': '全部展开',
+  'mindmap.miniMap': '缩略图',
+  'mindmap.close': '关闭（Esc）',
+  'mindmap.empty': '当前文档没有标题内容',
 
   // --- Export ---
   'export.title': '导出项目',
@@ -329,6 +338,7 @@ export const zhCN: TranslationMap = {
   'settings.plugins.builtin': '内置插件',
   'settings.plugins.community': '社区插件',
   'settings.plugins.builtinBadge': '内置',
+  'settings.plugins.reload': '重新加载插件',
 
   'settings.plugins.add': '添加插件',
   'settings.plugins.openFolder': '打开插件目录',
