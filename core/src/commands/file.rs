@@ -300,13 +300,6 @@ pub async fn list_directory(path: String) -> Result<Vec<FileEntry>, AppError> {
         });
     }
 
-    // Sort: directories first, then alphabetical by name
-    entries.sort_by(|a, b| {
-        b.is_dir
-            .cmp(&a.is_dir)
-            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-    });
-
     Ok(entries)
 }
 
@@ -749,15 +742,37 @@ mod tests {
         let entries = list_directory(dir.path().to_string_lossy().to_string())
             .await
             .unwrap();
+        let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
         assert_eq!(entries.len(), 3);
-        assert_eq!(entries[0].name, "chapters");
-        assert!(entries[0].is_dir);
-        assert_eq!(entries[1].name, "a.md");
-        assert_eq!(entries[2].name, "b.md");
+        assert!(names.contains(&"chapters"));
+        assert!(names.contains(&"a.md"));
+        assert!(names.contains(&"b.md"));
+        assert!(!names.contains(&".hidden"));
+        assert!(
+            entries
+                .iter()
+                .find(|e| e.name == "chapters")
+                .map(|e| e.is_dir)
+                .unwrap_or(false)
+        );
         assert!(
             entries.iter().any(|e| e.mtime.is_some()),
             "at least one entry should have mtime"
         );
+    }
+
+    #[tokio::test]
+    async fn test_list_directory_returns_unsorted() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("z.md"), "").unwrap();
+        fs::write(dir.path().join("a.md"), "").unwrap();
+        let result = list_directory(dir.path().to_string_lossy().to_string())
+            .await
+            .unwrap();
+        let names: Vec<&str> = result.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names.len(), 2);
+        assert!(names.contains(&"a.md"));
+        assert!(names.contains(&"z.md"));
     }
 
     #[tokio::test]
