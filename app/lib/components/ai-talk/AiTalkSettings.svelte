@@ -1,13 +1,14 @@
 <script lang="ts">
   import { aiTalkSettings } from './settings.svelte';
   import { AI_TALK_PRESETS, applyAiTalkPreset } from './presets';
+  import PromptPresetManager from './PromptPresetManager.svelte';
 
   let { compact = false }: { compact?: boolean } = $props();
 </script>
 
 <div class="ai-talk-settings" class:compact>
   <div class="presets full">
-    <span class="preset-label">Quick preset:</span>
+    <span class="preset-label">Provider preset:</span>
     {#each AI_TALK_PRESETS as p}
       <button
         type="button"
@@ -85,7 +86,16 @@
   </p>
 </div>
 
+<div class="prompt-presets-wrap">
+  <PromptPresetManager />
+</div>
+
 <style>
+  .prompt-presets-wrap {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--novelist-border);
+  }
   .ai-talk-settings {
     display: grid;
     grid-template-columns: 1fr 1fr;
