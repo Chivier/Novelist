@@ -24,6 +24,8 @@
   import ErrorBoundary from '$lib/components/ErrorBoundary.svelte';
   import { extensionStore } from '$lib/stores/extensions.svelte';
   import PluginPanel from '$lib/components/PluginPanel.svelte';
+  import AiTalkPanel from '$lib/components/AiTalkPanel.svelte';
+  import AiAgentPanel from '$lib/components/AiAgentPanel.svelte';
   import PluginFileEditor from '$lib/components/PluginFileEditor.svelte';
   import CanvasFileEditor from '$lib/components/CanvasFileEditor.svelte';
   import KanbanFileEditor from '$lib/components/KanbanFileEditor.svelte';
@@ -127,7 +129,7 @@
     uiStore.snapshotVisible ||
     uiStore.statsVisible ||
     uiStore.templateVisible ||
-    !!(extensionStore.activePanelId && tabsStore.activeTab)
+    !!extensionStore.activePanelId
   );
 
   // Recent projects cache for Cmd+Number switching (Notion-style)
@@ -596,9 +598,17 @@
             onDialogHandled={() => { templateDialogRequest = null; }}
           />
         </div>
-      {:else if extensionStore.activePanelId && tabsStore.activeTab}
+      {:else if extensionStore.activePanelId}
         {@const activePanel = extensionStore.panels.find(p => p.pluginId === extensionStore.activePanelId)}
-        {#if activePanel}
+        {#if activePanel?.pluginId === 'ai-talk'}
+          <div style="width: {uiStore.rightPanelWidth}px;">
+            <ErrorBoundary><AiTalkPanel /></ErrorBoundary>
+          </div>
+        {:else if activePanel?.pluginId === 'ai-agent'}
+          <div style="width: {uiStore.rightPanelWidth}px;">
+            <ErrorBoundary><AiAgentPanel /></ErrorBoundary>
+          </div>
+        {:else if activePanel && tabsStore.activeTab}
           <div style="width: {uiStore.rightPanelWidth}px;">
             <PluginPanel extension={activePanel} onNavigate={(from) => activeEditorRef?.scrollToPosition(from)} />
           </div>
