@@ -364,6 +364,7 @@
     aiTalkSessions.ensureOne();
     refreshLiveSnapshot();
     selectionTimer = setInterval(refreshLiveSnapshot, 300);
+    window.addEventListener('novelist:ai-talk:save-chat', saveChatToProject);
   });
 
   // ---- Session + preset helpers wired to SessionTabs / preset picker ----
@@ -402,6 +403,7 @@
   onDestroy(() => {
     cancelPendingStreams([chatStreamId, rewriteStreamId], cancelAiStream);
     if (selectionTimer) clearInterval(selectionTimer);
+    window.removeEventListener('novelist:ai-talk:save-chat', saveChatToProject);
   });
 </script>
 
