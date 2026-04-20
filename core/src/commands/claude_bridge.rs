@@ -117,9 +117,20 @@ fn candidate_paths() -> Vec<PathBuf> {
     if let Some(h) = home.as_ref() {
         out.push(h.join(".claude").join("local").join("claude"));
         out.push(h.join(".local").join("bin").join("claude"));
-        for mgr in ["volta", "asdf", ".nvm", ".bun"] {
-            out.push(h.join(mgr).join("bin").join("claude"));
+        // Volta / fnm / asdf / bun — stable bin dirs
+        out.push(h.join(".volta").join("bin").join("claude"));
+        out.push(h.join(".fnm").join("current").join("bin").join("claude"));
+        out.push(h.join(".asdf").join("shims").join("claude"));
+        out.push(h.join(".bun").join("bin").join("claude"));
+        // nvm: iterate all installed Node versions under ~/.nvm/versions/node/
+        let nvm_dir = h.join(".nvm").join("versions").join("node");
+        if let Ok(entries) = std::fs::read_dir(&nvm_dir) {
+            for entry in entries.flatten() {
+                out.push(entry.path().join("bin").join("claude"));
+            }
         }
+        // Global npm prefixes (when set via NPM_CONFIG_PREFIX or default npm root -g)
+        out.push(h.join(".npm-global").join("bin").join("claude"));
     }
 
     // Homebrew (macOS Intel + Apple Silicon, Linux)
@@ -521,5 +532,15 @@ mod tests {
         let strs: Vec<String> = c.iter().map(|p| p.to_string_lossy().to_string()).collect();
         assert!(strs.iter().any(|s| s.contains("/tmp/one")));
         assert!(strs.iter().any(|s| s.contains("/tmp/two")));
+    }
+
+    #[test]
+    fn candidate_paths_includes_node_manager_dirs() {
+        let c = candidate_paths();
+        let strs: Vec<String> = c.iter().map(|p| p.to_string_lossy().to_string()).collect();
+        // Spot-check that we scan common Node version manager locations.
+        assert!(strs.iter().any(|s| s.contains(".volta/bin/claude")));
+        assert!(strs.iter().any(|s| s.contains(".bun/bin/claude")));
+        assert!(strs.iter().any(|s| s.contains(".asdf/shims/claude")));
     }
 }
