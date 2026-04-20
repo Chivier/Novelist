@@ -39,7 +39,7 @@ function saveSettings(s: EditorSettings) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
 }
 
-export type RightPanel = 'draft' | 'snapshot' | 'stats' | null;
+export type RightPanel = 'draft' | 'snapshot' | 'stats' | 'template' | null;
 
 class UiStore {
   sidebarVisible = $state(true);
@@ -62,6 +62,7 @@ class UiStore {
   get draftVisible(): boolean { return this.activeRightPanel === 'draft'; }
   get snapshotVisible(): boolean { return this.activeRightPanel === 'snapshot'; }
   get statsVisible(): boolean { return this.activeRightPanel === 'stats'; }
+  get templateVisible(): boolean { return this.activeRightPanel === 'template'; }
   toggleSidebar() { this.sidebarVisible = !this.sidebarVisible; }
   toggleOutline() { this.outlineVisible = !this.outlineVisible; }
 
@@ -73,6 +74,7 @@ class UiStore {
   toggleDraft() { this.toggleRightPanel('draft'); }
   toggleSnapshot() { this.toggleRightPanel('snapshot'); }
   toggleStats() { this.toggleRightPanel('stats'); }
+  toggleTemplate() { this.toggleRightPanel('template'); }
   toggleZen() { this.zenMode = !this.zenMode; }
   toggleSettings() { this.settingsOpen = !this.settingsOpen; }
 
