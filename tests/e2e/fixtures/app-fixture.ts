@@ -54,6 +54,8 @@ export const test = base.extend<{
     getCreatedFiles: () => Promise<string[]>;
     getDeletedFiles: () => Promise<string[]>;
     getFiles: () => Promise<MockFileEntry[]>;
+    getRecentProjects: () => Promise<Array<{ path: string; name: string; pinned?: boolean }>>;
+    seedRecentProjects: (list: Array<{ path: string; name: string; last_opened: string; pinned?: boolean; sort_order?: number | null }>) => Promise<void>;
     emitEvent: (event: string, payload: unknown) => Promise<void>;
     openProject: (dirPath: string, files: MockFileEntry[]) => Promise<void>;
     renameFile: (oldPath: string, newPath: string) => Promise<void>;
@@ -96,6 +98,15 @@ export const test = base.extend<{
       },
       async getFiles() {
         return app.evaluate(() => (window as any).__TAURI_MOCK_STATE__.files);
+      },
+      async getRecentProjects() {
+        return app.evaluate(() => (window as any).__TAURI_MOCK_STATE__.recentProjects);
+      },
+      async seedRecentProjects(list: Array<{ path: string; name: string; last_opened: string; pinned?: boolean; sort_order?: number | null }>) {
+        await app.evaluate(
+          (l) => (window as any).__TAURI_MOCK_STATE__.seedRecentProjects(l),
+          list,
+        );
       },
       async emitEvent(event: string, payload: unknown) {
         await app.evaluate(

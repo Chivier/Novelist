@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures/app-fixture';
 
-test.describe('Kanban file-handler plugin', () => {
+test.describe('Kanban file-handler', () => {
   test.beforeEach(async ({ app }) => {
     const recentItem = app.getByTestId('recent-project-0');
     if (await recentItem.isVisible().catch(() => false)) {
@@ -14,18 +14,19 @@ test.describe('Kanban file-handler plugin', () => {
     await expect(file).toBeVisible();
   });
 
-  test('opening a .kanban file routes to the plugin file editor, not the markdown editor', async ({ app }) => {
+  test('opening a .kanban file routes to the native kanban editor, not the markdown editor', async ({ app }) => {
     await app.getByTestId('sidebar-file-board.kanban').click();
-    // Plugin-served iframe should appear; CodeMirror editor should not.
-    await app.locator('.plugin-file-editor iframe').waitFor({ state: 'attached', timeout: 5000 });
-    await expect(app.locator('.plugin-file-editor iframe')).toHaveAttribute('title', 'Kanban');
+    // Native KanbanFileEditor should appear; CodeMirror should not.
+    await app.getByTestId('kanban-file-editor').waitFor({ state: 'attached', timeout: 5000 });
     await expect(app.locator('.cm-editor')).toHaveCount(0);
   });
 
-  test('iframe source is resolved through the plugin entry url', async ({ app }) => {
+  test('kanban editor renders its board shell once the impl chunk loads', async ({ app }) => {
     await app.getByTestId('sidebar-file-board.kanban').click();
-    const src = await app.locator('.plugin-file-editor iframe').getAttribute('src');
-    // Mock convertFileSrc keeps the raw path; just confirm entry html is targeted.
-    expect(src).toMatch(/index\.html$/);
+    const wrapper = app.getByTestId('kanban-file-editor');
+    await wrapper.waitFor({ state: 'visible', timeout: 5000 });
+    // The impl is dynamic-imported; wait for the board to mount (not the
+    // loading spinner). `.board` is the KanbanImpl root element.
+    await expect(wrapper.locator('.board')).toBeVisible({ timeout: 5000 });
   });
 });

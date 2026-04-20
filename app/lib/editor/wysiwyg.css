@@ -39,7 +39,12 @@
 }
 
 /* Inline styles */
-.cm-novelist-bold { font-weight: 700; }
+/* Bold renders in an orange accent to stand out against body text;
+   themes can override by setting --novelist-bold-color. */
+.cm-novelist-bold {
+  font-weight: 700;
+  color: var(--novelist-bold-color, #e67e22);
+}
 .cm-novelist-italic { font-style: italic; }
 .cm-novelist-strikethrough { text-decoration: line-through; color: var(--novelist-text-secondary); }
 /* Inline code — background only, no font change.
@@ -392,10 +397,18 @@
   height: 32px;
   border-radius: 6px;
   background: var(--novelist-bg-secondary, #f5f5f5);
-  font-size: 14px;
-  font-weight: 600;
   color: var(--novelist-text-secondary, #666);
   flex-shrink: 0;
+}
+
+.cm-slash-menu-icon svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.cm-slash-menu-item-selected .cm-slash-menu-icon {
+  color: var(--novelist-accent, #4a9eff);
 }
 
 .cm-slash-menu-text {

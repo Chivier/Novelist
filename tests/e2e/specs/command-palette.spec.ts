@@ -39,6 +39,24 @@ test.describe('Command Palette', () => {
     await expect(palette).not.toBeVisible();
   });
 
+  test('"Switch Project" command opens the sidebar switcher popup', async ({ app }) => {
+    // Popup should be closed initially.
+    await expect(app.getByTestId('project-switcher')).toHaveCount(0);
+
+    await app.keyboard.press('Meta+Shift+p');
+    const input = app.getByTestId('palette-input');
+    await input.fill('switch project');
+
+    const firstResult = app.locator('[data-testid="palette-result-0"]');
+    await expect(firstResult).toBeVisible();
+    await firstResult.click();
+
+    // Popup is now visible with the recent projects.
+    const switcher = app.getByTestId('project-switcher');
+    await expect(switcher).toBeVisible();
+    await expect(switcher).toContainText('Test Novel');
+  });
+
   test('selecting a command executes it', async ({ app }) => {
     // Open a file so we have an editor
     await app.getByTestId('sidebar-file-Chapter 1.md').click();

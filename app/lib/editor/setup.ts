@@ -10,7 +10,7 @@ import { GFM } from '@lezer/markdown';
 import { Highlight, Footnote, FrontMatter, InlineMath, DisplayMath } from './markdown-extensions';
 import { syntaxHighlighting, defaultHighlightStyle, HighlightStyle, bracketMatching, indentOnInput, indentUnit } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
-import { searchKeymap, highlightSelectionMatches, openSearchPanel } from '@codemirror/search';
+import { searchKeymap, highlightSelectionMatches, openSearchPanel, closeSearchPanel, searchPanelOpen } from '@codemirror/search';
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { wysiwygPlugin, linkClickPlugin, imagePastePlugin } from './wysiwyg';
 import { unifiedLineSelectionPlugin } from './selection-line';
@@ -26,6 +26,17 @@ import './wysiwyg.css';
 export const highlightMatchCompartment = new Compartment();
 
 /**
+ * Cmd+F toggles the search panel: opens when closed, closes when open.
+ * The panel's own Escape binding still works as a secondary close path.
+ */
+const toggleSearchPanel = (view: EditorView): boolean =>
+  searchPanelOpen(view.state) ? closeSearchPanel(view) : openSearchPanel(view);
+
+// searchKeymap ships its own `Mod-f: openSearchPanel` binding which wins before
+// our override in keymap.of(). Strip it so the toggle binding below runs instead.
+const searchKeymapNoModF = searchKeymap.filter(b => b.key !== 'Mod-f');
+
+/**
  * Heading font sizes MUST live in syntaxHighlighting, NOT in WYSIWYG
  * mark decorations.  The WYSIWYG plugin only decorates visible ranges;
  * when a heading scrolls out of the viewport its mark decoration is
@@ -39,8 +50,8 @@ export const highlightMatchCompartment = new Compartment();
  * NOTE: Even with syntaxHighlighting, the heading font-size differences
  * (1.75em for H1, etc.) cause CM6's height estimation to drift for
  * off-screen lines in documents with >5000 lines. For such "tall docs",
- * use flatNovelistHighlightStyle instead, which keeps headings bold and
- * colored but at uniform font-size, eliminating height-map drift entirely.
+ * use flatNovelistHighlightStyle instead, which keeps heading color
+ * but uses uniform font-size, eliminating height-map drift entirely.
  */
 /**
  * Heading line-height is calculated so that each heading line occupies
@@ -55,30 +66,32 @@ export const highlightMatchCompartment = new Compartment();
  *   H5/H6: ≤1.0em → keep 1.8
  */
 const novelistHighlightStyle = HighlightStyle.define([
-  { tag: tags.heading, fontWeight: 'bold' },
-  { tag: tags.heading1, fontSize: '1.75em', fontWeight: '700', lineHeight: '1.15', color: 'var(--novelist-heading-color)', letterSpacing: '-0.02em' },
-  { tag: tags.heading2, fontSize: '1.4em',  fontWeight: '600', lineHeight: '1.3',  color: 'var(--novelist-heading-color)', letterSpacing: '-0.01em' },
-  { tag: tags.heading3, fontSize: '1.2em',  fontWeight: '600', lineHeight: '1.5',  color: 'var(--novelist-heading-color)' },
-  { tag: tags.heading4, fontSize: '1.05em', fontWeight: '600', lineHeight: '1.7',  color: 'var(--novelist-heading-color)' },
-  { tag: tags.heading5, fontSize: '1.0em',  fontWeight: '600', lineHeight: '1.8',  color: 'var(--novelist-text-secondary)' },
-  { tag: tags.heading6, fontSize: '0.92em', fontWeight: '600', lineHeight: '1.8',  color: 'var(--novelist-text-secondary)' },
+  // Headings intentionally use normal weight — only inline **…** inside a heading renders bold.
+  { tag: tags.heading, fontWeight: '400' },
+  { tag: tags.heading1, fontSize: '1.75em', fontWeight: '400', lineHeight: '1.15', color: 'var(--novelist-heading-color)', letterSpacing: '-0.02em' },
+  { tag: tags.heading2, fontSize: '1.4em',  fontWeight: '400', lineHeight: '1.3',  color: 'var(--novelist-heading-color)', letterSpacing: '-0.01em' },
+  { tag: tags.heading3, fontSize: '1.2em',  fontWeight: '400', lineHeight: '1.5',  color: 'var(--novelist-heading-color)' },
+  { tag: tags.heading4, fontSize: '1.05em', fontWeight: '400', lineHeight: '1.7',  color: 'var(--novelist-heading-color)' },
+  { tag: tags.heading5, fontSize: '1.0em',  fontWeight: '400', lineHeight: '1.8',  color: 'var(--novelist-text-secondary)' },
+  { tag: tags.heading6, fontSize: '0.92em', fontWeight: '400', lineHeight: '1.8',  color: 'var(--novelist-text-secondary)' },
 ]);
 
 /**
  * Flat highlight style for tall documents (>5000 lines).
- * Keeps headings bold and colored but removes font-size / line-height
- * differences so every line has identical height.  This makes CM6's
- * height-map estimation exact regardless of scroll position, preventing
- * the "click after scroll jumps to wrong line" bug.
+ * Removes font-size / line-height differences so every line has identical
+ * height. This makes CM6's height-map estimation exact regardless of
+ * scroll position, preventing the "click after scroll jumps to wrong
+ * line" bug. Headings use normal weight — only inline **…** inside a
+ * heading renders bold (via the wysiwyg `cm-novelist-bold` decoration).
  */
 const flatNovelistHighlightStyle = HighlightStyle.define([
-  { tag: tags.heading, fontWeight: 'bold' },
-  { tag: tags.heading1, fontWeight: '700', color: 'var(--novelist-heading-color)' },
-  { tag: tags.heading2, fontWeight: '600', color: 'var(--novelist-heading-color)' },
-  { tag: tags.heading3, fontWeight: '600', color: 'var(--novelist-heading-color)' },
-  { tag: tags.heading4, fontWeight: '600', color: 'var(--novelist-heading-color)' },
-  { tag: tags.heading5, fontWeight: '600', color: 'var(--novelist-text-secondary)' },
-  { tag: tags.heading6, fontWeight: '600', color: 'var(--novelist-text-secondary)' },
+  { tag: tags.heading, fontWeight: '400' },
+  { tag: tags.heading1, fontWeight: '400', color: 'var(--novelist-heading-color)' },
+  { tag: tags.heading2, fontWeight: '400', color: 'var(--novelist-heading-color)' },
+  { tag: tags.heading3, fontWeight: '400', color: 'var(--novelist-heading-color)' },
+  { tag: tags.heading4, fontWeight: '400', color: 'var(--novelist-heading-color)' },
+  { tag: tags.heading5, fontWeight: '400', color: 'var(--novelist-text-secondary)' },
+  { tag: tags.heading6, fontWeight: '400', color: 'var(--novelist-text-secondary)' },
 ]);
 
 /**
@@ -305,14 +318,126 @@ const novelistTheme = EditorView.theme({
     fontStyle: 'italic',
   },
   /* Heading font-size — scoped inside CM6 theme for high specificity.
+     Headings use normal weight; only inline **…** inside a heading is
+     bolded via the `cm-novelist-bold` WYSIWYG decoration.
      Line-heights tuned so each heading occupies ~1.8em (matching body rhythm). */
-  '.cm-novelist-h1': { fontSize: '1.75em', fontWeight: '700', lineHeight: '1.15', color: 'var(--novelist-heading-color)' },
-  '.cm-novelist-h2': { fontSize: '1.4em',  fontWeight: '600', lineHeight: '1.3',  color: 'var(--novelist-heading-color)' },
-  '.cm-novelist-h3': { fontSize: '1.2em',  fontWeight: '600', lineHeight: '1.5',  color: 'var(--novelist-heading-color)' },
-  '.cm-novelist-h4': { fontSize: '1.05em', fontWeight: '600', lineHeight: '1.7',  color: 'var(--novelist-heading-color)' },
-  '.cm-novelist-h5': { fontSize: '1.0em',  fontWeight: '600', lineHeight: '1.8',  color: 'var(--novelist-text-secondary)' },
-  '.cm-novelist-h6': { fontSize: '0.92em', fontWeight: '600', lineHeight: '1.8',  color: 'var(--novelist-text-secondary)' },
-  '.cm-selectionMatch': { backgroundColor: 'rgba(0, 180, 80, 0.15)' },
+  '.cm-novelist-h1': { fontSize: '1.75em', fontWeight: '400', lineHeight: '1.15', color: 'var(--novelist-heading-color)' },
+  '.cm-novelist-h2': { fontSize: '1.4em',  fontWeight: '400', lineHeight: '1.3',  color: 'var(--novelist-heading-color)' },
+  '.cm-novelist-h3': { fontSize: '1.2em',  fontWeight: '400', lineHeight: '1.5',  color: 'var(--novelist-heading-color)' },
+  '.cm-novelist-h4': { fontSize: '1.05em', fontWeight: '400', lineHeight: '1.7',  color: 'var(--novelist-heading-color)' },
+  '.cm-novelist-h5': { fontSize: '1.0em',  fontWeight: '400', lineHeight: '1.8',  color: 'var(--novelist-text-secondary)' },
+  '.cm-novelist-h6': { fontSize: '0.92em', fontWeight: '400', lineHeight: '1.8',  color: 'var(--novelist-text-secondary)' },
+  '.cm-selectionMatch': {
+    backgroundColor: 'color-mix(in srgb, var(--novelist-accent) 18%, transparent)',
+  },
+  // Search panel — reskinned to match the Novelist theme. CM6's default panel
+  // is bright white with blue OS buttons, which clashes hard with the app's
+  // muted palette (and is unreadable in dark themes).
+  '.cm-panels': {
+    backgroundColor: 'var(--novelist-bg-secondary)',
+    color: 'var(--novelist-text)',
+    borderColor: 'var(--novelist-border)',
+    fontFamily: 'var(--novelist-ui-font, var(--novelist-editor-font))',
+    fontSize: '13px',
+  },
+  '.cm-panels.cm-panels-top': {
+    borderBottom: '1px solid var(--novelist-border)',
+  },
+  '.cm-panels.cm-panels-bottom': {
+    borderTop: '1px solid var(--novelist-border)',
+  },
+  '.cm-panel.cm-search': {
+    padding: '8px 10px 10px',
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  '.cm-panel.cm-search label': {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    color: 'var(--novelist-text-secondary)',
+    fontSize: '12px',
+    userSelect: 'none',
+  },
+  '.cm-panel.cm-search input[type=checkbox]': {
+    accentColor: 'var(--novelist-accent)',
+    margin: 0,
+  },
+  '.cm-panel.cm-search br': {
+    flexBasis: '100%',
+    height: 0,
+    margin: 0,
+  },
+  '.cm-textfield': {
+    backgroundColor: 'var(--novelist-bg)',
+    color: 'var(--novelist-text)',
+    border: '1px solid var(--novelist-border)',
+    borderRadius: '4px',
+    padding: '4px 8px',
+    fontSize: '13px',
+    fontFamily: 'inherit',
+    outline: 'none',
+    minWidth: '160px',
+    transition: 'border-color 120ms ease, box-shadow 120ms ease',
+  },
+  '.cm-textfield:focus': {
+    borderColor: 'var(--novelist-accent)',
+    boxShadow: '0 0 0 2px color-mix(in srgb, var(--novelist-accent) 22%, transparent)',
+  },
+  '.cm-button': {
+    backgroundColor: 'var(--novelist-bg)',
+    backgroundImage: 'none',
+    color: 'var(--novelist-text)',
+    border: '1px solid var(--novelist-border)',
+    borderRadius: '4px',
+    padding: '4px 10px',
+    fontSize: '12px',
+    fontFamily: 'inherit',
+    cursor: 'pointer',
+    transition: 'background-color 120ms ease, border-color 120ms ease',
+  },
+  '.cm-button:hover': {
+    backgroundColor: 'var(--novelist-bg-tertiary)',
+    borderColor: 'var(--novelist-accent)',
+  },
+  '.cm-button:active': {
+    backgroundColor: 'color-mix(in srgb, var(--novelist-accent) 18%, var(--novelist-bg))',
+    backgroundImage: 'none',
+  },
+  '.cm-button:focus-visible': {
+    outline: 'none',
+    borderColor: 'var(--novelist-accent)',
+    boxShadow: '0 0 0 2px color-mix(in srgb, var(--novelist-accent) 22%, transparent)',
+  },
+  '.cm-panel.cm-search [name=close]': {
+    position: 'absolute',
+    top: '4px',
+    right: '6px',
+    width: '22px',
+    height: '22px',
+    lineHeight: '18px',
+    padding: 0,
+    backgroundColor: 'transparent',
+    color: 'var(--novelist-text-secondary)',
+    border: 'none',
+    borderRadius: '4px',
+    fontSize: '18px',
+    cursor: 'pointer',
+  },
+  '.cm-panel.cm-search [name=close]:hover': {
+    backgroundColor: 'var(--novelist-bg-tertiary)',
+    color: 'var(--novelist-text)',
+  },
+  '.cm-searchMatch': {
+    backgroundColor: 'color-mix(in srgb, var(--novelist-accent) 22%, transparent)',
+    borderRadius: '2px',
+  },
+  '.cm-searchMatch-selected': {
+    backgroundColor: 'color-mix(in srgb, var(--novelist-accent) 55%, transparent)',
+    outline: '1px solid var(--novelist-accent)',
+  },
 });
 
 export type FileType = 'markdown' | 'json' | 'plaintext';
@@ -393,8 +518,8 @@ export function createEditorExtensions(options?: EditorOptions): Extension[] {
       ...markdownKeymap,
       ...defaultKeymap,
       ...historyKeymap,
-      ...searchKeymap,
-      { key: 'Mod-f', run: openSearchPanel },
+      ...searchKeymapNoModF,
+      { key: 'Mod-f', run: toggleSearchPanel },
     ]),
   ];
 
@@ -457,8 +582,8 @@ function createLargeFileExtensions(): Extension[] {
     keymap.of([
       ...defaultKeymap,
       ...historyKeymap,
-      ...searchKeymap,
-      { key: 'Mod-f', run: openSearchPanel },
+      ...searchKeymapNoModF,
+      { key: 'Mod-f', run: toggleSearchPanel },
     ]),
   ];
 }
@@ -476,8 +601,8 @@ function createReadOnlyExtensions(): Extension[] {
     EditorView.lineWrapping,
     novelistTheme,
     keymap.of([
-      ...searchKeymap,
-      { key: 'Mod-f', run: openSearchPanel },
+      ...searchKeymapNoModF,
+      { key: 'Mod-f', run: toggleSearchPanel },
     ]),
   ];
 }

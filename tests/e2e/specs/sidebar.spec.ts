@@ -90,6 +90,20 @@ test.describe('Sidebar', () => {
     await expect(switcher).toContainText('Another Story');
   });
 
+  test('switcher popup exposes a pin button that toggles pinned state', async ({ app, mockState }) => {
+    await app.getByTestId('sidebar-switch-btn').click();
+
+    // The non-active project "Another Story" is at index 1 (index 0 is the current project).
+    // Pin it.
+    const pinBtn = app.getByTestId('project-switcher-pin-1');
+    await pinBtn.click();
+
+    // Backend state reflects the pin.
+    const after = await mockState.getRecentProjects();
+    const another = after.find(p => p.name === 'Another Story');
+    expect(another?.pinned).toBe(true);
+  });
+
   test('folder tree: drag a root file into a subfolder', async ({ app }) => {
     const folder = app.getByTestId('sidebar-folder-Notes');
     const chevron = folder.getByRole('button', { name: /Expand|Collapse/i });

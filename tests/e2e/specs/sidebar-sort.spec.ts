@@ -106,27 +106,27 @@ test.describe('Sidebar sort modes', () => {
     await app.getByTestId('sidebar-sort-name-desc').click();
     await expect(app.getByTestId('sidebar-sort-menu')).toHaveCount(0);
 
-    // localStorage should have recorded it under this project's key.
+    // Settings now live in the mocked per-project settings store (keyed by
+    // project dir), mirroring how the real backend writes to
+    // <project>/.novelist/project.toml's [view] section.
     const storedA = await app.evaluate(
       (key) => localStorage.getItem(key),
-      `novelist.sortMode.${MOCK_PROJECT_DIR}`,
+      `__novelist_mock_project_settings__:${MOCK_PROJECT_DIR}`,
     );
-    expect(storedA).toBe('name-desc');
+    expect(storedA).not.toBeNull();
+    expect(JSON.parse(storedA!).view.sort_mode).toBe('name-desc');
 
-    // Reload — this wipes in-memory state but preserves localStorage — so the
-    // Welcome screen shows up and lets us navigate to the *other* recent project.
+    // Reload — in-memory state resets; mock settings survive in localStorage,
+    // so reopening the project should restore name-desc.
     await app.reload();
     await app.waitForSelector('#app > *', { timeout: 10000 });
 
-    // Seed files for /tmp/another-project and navigate via recent-project-1.
-    // The mock's list_directory filters by prefix, so files must live under
-    // the project's path.
     await seedProjectFiles(app, OTHER_PROJECT_DIR, [
       { name: 'x.md', path: `${OTHER_PROJECT_DIR}/x.md`, is_dir: false, size: 0 },
     ]);
     await navigateToRecent(app, 1);
 
-    // Fresh project (no stored pref) — default numeric-asc is active.
+    // Fresh project (no stored overlay) — default numeric-asc is active.
     await openSortMenu(app);
     await expect(app.getByTestId('sidebar-sort-numeric-asc')).toContainText('\u2713');
     await expect(app.getByTestId('sidebar-sort-name-desc')).not.toContainText('\u2713');
@@ -141,7 +141,7 @@ test.describe('Sidebar sort modes', () => {
     ]);
     await navigateToRecent(app, 0);
 
-    // Sort mode restored from localStorage: name-desc is the ticked option.
+    // Sort mode restored from the per-project settings overlay.
     await openSortMenu(app);
     await expect(app.getByTestId('sidebar-sort-name-desc')).toContainText('\u2713');
     await expect(app.getByTestId('sidebar-sort-numeric-asc')).not.toContainText('\u2713');

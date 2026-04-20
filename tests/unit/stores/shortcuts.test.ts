@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchesShortcut } from '$lib/stores/shortcuts.svelte';
+import { matchesShortcut, shortcutsStore } from '$lib/stores/shortcuts.svelte';
 
 /** Create a minimal KeyboardEvent-like object for testing. */
 function fakeKeyEvent(opts: {
@@ -73,5 +73,34 @@ describe('matchesShortcut', () => {
 
   it('Cmd+I does not match Cmd+Shift+I', () => {
     expect(matchesShortcut(fakeKeyEvent({ key: 'I', metaKey: true, shiftKey: true }), 'Cmd+I')).toBe(false);
+  });
+});
+
+describe('right-panel default shortcut scheme (Cmd+Alt+<digit>)', () => {
+  // Regression trap: the right-panel toggles intentionally share a single
+  // modifier combo (`Cmd+Alt+1..5`) with the digit matching the button's
+  // vertical position. If anyone casually reassigns these to letter keys,
+  // the test below will catch it and the PR reviewer can double-check
+  // against the reasoning note in shortcuts.svelte.ts.
+  const expected: Record<string, string> = {
+    'toggle-outline': 'Cmd+Alt+1',
+    'toggle-draft': 'Cmd+Alt+2',
+    'toggle-snapshot': 'Cmd+Alt+3',
+    'toggle-stats': 'Cmd+Alt+4',
+    'toggle-template': 'Cmd+Alt+5',
+  };
+
+  for (const [id, shortcut] of Object.entries(expected)) {
+    it(`${id} defaults to ${shortcut}`, () => {
+      expect(shortcutsStore.defaults[id]).toBe(shortcut);
+    });
+  }
+
+  it('matches Cmd+Alt+5 for toggle-template', () => {
+    expect(matchesShortcut(fakeKeyEvent({ key: '5', metaKey: true, altKey: true }), 'Cmd+Alt+5')).toBe(true);
+  });
+
+  it('Cmd+Alt+5 does not match the plain Cmd+5 project-switch combo', () => {
+    expect(matchesShortcut(fakeKeyEvent({ key: '5', metaKey: true, altKey: false }), 'Cmd+Alt+5')).toBe(false);
   });
 });

@@ -12,9 +12,14 @@
   }
   let { onOpenDirectory, onOpenRecent, onNewFile, onNewProject }: Props = $props();
 
+  const MAX_RECENT_DISPLAY = 7;
+
   let recentProjects = $state<RecentProject[]>([]);
   let draggingPath = $state<string | null>(null);
   let dragOverPath = $state<string | null>(null);
+
+  let visibleProjects = $derived(recentProjects.slice(0, MAX_RECENT_DISPLAY));
+  let overflowCount = $derived(Math.max(0, recentProjects.length - MAX_RECENT_DISPLAY));
 
   onMount(async () => {
     await refresh();
@@ -122,7 +127,7 @@
           <h2 class="recent-heading">{t('welcome.recentProjects')}</h2>
         </div>
         <ul class="recent-list">
-          {#each recentProjects as project, index (project.path)}
+          {#each visibleProjects as project, index (project.path)}
             <li
               class="recent-row"
               class:pinned={project.pinned}
@@ -135,7 +140,6 @@
               ondrop={(e) => onDrop(e, project.path)}
               ondragend={onDragEnd}
             >
-              <span class="drag-handle" title={t('welcome.dragToReorder')} aria-hidden="true">⋮⋮</span>
               <button
                 class="recent-item"
                 data-testid="recent-project-{index}"
@@ -167,6 +171,11 @@
             </li>
           {/each}
         </ul>
+        {#if overflowCount > 0}
+          <p class="recent-overflow" data-testid="recent-overflow-hint">
+            {t('welcome.moreProjectsHint', { count: overflowCount })}
+          </p>
+        {/if}
       </div>
     {:else}
       <div class="empty-state">
@@ -269,21 +278,6 @@
     box-shadow: inset 0 2px 0 0 var(--novelist-accent);
   }
 
-  .drag-handle {
-    width: 18px;
-    flex-shrink: 0;
-    text-align: center;
-    color: var(--novelist-text-tertiary, #b0b0b0);
-    font-size: 12px;
-    cursor: grab;
-    opacity: 0;
-    transition: opacity 0.12s;
-    user-select: none;
-    letter-spacing: -1px;
-  }
-  .recent-row:hover .drag-handle { opacity: 0.7; }
-  .recent-row.dragging .drag-handle { cursor: grabbing; opacity: 1; }
-
   .recent-item {
     display: flex;
     flex-direction: column;
@@ -343,6 +337,14 @@
   .recent-remove-btn:hover {
     color: #e5484d;
     background: #e5484d12;
+  }
+
+  .recent-overflow {
+    margin: 0.4rem 0 0 0;
+    padding: 0 4px;
+    font-size: 0.78rem;
+    color: var(--novelist-text-tertiary, var(--novelist-text-secondary));
+    text-align: center;
   }
 
   .empty-state {

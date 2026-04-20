@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { EditorView, keymap } from '@codemirror/view';
+  import { EditorView } from '@codemirror/view';
   import type { Extension, ChangeSet } from '@codemirror/state';
   import { createEditorExtensions, createEditorState, highlightMatchCompartment } from '$lib/editor/setup';
   import { highlightSelectionMatches } from '@codemirror/search';
@@ -10,11 +10,10 @@
   import { projectStore } from '$lib/stores/project.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
   import { commands } from '$lib/ipc/commands';
-  import { save as saveDialog } from '@tauri-apps/plugin-dialog';
+  import { save as saveDialog, ask, message } from '@tauri-apps/plugin-dialog';
   import { isScratchFile } from '$lib/utils/scratch';
   import { invoke } from '@tauri-apps/api/core';
   import { t } from '$lib/i18n';
-  import { getCurrentWindow } from '@tauri-apps/api/window';
   import { countWords } from '$lib/utils/wordcount';
   import { extractHeadings, type HeadingItem } from '$lib/editor/outline';
   import { setWysiwygProjectDir, setWysiwygRenderImages } from '$lib/editor/wysiwyg';
@@ -50,6 +49,10 @@
   let isReadOnly = $state(false);
   let readOnlyFileSize = $state(0);
   let statsTimer: ReturnType<typeof setTimeout> | null = null;
+  // Re-entrancy guard for saveCurrentFile. Prevents two racing writers from
+  // both using the `{path}.novelist-tmp` atomic-write name (the first rename
+  // would consume the temp and the second would fail with ENOENT).
+  let isSaving = false;
 
   // Recovery banner state (replaces modal dialog for better UX)
   let recoveryAvailable = $state(false);
@@ -287,27 +290,62 @@
   }
 
   async function saveCurrentFile() {
+    if (isSaving) return;
     const tab = getActiveTab();
     if (!tab || !tab.isDirty || !view) return;
 
     const content = view.state.doc.toString();
 
-    // Scratch files (pattern-based) → prompt Save As with rename
-    if (isScratchFile(tab.filePath)) {
-      await saveAsRename(tab, content);
-      return;
-    }
+    isSaving = true;
+    try {
+      // Scratch files (pattern-based) → prompt Save As with rename. They
+      // live in a hidden cache dir, so writing back to that path is never
+      // what the user wants on Cmd+S.
+      if (isScratchFile(tab.filePath)) {
+        await saveAsRename(tab, content);
+        return;
+      }
 
-    await commands.registerWriteIgnore(tab.filePath);
-    const result = await commands.writeFile(tab.filePath, content);
-    if (result.status === 'ok') {
-      tabsStore.updateContent(tab.id, content);
-      const finalPath = await tabsStore.tryRenameAfterSave(tab.filePath, content);
-      tabsStore.markSavedByPath(finalPath);
-      clearRecoveryDraft(tab.filePath);
-      flushWritingStats();
-    } else {
-      console.error('[Save] Failed:', result.error);
+      await commands.registerWriteIgnore(tab.filePath);
+      const result = await commands.writeFile(tab.filePath, content);
+      if (result.status === 'ok') {
+        tabsStore.updateContent(tab.id, content);
+        const finalPath = await tabsStore.tryRenameAfterSave(tab.filePath, content);
+        tabsStore.markSavedByPath(finalPath);
+        clearRecoveryDraft(tab.filePath);
+        flushWritingStats();
+      } else {
+        console.error('[Save] Failed:', result.error);
+        const errStr = String(result.error ?? '');
+        // "Parent directory does not exist" is the explicit pre-check error
+        // raised by write_file_inner when the folder really is gone. Bare
+        // "No such file or directory" / "os error 2" is ambiguous — e.g. a
+        // concurrent-writer race on the `.novelist-tmp` rename produces it
+        // too — so we only trust the explicit message for the Save As
+        // recovery prompt. Everything else becomes a non-blocking error
+        // toast so the user can retry without being pushed into a file
+        // picker they never asked for.
+        const parentMissing = errStr.includes('Parent directory does not exist');
+        if (parentMissing) {
+          const wantSaveAs = await ask(
+            t('dialog.saveParentMissing', { path: tab.filePath }),
+            {
+              title: t('dialog.saveFailed'),
+              kind: 'warning',
+              okLabel: t('dialog.saveAs'),
+              cancelLabel: t('dialog.cancel'),
+            }
+          );
+          if (wantSaveAs) await saveAsRename(tab, content);
+        } else {
+          await message(errStr || t('dialog.saveFailedGeneric'), {
+            title: t('dialog.saveFailed'),
+            kind: 'error',
+          });
+        }
+      }
+    } finally {
+      isSaving = false;
     }
   }
 
@@ -334,7 +372,7 @@
       await commands.registerOpenFile(savePath);
       // Refresh sidebar if in project mode
       if (projectStore.dirPath) {
-        const filesResult = await commands.listDirectory(projectStore.dirPath);
+        const filesResult = await commands.listDirectory(projectStore.dirPath, null);
         if (filesResult.status === 'ok') projectStore.updateFiles(filesResult.data);
       }
       flushWritingStats();
@@ -406,7 +444,7 @@
     }
 
     // Refresh file tree
-    const filesResult = await commands.listDirectory(projectStore.dirPath);
+    const filesResult = await commands.listDirectory(projectStore.dirPath, null);
     if (filesResult.status === 'ok') {
       projectStore.updateFiles(filesResult.data);
     }
@@ -476,10 +514,14 @@
     const extensions = [
       ...buildExtensions(fileSize, lineCount),
       buildUpdateListener(),
-      ...(!isReadOnly ? [keymap.of([
-        { key: 'Mod-s', run: () => { saveCurrentFile(); return true; } },
-        { key: 'Mod-w', run: () => { const tab = tabsStore.activeTab; if (tab) tabsStore.closeTab(tab.id); else getCurrentWindow().close(); return true; } },
-      ])] : []),
+      // Cmd+S and Cmd+W are intentionally NOT bound here — both are owned by
+      // the window-level handler in App.svelte. Binding them a second time in
+      // a CM6 keymap dispatches the command twice per keypress: two racing
+      // saveCurrentFile calls share the same `{path}.novelist-tmp` name, so
+      // the first rename consumes the temp and the second fails with ENOENT
+      // ("rename … No such file or directory"), which the error path then
+      // wrongly reports as "parent directory missing" and pops Save As.
+      // Two close-tab dispatches stack two "save before close?" dialogs.
     ];
 
     const savedState = getSavedEditorState(tab.id);

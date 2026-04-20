@@ -1,5 +1,5 @@
 import { EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
-import { StateField, StateEffect } from '@codemirror/state';
+import { StateField, StateEffect, Prec } from '@codemirror/state';
 
 /**
  * Slash command menu — Notion-style "/" block insertion.
@@ -13,6 +13,7 @@ interface SlashMenuItem {
   id: string;
   label: string;
   description: string;
+  /** Inline SVG markup (rendered via innerHTML — always author-controlled, never user input). */
   icon: string;
   /** The markdown text to insert. "{cursor}" marks where the cursor should land. */
   insert: string;
@@ -20,58 +21,142 @@ interface SlashMenuItem {
   keywords: string[];
 }
 
+// ── SVG icons ───────────────────────────────────────────────────────────
+// 24×24 viewBox, 1.75 stroke, currentColor — scale/tint via CSS.
+// Kept inline as strings so the whole slash extension stays a single file.
+const svgHeading = (n: number) => `
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <text x="12" y="17" text-anchor="middle" font-size="13" font-weight="700" font-family="var(--novelist-editor-font, system-ui, sans-serif)" fill="currentColor">H${n}</text>
+</svg>`;
+
+const svgBulletList = `
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <circle cx="5" cy="7" r="1.3" fill="currentColor" stroke="none"/>
+  <circle cx="5" cy="12" r="1.3" fill="currentColor" stroke="none"/>
+  <circle cx="5" cy="17" r="1.3" fill="currentColor" stroke="none"/>
+  <line x1="10" y1="7" x2="19" y2="7"/>
+  <line x1="10" y1="12" x2="19" y2="12"/>
+  <line x1="10" y1="17" x2="19" y2="17"/>
+</svg>`;
+
+const svgNumberedList = `
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <line x1="10" y1="7" x2="19" y2="7"/>
+  <line x1="10" y1="12" x2="19" y2="12"/>
+  <line x1="10" y1="17" x2="19" y2="17"/>
+  <text x="4.5" y="9.3" text-anchor="middle" font-size="6.5" font-weight="700" fill="currentColor" stroke="none">1</text>
+  <text x="4.5" y="14.3" text-anchor="middle" font-size="6.5" font-weight="700" fill="currentColor" stroke="none">2</text>
+  <text x="4.5" y="19.3" text-anchor="middle" font-size="6.5" font-weight="700" fill="currentColor" stroke="none">3</text>
+</svg>`;
+
+const svgTaskList = `
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <rect x="4" y="4" width="16" height="16" rx="3"/>
+  <path d="M8.5 12.25l2.75 2.75L16 9.75"/>
+</svg>`;
+
+const svgCodeBlock = `
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <path d="M9 7l-5 5 5 5"/>
+  <path d="M15 7l5 5-5 5"/>
+  <line x1="13.5" y1="5" x2="10.5" y2="19" opacity="0.5"/>
+</svg>`;
+
+const svgQuote = `
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <line x1="5" y1="5" x2="5" y2="19" stroke-width="2.5"/>
+  <line x1="10" y1="8" x2="19" y2="8"/>
+  <line x1="10" y1="12" x2="17" y2="12"/>
+  <line x1="10" y1="16" x2="18" y2="16"/>
+</svg>`;
+
+const svgDivider = `
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <line x1="3" y1="8" x2="21" y2="8" opacity="0.45"/>
+  <line x1="3" y1="12" x2="21" y2="12" stroke-width="2"/>
+  <line x1="3" y1="16" x2="21" y2="16" opacity="0.45"/>
+</svg>`;
+
+const svgImage = `
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <rect x="3.25" y="4.5" width="17.5" height="15" rx="2.25"/>
+  <circle cx="9" cy="10" r="1.5" fill="currentColor" stroke="none"/>
+  <path d="M3.5 17l4.5-4.5 3.5 3.5L15.5 12l5 5"/>
+</svg>`;
+
+const svgTable = `
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <rect x="3.5" y="4.5" width="17" height="15" rx="2"/>
+  <line x1="3.5" y1="9.25" x2="20.5" y2="9.25"/>
+  <line x1="3.5" y1="14.5" x2="20.5" y2="14.5"/>
+  <line x1="9.5" y1="4.5" x2="9.5" y2="19.5"/>
+  <line x1="14.5" y1="4.5" x2="14.5" y2="19.5"/>
+</svg>`;
+
+const svgMath = `
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <path d="M18 5H6.5l5.5 7-5.5 7H18"/>
+</svg>`;
+
+const svgCallout = `
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <path d="M9 17.5h6"/>
+  <path d="M10 20.5h4"/>
+  <path d="M12 3a6 6 0 00-4 10.5c.75.75 1 1.5 1 2.5h6c0-1 .25-1.75 1-2.5A6 6 0 0012 3z"/>
+</svg>`;
+
 const slashItems: SlashMenuItem[] = [
   {
     id: 'heading1', label: 'Heading 1', description: 'Large section heading',
-    icon: 'H1', insert: '# {cursor}', keywords: ['h1', 'heading', 'title', '标题'],
+    icon: svgHeading(1), insert: '# {cursor}', keywords: ['h1', 'heading', 'title', '标题'],
   },
   {
     id: 'heading2', label: 'Heading 2', description: 'Medium section heading',
-    icon: 'H2', insert: '## {cursor}', keywords: ['h2', 'heading', '标题'],
+    icon: svgHeading(2), insert: '## {cursor}', keywords: ['h2', 'heading', '标题'],
   },
   {
     id: 'heading3', label: 'Heading 3', description: 'Small section heading',
-    icon: 'H3', insert: '### {cursor}', keywords: ['h3', 'heading', '标题'],
+    icon: svgHeading(3), insert: '### {cursor}', keywords: ['h3', 'heading', '标题'],
   },
   {
     id: 'bulletList', label: 'Bullet List', description: 'Unordered list item',
-    icon: '•', insert: '- {cursor}', keywords: ['bullet', 'list', 'unordered', '列表', '无序'],
+    icon: svgBulletList, insert: '- {cursor}', keywords: ['bullet', 'list', 'unordered', '列表', '无序'],
   },
   {
     id: 'numberedList', label: 'Numbered List', description: 'Ordered list item',
-    icon: '1.', insert: '1. {cursor}', keywords: ['number', 'ordered', 'list', '列表', '有序'],
+    icon: svgNumberedList, insert: '1. {cursor}', keywords: ['number', 'ordered', 'list', '列表', '有序'],
   },
   {
     id: 'taskList', label: 'Task List', description: 'Checkbox todo item',
-    icon: '☐', insert: '- [ ] {cursor}', keywords: ['task', 'todo', 'checkbox', '任务', '待办'],
+    icon: svgTaskList, insert: '- [ ] {cursor}', keywords: ['task', 'todo', 'checkbox', '任务', '待办'],
   },
   {
     id: 'codeBlock', label: 'Code Block', description: 'Fenced code block',
-    icon: '<>', insert: '```\n{cursor}\n```', keywords: ['code', 'fence', '代码'],
+    icon: svgCodeBlock, insert: '```\n{cursor}\n```', keywords: ['code', 'fence', '代码'],
   },
   {
     id: 'quote', label: 'Quote', description: 'Block quotation',
-    icon: '"', insert: '> {cursor}', keywords: ['quote', 'blockquote', '引用'],
+    icon: svgQuote, insert: '> {cursor}', keywords: ['quote', 'blockquote', '引用'],
   },
   {
     id: 'divider', label: 'Divider', description: 'Horizontal rule',
-    icon: '—', insert: '---\n{cursor}', keywords: ['divider', 'hr', 'horizontal', 'rule', '分割线'],
+    icon: svgDivider, insert: '---\n{cursor}', keywords: ['divider', 'hr', 'horizontal', 'rule', '分割线'],
   },
   {
     id: 'image', label: 'Image', description: 'Insert image',
-    icon: '🖼', insert: '![{cursor}]()', keywords: ['image', 'img', 'picture', '图片'],
+    icon: svgImage, insert: '![{cursor}]()', keywords: ['image', 'img', 'picture', '图片'],
   },
   {
     id: 'table', label: 'Table', description: 'Insert a table',
-    icon: '⊞', insert: '| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| {cursor} |  |  |', keywords: ['table', '表格'],
+    icon: svgTable, insert: '| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| {cursor} |  |  |', keywords: ['table', '表格'],
   },
   {
     id: 'math', label: 'Math Block', description: 'LaTeX math expression',
-    icon: '∑', insert: '$$\n{cursor}\n$$', keywords: ['math', 'latex', 'equation', '数学', '公式'],
+    icon: svgMath, insert: '$$\n{cursor}\n$$', keywords: ['math', 'latex', 'equation', '数学', '公式'],
   },
   {
     id: 'callout', label: 'Callout', description: 'Highlighted note block',
-    icon: '💡', insert: '> [!NOTE]\n> {cursor}', keywords: ['callout', 'note', 'tip', 'warning', '提示', '高亮'],
+    icon: svgCallout, insert: '> [!NOTE]\n> {cursor}', keywords: ['callout', 'note', 'tip', 'warning', '提示', '高亮'],
   },
 ];
 
@@ -152,19 +237,44 @@ class SlashMenuWidget {
   private filteredItems: SlashMenuItem[] = [];
   private view: EditorView;
   private slashPos: number;
+  private positionRetries = 0;
 
   constructor(view: EditorView, slashPos: number) {
     this.view = view;
     this.slashPos = slashPos;
     this.filteredItems = getItems();
     this.createDOM();
-    this.position();
+    this.schedulePosition();
+  }
+
+  private schedulePosition() {
+    // Defer to after CM6's measure phase; the newly-inserted "/" may not yet
+    // be rendered in the DOM when we're called from inside a ViewPlugin.update().
+    this.view.requestMeasure({
+      read: (view) => view.coordsAtPos(this.slashPos) ?? view.coordsAtPos(Math.max(0, this.slashPos - 1)),
+      write: (coords) => {
+        if (!this.dom) return;
+        if (coords) {
+          this.applyPosition(coords);
+          return;
+        }
+        // Still not measurable — retry via rAF. The menu stays in the DOM at
+        // its last position (or default 0,0) so the user still sees it.
+        if (this.positionRetries < 5) {
+          this.positionRetries++;
+          requestAnimationFrame(() => this.schedulePosition());
+        }
+      },
+    });
   }
 
   private createDOM() {
     this.dom = document.createElement('div');
     this.dom.className = 'cm-slash-menu';
     this.dom.setAttribute('role', 'listbox');
+    // Hide until first successful positioning to avoid a (0,0) flash while
+    // CM6's measure cycle catches up to the newly-inserted "/".
+    this.dom.style.visibility = 'hidden';
     this.render();
     document.body.appendChild(this.dom);
   }
@@ -189,7 +299,8 @@ class SlashMenuWidget {
 
       const icon = document.createElement('span');
       icon.className = 'cm-slash-menu-icon';
-      icon.textContent = item.icon;
+      // Author-controlled SVG markup (see constants at top of file).
+      icon.innerHTML = item.icon;
       el.appendChild(icon);
 
       const text = document.createElement('div');
@@ -222,30 +333,60 @@ class SlashMenuWidget {
   }
 
   position() {
+    this.schedulePosition();
+  }
+
+  private applyPosition(coords: { left: number; top: number; bottom: number; right: number }) {
     if (!this.dom) return;
-    const coords = this.view.coordsAtPos(this.slashPos);
-    if (!coords) { this.destroy(); return; }
 
-    this.dom.style.left = `${coords.left}px`;
-    this.dom.style.top = `${coords.bottom + 4}px`;
+    // Measure the hidden menu (layout runs on-demand for getBoundingClientRect).
+    // Fallback to CSS caps (max-height 320 / width 280) when happy-dom / pre-
+    // layout paths return zero-sized rects.
+    const rect = this.dom.getBoundingClientRect();
+    const menuH = rect.height || 320;
+    const menuW = rect.width || 280;
+    const gap = 6;
+    const margin = 8;
 
-    // Ensure menu doesn't go off-screen
-    requestAnimationFrame(() => {
-      if (!this.dom) return;
-      const rect = this.dom.getBoundingClientRect();
-      if (rect.bottom > window.innerHeight) {
-        this.dom.style.top = `${coords.top - rect.height - 4}px`;
-      }
-      if (rect.right > window.innerWidth) {
-        this.dom.style.left = `${window.innerWidth - rect.width - 8}px`;
-      }
-    });
+    const spaceBelow = window.innerHeight - coords.bottom - margin;
+    const spaceAbove = coords.top - margin;
+
+    // Prefer below (menu top aligned with cursor bottom). Flip above (menu
+    // bottom aligned with cursor top) when the cursor sits in the lower
+    // half and there isn't enough room below. If neither side fits we keep
+    // the side with more room and clamp into the viewport.
+    let top: number;
+    if (spaceBelow >= menuH + gap) {
+      top = coords.bottom + gap;
+    } else if (spaceAbove >= menuH + gap) {
+      top = coords.top - menuH - gap;
+    } else if (spaceAbove > spaceBelow) {
+      top = Math.max(margin, coords.top - menuH - gap);
+    } else {
+      top = coords.bottom + gap;
+    }
+    top = Math.max(margin, Math.min(top, window.innerHeight - menuH - margin));
+
+    // Horizontal: anchor to cursor left, clamp into viewport.
+    let left = coords.left;
+    if (left + menuW > window.innerWidth - margin) {
+      left = window.innerWidth - menuW - margin;
+    }
+    left = Math.max(margin, left);
+
+    this.dom.style.top = `${top}px`;
+    this.dom.style.left = `${left}px`;
+    this.dom.style.visibility = 'visible';
   }
 
   updateQuery(query: string) {
     this.filteredItems = filterItems(query);
     this.selectedIndex = 0;
     this.render();
+    // Height changes with the filtered item count; re-evaluate flip direction
+    // so the menu doesn't end up half off-screen at the bottom of the viewport.
+    this.positionRetries = 0;
+    this.schedulePosition();
   }
 
   handleKey(key: string): boolean {
@@ -429,6 +570,9 @@ export const slashCommandExtension = [
   slashMenuField,
   slashMenuPlugin,
   slashTriggerHandler,
-  slashKeyHandler,
+  // `defaultKeymap` binds ArrowUp/Down to cursor movement — raise the slash
+  // key handler to highest precedence so it consumes navigation keys while
+  // the menu is open.
+  Prec.highest(slashKeyHandler),
   slashMenuTheme,
 ];

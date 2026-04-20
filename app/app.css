@@ -84,3 +84,43 @@ html, body, #app {
 *:hover::-webkit-scrollbar-thumb {
   background: var(--novelist-border);
 }
+
+/* Shared popup/context-menu styling — used by the sidebar file-tree menu,
+   the editor right-click menu, etc. Declared globally so it works even when
+   Sidebar isn't mounted (zen mode, welcome screen). */
+.context-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 140px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--novelist-bg);
+  border: 1px solid var(--novelist-border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  color: var(--novelist-text);
+}
+.context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--novelist-text);
+  font-size: 0.78rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 80ms;
+}
+.context-menu-item:hover {
+  background: var(--novelist-sidebar-hover);
+}
+.context-menu-item-danger:hover {
+  background: #e5484d18;
+  color: #e5484d;
+}
+.context-menu-separator {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--novelist-border-subtle, var(--novelist-border));
+}

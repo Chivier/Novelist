@@ -94,7 +94,7 @@
   async function getUsername(): Promise<string> {
     // Simple fallback — read from environment via a trick
     try {
-      const result = await commands.listDirectory('/Users');
+      const result = await commands.listDirectory('/Users', null);
       if (result.status === 'ok') {
         // Find a likely home dir (not Shared, not hidden)
         const dirs = result.data.filter(f =>
@@ -103,7 +103,7 @@
         if (dirs.length === 1) return dirs[0].name;
         // Multiple users — try to find one that has Documents
         for (const d of dirs) {
-          const docsResult = await commands.listDirectory(`/Users/${d.name}/Documents`);
+          const docsResult = await commands.listDirectory(`/Users/${d.name}/Documents`, null);
           if (docsResult.status === 'ok') return d.name;
         }
         if (dirs.length > 0) return dirs[0].name;

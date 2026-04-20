@@ -879,6 +879,12 @@ function buildDecorations(view: EditorView): DecorationSet {
 /**
  * Helper for inline markup nodes (bold, italic, strikethrough, inline code).
  * Finds marker children, hides/reveals them, and applies content styling.
+ *
+ * When the cursor is NOT on the node (`markerClass === 'cm-novelist-hidden'`)
+ * we use `Decoration.replace({})` to fully collapse the `**` / `*` / `~~` /
+ * `` ` `` markers. `visibility: hidden` would leave a per-marker horizontal
+ * gap (e.g. `**姓名**` rendered as "  姓名  "), which users perceive as an
+ * unwanted space. Headings/links already collapse their markers the same way.
  */
 function handleInlineMarkup(
   syntaxNode: ReturnType<typeof syntaxTree>['topNode'],
@@ -888,17 +894,21 @@ function handleInlineMarkup(
   contentClass: string,
   markerNodeName: string,
 ) {
-  const markers: { from: number; to: number }[] = [];
   const cursor = syntaxNode.cursor();
+  const collapse = markerClass === 'cm-novelist-hidden';
 
   if (cursor.firstChild()) {
     do {
       if (cursor.name === markerNodeName) {
-        markers.push({ from: cursor.from, to: cursor.to });
         if (cursor.from < cursor.to) {
-          decos.push(
-            Decoration.mark({ class: markerClass }).range(cursor.from, cursor.to)
-          );
+          if (collapse) {
+            const r = clampReplaceRange(state, cursor.from, cursor.to);
+            if (r) decos.push(Decoration.replace({}).range(r.from, r.to));
+          } else {
+            decos.push(
+              Decoration.mark({ class: markerClass }).range(cursor.from, cursor.to)
+            );
+          }
         }
       }
     } while (cursor.nextSibling());

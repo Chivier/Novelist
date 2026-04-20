@@ -16,6 +16,21 @@ interface TabState {
   scrollPosition: number;
   cursorPosition: number;
   version: number;
+  /**
+   * True for tabs that were created this session via "New File" / "New Scratch
+   * File" / template "new-file". Gates H1-driven auto-rename in
+   * `tryRenameAfterSave` so that opening an existing file whose name happens
+   * to match a placeholder pattern (e.g. `第1章.md` the user created manually)
+   * does NOT get silently renamed on Cmd+S. Cleared after a successful
+   * auto-rename (one-shot); stays true across no-op saves so the rename can
+   * still fire once the user actually types an H1.
+   */
+  justCreated: boolean;
+}
+
+interface OpenTabOptions {
+  /** Opt-in flag for the H1 auto-rename pipeline. See TabState.justCreated. */
+  justCreated?: boolean;
 }
 
 /**
@@ -176,9 +191,19 @@ class TabsStore {
    * Post-write hook: if the file is a placeholder and its content has an H1,
    * rename the file to match. Returns the new path (== old path if no rename).
    * Safe to call after every successful writeFile.
+   *
+   * Gated on the tab's `justCreated` flag — only fires for tabs created this
+   * session via New File / New Scratch / template new-file. Opening an
+   * existing file whose name happens to match a placeholder pattern (e.g.
+   * a `第1章.md` the user created in Finder) must NOT be auto-renamed, since
+   * the user explicitly chose that name. See the TabState.justCreated doc.
    */
   async tryRenameAfterSave(filePath: string, content: string): Promise<string> {
     if (!newFileSettings.autoRenameFromH1) return filePath;
+
+    const tab = this.findByPath(filePath);
+    if (!tab || !tab.justCreated) return filePath;
+
     const fileName = filePath.split('/').pop() || filePath;
     if (!isPlaceholder(fileName)) return filePath;
     const h1 = extractFirstH1(content);
@@ -188,7 +213,7 @@ class TabsStore {
     const parentDir = lastSlash > 0 ? filePath.slice(0, lastSlash) : filePath;
 
     // Re-list to get current siblings for collision check
-    const list = await commands.listDirectory(parentDir);
+    const list = await commands.listDirectory(parentDir, null);
     const siblings = list.status === 'ok' ? list.data.map(e => e.name) : [];
 
     const newName = renameFromH1(fileName, h1, siblings);
@@ -201,6 +226,13 @@ class TabsStore {
     }
     const newPath = result.data;
     this.updatePath(filePath, newPath);
+    // Consume the one-shot: after a successful rename the tab is no longer
+    // a freshly-created placeholder. Future saves go through the normal path.
+    for (const pane of this.panes) {
+      for (const t of pane.tabs) {
+        if (t.filePath === newPath) t.justCreated = false;
+      }
+    }
 
     // Broadcast to other windows so their tabs/sidebar can update.
     await commands.broadcastFileRenamed(filePath, newPath).catch(() => {});
@@ -208,7 +240,7 @@ class TabsStore {
     return newPath;
   }
 
-  openTab(filePath: string, content: string) {
+  openTab(filePath: string, content: string, options: OpenTabOptions = {}) {
     const pane = this.activePane;
     const existing = pane.tabs.find(t => t.filePath === filePath);
     if (existing) { pane.activeTabId = existing.id; return; }
@@ -216,12 +248,22 @@ class TabsStore {
     const rawName = filePath.split('/').pop() || filePath;
     const fileName = isScratchFile(filePath) ? nextScratchDisplayName() : rawName;
     const id = crypto.randomUUID();
-    pane.tabs.push({ id, filePath, fileName, content, isDirty: false, scrollPosition: 0, cursorPosition: 0, version: 0 });
+    pane.tabs.push({
+      id,
+      filePath,
+      fileName,
+      content,
+      isDirty: false,
+      scrollPosition: 0,
+      cursorPosition: 0,
+      version: 0,
+      justCreated: options.justCreated === true,
+    });
     pane.activeTabId = id;
   }
 
   /** Open a tab in a specific pane (for "Open in Other Pane"). */
-  openTabInPane(paneId: string, filePath: string, content: string) {
+  openTabInPane(paneId: string, filePath: string, content: string, options: OpenTabOptions = {}) {
     const pane = this.panes.find(p => p.id === paneId);
     if (!pane) return;
     const existing = pane.tabs.find(t => t.filePath === filePath);
@@ -229,7 +271,17 @@ class TabsStore {
 
     const fileName = filePath.split('/').pop() || filePath;
     const id = crypto.randomUUID();
-    pane.tabs.push({ id, filePath, fileName, content, isDirty: false, scrollPosition: 0, cursorPosition: 0, version: 0 });
+    pane.tabs.push({
+      id,
+      filePath,
+      fileName,
+      content,
+      isDirty: false,
+      scrollPosition: 0,
+      cursorPosition: 0,
+      version: 0,
+      justCreated: options.justCreated === true,
+    });
     pane.activeTabId = id;
   }
 
@@ -317,6 +369,20 @@ class TabsStore {
         return;
       }
     }
+  }
+
+  /**
+   * Cycle the active pane's active tab by `delta` (+1 next, -1 previous).
+   * Wraps around at both ends. No-op if the pane has 0 or 1 tabs.
+   */
+  cycleActiveTab(delta: number) {
+    const pane = this.activePane;
+    if (pane.tabs.length < 2) return;
+    const currentIdx = pane.tabs.findIndex(t => t.id === pane.activeTabId);
+    const base = currentIdx === -1 ? 0 : currentIdx;
+    const len = pane.tabs.length;
+    const nextIdx = ((base + delta) % len + len) % len;
+    pane.activeTabId = pane.tabs[nextIdx].id;
   }
 
   /** Mark tab as dirty without copying content (used during typing). */

@@ -9,6 +9,8 @@ const commandI18nKeys: Record<string, string> = {
   'toggle-draft': 'command.toggleDraft',
   'toggle-snapshot': 'command.toggleSnapshot',
   'toggle-stats': 'command.toggleStats',
+  'toggle-template': 'command.toggleTemplate',
+  'save-current-as-template': 'command.saveCurrentAsTemplate',
   'toggle-zen': 'command.toggleZen',
   'command-palette': 'command.commandPalette',
   'toggle-split': 'command.toggleSplit',
@@ -17,6 +19,7 @@ const commandI18nKeys: Record<string, string> = {
   'export-project': 'command.exportProject',
   'close-tab': 'command.closeTab',
   'rename-file': 'command.renameFile',
+  'move-file': 'command.moveFile',
   'open-settings': 'command.openSettings',
   'go-to-line': 'command.goToLine',
   'editor-bold': 'command.bold',
@@ -28,12 +31,30 @@ const commandI18nKeys: Record<string, string> = {
   'toggle-mindmap': 'command.toggleMindmap',
 };
 
+/**
+ * Right-panel toggles share a single modifier combo (`Cmd+Alt+<digit>`), with
+ * the digit matching the button's vertical position in the right rail.
+ *
+ * Why not letter shortcuts (the old `Cmd+Shift+O/D/S/T` scheme):
+ *   - `Cmd+Shift+S` overlaps with "Save As" semantics in most apps.
+ *   - `Cmd+Shift+T` is "reopen closed tab" in every browser.
+ *   - Letters are arbitrary (T for Stats? S for Snapshot?) — users have to
+ *     memorize mappings instead of reading them off the UI.
+ *
+ * Why not `Cmd+Shift+<digit>`: on macOS, `Cmd+Shift+3/4/5` are reserved by the
+ * OS for screenshots, which would silently eat the shortcut.
+ *
+ * `Cmd+Alt+1..5` is free on macOS and Windows/Linux, scales (new panels get
+ * 6, 7, …), and groups cleanly in Settings > Shortcuts.
+ */
 const defaultShortcuts: Record<string, string> = {
   'toggle-sidebar': 'Cmd+Shift+B',
-  'toggle-outline': 'Cmd+Shift+O',
-  'toggle-draft': 'Cmd+Shift+D',
-  'toggle-snapshot': 'Cmd+Shift+S',
-  'toggle-stats': 'Cmd+Shift+T',
+  'toggle-outline': 'Cmd+Alt+1',
+  'toggle-draft': 'Cmd+Alt+2',
+  'toggle-snapshot': 'Cmd+Alt+3',
+  'toggle-stats': 'Cmd+Alt+4',
+  'toggle-template': 'Cmd+Alt+5',
+  'save-current-as-template': '',
   'toggle-zen': 'Cmd+Alt+Z',
   'command-palette': 'Cmd+Shift+P',
   'toggle-split': 'Cmd+\\',
@@ -42,6 +63,7 @@ const defaultShortcuts: Record<string, string> = {
   'export-project': 'Cmd+P',
   'close-tab': 'Cmd+W',
   'rename-file': 'Cmd+Shift+R',
+  'move-file': 'Cmd+M',
   'open-settings': 'Cmd+,',
   'go-to-line': 'Cmd+G',
   'toggle-mindmap': 'Cmd+Shift+M',
@@ -102,8 +124,60 @@ export function matchesShortcut(e: KeyboardEvent, shortcut: string): boolean {
   let eventKey = e.key;
   if (eventKey === ' ') eventKey = 'Space';
 
-  // Case-insensitive key match
-  return eventKey.toLowerCase() === key.toLowerCase();
+  if (eventKey.toLowerCase() === key.toLowerCase()) return true;
+
+  // macOS: Option+<digit/letter> produces special glyphs in e.key (⌥1 → "¡",
+  // ⌥a → "å"). Fall back to e.code so the physical-key shortcut still matches.
+  const code = (e as KeyboardEvent & { code?: string }).code;
+  if (code) {
+    if (/^[0-9]$/.test(key) && code === `Digit${key}`) return true;
+    if (/^[a-zA-Z]$/.test(key) && code === `Key${key.toUpperCase()}`) return true;
+  }
+  return false;
+}
+
+const IS_MAC = typeof navigator !== 'undefined'
+  && /mac|iphone|ipad|ipod/i.test(navigator.userAgent || '');
+
+/**
+ * Render a canonical shortcut string ("Cmd+Alt+1") in a platform-native way:
+ *   - macOS: Apple symbols in Apple order — "⌥⌘1", "⇧⌘P"
+ *   - Other: Cmd is shown as "Ctrl" — "Ctrl+Alt+1"
+ *
+ * Shortcuts are always STORED in the canonical "Cmd+Alt+Key" form; this
+ * helper is only for display.
+ */
+export function formatShortcut(shortcut: string): string {
+  if (!shortcut) return '';
+  const parts = shortcut.split('+');
+  const rawKey = parts[parts.length - 1];
+  const mods = new Set(parts.slice(0, -1).map(m => m.toLowerCase()));
+
+  const keyLabel =
+    rawKey === 'Space' ? '␣' :
+    rawKey === 'ArrowUp' ? '↑' :
+    rawKey === 'ArrowDown' ? '↓' :
+    rawKey === 'ArrowLeft' ? '←' :
+    rawKey === 'ArrowRight' ? '→' :
+    rawKey === 'Escape' ? 'Esc' :
+    rawKey;
+
+  if (IS_MAC) {
+    // Apple order: Control ⌃ · Option ⌥ · Shift ⇧ · Command ⌘ · Key — no separators
+    let s = '';
+    if (mods.has('ctrl')) s += '⌃';
+    if (mods.has('alt')) s += '⌥';
+    if (mods.has('shift')) s += '⇧';
+    if (mods.has('cmd')) s += '⌘';
+    return s + keyLabel;
+  }
+
+  const out: string[] = [];
+  if (mods.has('cmd') || mods.has('ctrl')) out.push('Ctrl');
+  if (mods.has('alt')) out.push('Alt');
+  if (mods.has('shift')) out.push('Shift');
+  out.push(keyLabel);
+  return out.join('+');
 }
 
 // Lazy reference to the i18n `t` function. We can't import it eagerly because
