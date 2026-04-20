@@ -24,11 +24,20 @@
     onClose,
   }: Props = $props();
 
+  // Prop values are intentionally snapshot once on mount so user edits
+  // aren't clobbered if the parent re-renders with the same initialX.
+  /* eslint-disable svelte/valid-compile */
+  // svelte-ignore state_referenced_locally
   let name = $state(initialName);
+  // svelte-ignore state_referenced_locally
   let mode = $state<TemplateMode>(initialMode);
+  // svelte-ignore state_referenced_locally
   let defaultFilename = $state(initialDefaultFilename);
+  // svelte-ignore state_referenced_locally
   let description = $state(initialDescription);
+  // svelte-ignore state_referenced_locally
   let body = $state(initialBody);
+  /* eslint-enable svelte/valid-compile */
   let error = $state<string>('');
   let saving = $state(false);
 

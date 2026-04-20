@@ -243,9 +243,11 @@
 <!-- Context menu -->
 {#if ctxMenu}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     class="tmpl-ctx-menu"
     role="menu"
+    tabindex="-1"
     data-testid="template-ctx-menu"
     style="left: {ctxMenu.x}px; top: {ctxMenu.y}px;"
     onclick={(e) => e.stopPropagation()}

@@ -61,6 +61,7 @@
 {#if selected && palette.length > 0}
   <NodeToolbar position={Position.Top} offset={8} isVisible>
     <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div class="palette nodrag nopan" onmousedown={stopMouse} onclick={stopMouse}>
       {#each palette as c}
         <button

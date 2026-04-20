@@ -2,6 +2,8 @@
   import { projectStore, type FileNode } from '$lib/stores/project.svelte';
   import { tabsStore } from '$lib/stores/tabs.svelte';
   import { compareByMode } from '$lib/utils/file-sort';
+  // Self-import replaces <svelte:self> (deprecated in Svelte 5).
+  import FileTreeNode from './FileTreeNode.svelte';
 
   interface Props {
     node: FileNode;
@@ -46,6 +48,7 @@
   <div
     role="treeitem"
     aria-expanded={node.expanded}
+    aria-selected={false}
     tabindex="0"
     class="tree-row tree-dir"
     class:drag-over={node.dragOver}
@@ -78,7 +81,7 @@
 
   {#if node.expanded && node.children}
     {#each sortChildren(node.children) as child (child.path)}
-      <svelte:self
+      <FileTreeNode
         node={child}
         depth={depth + 1}
         {onContextMenu}
@@ -113,6 +116,8 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     role="treeitem"
+    aria-selected={false}
+    tabindex="-1"
     class="tree-row tree-file tree-disabled"
     style="padding-left: {indentPx + 16}px;"
     oncontextmenu={(e) => onContextMenu(e, node)}

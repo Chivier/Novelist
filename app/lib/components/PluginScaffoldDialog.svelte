@@ -46,7 +46,7 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="scaffold-overlay" onkeydown={onKeydown} role="dialog" aria-modal="true">
+<div class="scaffold-overlay" onkeydown={onKeydown} role="dialog" aria-modal="true" tabindex="-1">
   <div class="scaffold-panel" data-testid="plugin-scaffold-dialog">
     <h4 class="scaffold-title">{t('settings.plugins.scaffold.title')}</h4>
 
