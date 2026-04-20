@@ -19,7 +19,27 @@
 
   let { onClose }: Props = $props();
 
-  let activeSection = $state<'editor' | 'theme' | 'shortcuts' | 'templates' | 'plugins' | 'sync'>('editor');
+  let activeSection = $state<string>('editor');
+  let pluginSettingsComponents = $state<Record<string, import('svelte').Component>>({});
+
+  async function ensurePluginSettingsLoaded(pluginId: string) {
+    if (pluginSettingsComponents[pluginId]) return;
+    const entry = pluginSettings.get(pluginId);
+    if (!entry) return;
+    try {
+      const mod = await entry.load();
+      pluginSettingsComponents = { ...pluginSettingsComponents, [pluginId]: mod.default };
+    } catch (e) {
+      console.error(`[settings] failed to load ${pluginId} settings:`, e);
+    }
+  }
+
+  $effect(() => {
+    if (activeSection.startsWith('plugin:')) {
+      const id = activeSection.slice('plugin:'.length);
+      void ensurePluginSettingsLoaded(id);
+    }
+  });
 
   // Editor settings
   const fontOptions = [
@@ -244,9 +264,7 @@
 
   function openPluginSettings(pluginId: string) {
     if (!pluginSettings.has(pluginId)) return;
-    requestOpenPanelSettings(pluginId);
-    extensionStore.openPanel(pluginId);
-    onClose();
+    activeSection = `plugin:${pluginId}`;
   }
 
   async function togglePluginEnabled(plugin: PluginInfo) {
@@ -545,9 +563,22 @@
           class="text-left px-4 py-2 text-sm cursor-pointer"
           data-testid="settings-section-{section.id}"
           style="background: {activeSection === section.id ? 'var(--novelist-sidebar-active)' : 'transparent'}; color: {activeSection === section.id ? 'var(--novelist-accent)' : 'var(--novelist-text)'}; border: none; font-weight: {activeSection === section.id ? '600' : '400'};"
-          onclick={() => activeSection = section.id as any}
+          onclick={() => activeSection = section.id}
         >{section.label}</button>
       {/each}
+
+      {#if pluginSettings.list().length > 0}
+        <div class="mt-2 px-4 py-1 text-[10px] uppercase tracking-wide" style="color: var(--novelist-text-secondary); opacity: 0.7;">Plugin settings</div>
+        {#each pluginSettings.list() as entry}
+          {@const sectionId = `plugin:${entry.pluginId}`}
+          <button
+            class="text-left px-4 py-2 text-sm cursor-pointer"
+            data-testid="settings-section-{sectionId}"
+            style="background: {activeSection === sectionId ? 'var(--novelist-sidebar-active)' : 'transparent'}; color: {activeSection === sectionId ? 'var(--novelist-accent)' : 'var(--novelist-text)'}; border: none; font-weight: {activeSection === sectionId ? '600' : '400'};"
+            onclick={() => activeSection = sectionId}
+          >{entry.label ?? entry.pluginId}</button>
+        {/each}
+      {/if}
 
       <div class="flex-1"></div>
       <button
@@ -1177,6 +1208,31 @@
           <div class="mt-3 text-xs" style="color: var(--novelist-text-secondary);">
             {t('settings.sync.syncPath')} <code style="background: var(--novelist-code-bg); padding: 1px 4px; border-radius: 3px;">{"<webdav-url>/novelist/<project-name>/"}</code>
           </div>
+        {/if}
+
+      {:else if activeSection.startsWith('plugin:')}
+        {@const pluginId = activeSection.slice('plugin:'.length)}
+        {@const entry = pluginSettings.get(pluginId)}
+        <div class="flex items-center gap-3 mb-4">
+          <h3 class="text-xs font-semibold uppercase tracking-wide flex-1" style="color: var(--novelist-text-secondary);">
+            {entry?.label ?? pluginId}
+          </h3>
+          {#if entry?.panelId}
+            <button
+              type="button"
+              class="text-xs px-2 py-1 rounded cursor-pointer"
+              style="border: 1px solid var(--novelist-border); background: var(--novelist-bg-secondary); color: var(--novelist-text);"
+              data-testid="open-in-panel-{pluginId}"
+              onclick={() => { if (entry?.panelId) { extensionStore.openPanel(entry.panelId); onClose(); } }}
+              title="Close this dialog and open the panel itself (settings are also embedded there)"
+            >Open in panel →</button>
+          {/if}
+        </div>
+        {#if pluginSettingsComponents[pluginId]}
+          {@const Comp = pluginSettingsComponents[pluginId]}
+          <Comp />
+        {:else}
+          <div class="text-xs" style="color: var(--novelist-text-secondary);">Loading settings…</div>
         {/if}
       {/if}
     </div>
