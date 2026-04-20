@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { aiTalkSettings } from './settings.svelte';
   import {
     getEditorSnapshot,
@@ -250,6 +250,13 @@
       sessionStorage.removeItem('novelist:ai-talk:open-settings');
       settingsOpen = true;
     }
+  });
+
+  // Cancel any in-flight streams when the panel unmounts so the Rust task
+  // exits and the Tauri listener gets cleaned up via the iterator's finally.
+  onDestroy(() => {
+    if (chatStreamId) void cancelAiStream(chatStreamId).catch(() => {});
+    if (rewriteStreamId) void cancelAiStream(rewriteStreamId).catch(() => {});
   });
 </script>
 
