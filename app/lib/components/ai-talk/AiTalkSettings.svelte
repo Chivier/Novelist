@@ -2,9 +2,36 @@
   import { aiTalkSettings } from './settings.svelte';
 
   let { compact = false }: { compact?: boolean } = $props();
+
+  const PRESETS = [
+    { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+    { id: 'anthropic', label: 'Anthropic', baseUrl: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-5' },
+    { id: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+    { id: 'groq', label: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
+    { id: 'openrouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini' },
+    { id: 'ollama', label: 'Ollama (local)', baseUrl: 'http://localhost:11434/v1', model: 'llama3.2' },
+  ];
+
+  function applyPreset(id: string) {
+    const p = PRESETS.find((x) => x.id === id);
+    if (!p) return;
+    aiTalkSettings.update({ baseUrl: p.baseUrl, model: p.model });
+  }
 </script>
 
 <div class="ai-talk-settings" class:compact>
+  <div class="presets full">
+    <span class="preset-label">Quick preset:</span>
+    {#each PRESETS as p}
+      <button
+        type="button"
+        class="preset-chip"
+        data-testid="ai-talk-preset-{p.id}"
+        onclick={() => applyPreset(p.id)}
+        title="{p.baseUrl} · {p.model}"
+      >{p.label}</button>
+    {/each}
+  </div>
   <label>
     <span>Base URL</span>
     <input
@@ -117,5 +144,31 @@
     margin: 0;
     font-size: 11px;
     color: var(--novelist-text-secondary);
+  }
+  .presets {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .preset-label {
+    font-size: 11px;
+    color: var(--novelist-text-secondary);
+    margin-right: 4px;
+  }
+  .preset-chip {
+    background: var(--novelist-bg);
+    border: 1px solid var(--novelist-border);
+    color: var(--novelist-text-secondary);
+    padding: 2px 8px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 11px;
+    transition: background 80ms, color 80ms;
+  }
+  .preset-chip:hover {
+    background: color-mix(in srgb, var(--novelist-accent) 15%, var(--novelist-bg));
+    color: var(--novelist-accent);
+    border-color: color-mix(in srgb, var(--novelist-accent) 50%, transparent);
   }
 </style>

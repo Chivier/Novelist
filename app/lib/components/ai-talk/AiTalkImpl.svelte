@@ -7,6 +7,7 @@
     startAiStream,
     cancelAiStream,
     aiStream,
+    type EditorSnapshot,
   } from './host';
   import { buildChatRequest, parseChatDelta, type ChatMessage } from './openai';
   import AiTalkSettings from './AiTalkSettings.svelte';
@@ -14,6 +15,26 @@
   type Tab = 'chat' | 'rewrite';
   let activeTab = $state<Tab>('chat');
   let settingsOpen = $state(false);
+
+  // -------- Live editor selection (poll 300ms) --------
+  // Shows a selection chip above the composer so the user knows their
+  // current selection will be passed as context on the next send.
+  // Dismissing the chip disables injection for the *next* turn only.
+
+  let liveSnapshot = $state<EditorSnapshot | null>(null);
+  let suppressSelectionOnce = $state(false);
+  let selectionTimer: ReturnType<typeof setInterval> | null = null;
+
+  function refreshLiveSnapshot() {
+    const s = getEditorSnapshot();
+    // Only track non-empty selections.
+    liveSnapshot = s && s.text.length > 0 ? s : null;
+  }
+
+  function clearSelectionContextOnce() {
+    suppressSelectionOnce = true;
+    liveSnapshot = null;
+  }
 
   // ------------------------------- Chat -------------------------------
 
@@ -53,13 +74,14 @@
     }
 
     const snap = getEditorSnapshot();
+    const includeSelection = s.includeSelection && !suppressSelectionOnce;
     if (snap) {
       if (s.includeCurrentFile && snap.fullDoc.trim()) {
         ctx.push({
           role: 'user',
           content: `The user is currently editing "${snap.filePath ?? 'untitled'}". Document contents:\n\n${snap.fullDoc}`,
         });
-      } else if (s.includeSelection && snap.text.trim()) {
+      } else if (includeSelection && snap.text.trim()) {
         ctx.push({
           role: 'user',
           content: `Selected text the user is asking about:\n\n${snap.text}`,
@@ -71,6 +93,8 @@
       ctx.push({ role: m.role, content: m.content });
     }
     ctx.push({ role: 'user', content: userText });
+    // Reset single-turn suppression after use.
+    suppressSelectionOnce = false;
     return ctx;
   }
 
@@ -168,15 +192,24 @@
 
   function captureSelection() {
     rewriteError = '';
-    const snap = getEditorSnapshot();
+    // Prefer the freshest reading, but fall back to the last polled snapshot.
+    const snap = getEditorSnapshot() ?? liveSnapshot;
     if (!snap || !snap.text.trim()) {
-      rewriteError = 'No text selected in the editor.';
+      rewriteError = 'Select text in the editor first, then try again.';
       rewriteSnap = null;
       return;
     }
     rewriteSnap = { from: snap.from, to: snap.to, original: snap.text };
     rewriteOutput = '';
   }
+
+  // Auto-capture selection when switching into the Rewrite tab if there's
+  // no active rewrite in progress and the user has selected something.
+  $effect(() => {
+    if (activeTab === 'rewrite' && !rewriteSnap && !rewriteOutput && liveSnapshot && liveSnapshot.text.trim()) {
+      rewriteSnap = { from: liveSnapshot.from, to: liveSnapshot.to, original: liveSnapshot.text };
+    }
+  });
 
   async function runRewrite() {
     if (!rewriteSnap || !rewriteInstr.trim() || rewriteStreaming) return;
@@ -250,6 +283,8 @@
       sessionStorage.removeItem('novelist:ai-talk:open-settings');
       settingsOpen = true;
     }
+    refreshLiveSnapshot();
+    selectionTimer = setInterval(refreshLiveSnapshot, 300);
   });
 
   // Cancel any in-flight streams when the panel unmounts so the Rust task
@@ -257,6 +292,7 @@
   onDestroy(() => {
     if (chatStreamId) void cancelAiStream(chatStreamId).catch(() => {});
     if (rewriteStreamId) void cancelAiStream(rewriteStreamId).catch(() => {});
+    if (selectionTimer) clearInterval(selectionTimer);
   });
 </script>
 
@@ -276,9 +312,9 @@
   {/if}
 
   {#if activeTab === 'chat'}
-    <div class="chat" bind:this={chatScroller}>
+    <div class="chat" data-testid="ai-talk-chat" bind:this={chatScroller}>
       {#each messages as m, i (i)}
-        <div class="msg {m.role}">
+        <div class="msg {m.role}" data-testid="ai-talk-msg-{m.role}">
           <div class="role">{m.role === 'user' ? 'You' : 'Assistant'}</div>
           <div class="content">{m.content}</div>
         </div>
@@ -289,8 +325,25 @@
         </div>
       {/if}
     </div>
-    <div class="composer">
+    <div class="composer" data-testid="ai-talk-composer">
+      {#if liveSnapshot && !suppressSelectionOnce && aiTalkSettings.value.includeSelection}
+        <div class="selection-chip" data-testid="selection-chip">
+          <span class="chip-icon">📝</span>
+          <span class="chip-label">
+            Selection · {liveSnapshot.text.length} chars
+          </span>
+          <span class="chip-preview">{liveSnapshot.text.slice(0, 80)}{liveSnapshot.text.length > 80 ? '…' : ''}</span>
+          <button
+            type="button"
+            class="chip-close"
+            title="Don't use this selection for the next message"
+            aria-label="Remove selection context"
+            onclick={clearSelectionContextOnce}
+          >✕</button>
+        </div>
+      {/if}
       <textarea
+        data-testid="ai-talk-input"
         rows="3"
         placeholder="Ask anything…"
         value={chatInput}
@@ -300,9 +353,9 @@
       <div class="composer-actions">
         <button class="ghost" onclick={clearChat} disabled={chatStreaming}>Clear</button>
         {#if chatStreaming}
-          <button class="primary" onclick={cancelChat}>Stop</button>
+          <button class="primary" data-testid="ai-talk-stop" onclick={cancelChat}>Stop</button>
         {:else}
-          <button class="primary" onclick={sendChat} disabled={!chatInput.trim()}>Send</button>
+          <button class="primary" data-testid="ai-talk-send" onclick={sendChat} disabled={!chatInput.trim()}>Send</button>
         {/if}
       </div>
     </div>
@@ -470,6 +523,42 @@
     font: inherit;
     resize: vertical;
   }
+  .selection-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: color-mix(in srgb, var(--novelist-accent) 10%, var(--novelist-bg));
+    border: 1px solid color-mix(in srgb, var(--novelist-accent) 40%, transparent);
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--novelist-text);
+  }
+  .chip-icon { flex-shrink: 0; }
+  .chip-label {
+    font-weight: 500;
+    color: var(--novelist-accent);
+    flex-shrink: 0;
+  }
+  .chip-preview {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--novelist-text-secondary);
+    flex: 1;
+    min-width: 0;
+  }
+  .chip-close {
+    background: none;
+    border: none;
+    color: var(--novelist-text-secondary);
+    cursor: pointer;
+    padding: 0 4px;
+    font-size: 14px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .chip-close:hover { color: var(--novelist-text); }
   .composer-actions {
     display: flex;
     justify-content: flex-end;
