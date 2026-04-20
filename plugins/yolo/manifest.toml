@@ -1,0 +1,12 @@
+[plugin]
+id = "yolo"
+name = "YOLO"
+version = "0.1.0"
+description = "Chat + inline rewrite powered by any OpenAI-compatible endpoint"
+author = "Novelist Team"
+permissions = ["read", "write", "ui", "ai:http"]
+
+[ui]
+type = "panel"
+entry = "index.html"
+label = "YOLO"
