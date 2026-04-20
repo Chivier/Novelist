@@ -10,6 +10,7 @@
     type EditorSnapshot,
   } from './host';
   import { buildChatRequest, parseChatDelta, type ChatMessage } from './openai';
+  import { cancelPendingStreams } from './cleanup';
   import AiTalkSettings from './AiTalkSettings.svelte';
 
   type Tab = 'chat' | 'rewrite';
@@ -290,8 +291,7 @@
   // Cancel any in-flight streams when the panel unmounts so the Rust task
   // exits and the Tauri listener gets cleaned up via the iterator's finally.
   onDestroy(() => {
-    if (chatStreamId) void cancelAiStream(chatStreamId).catch(() => {});
-    if (rewriteStreamId) void cancelAiStream(rewriteStreamId).catch(() => {});
+    cancelPendingStreams([chatStreamId, rewriteStreamId], cancelAiStream);
     if (selectionTimer) clearInterval(selectionTimer);
   });
 </script>
