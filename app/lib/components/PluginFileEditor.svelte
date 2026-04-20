@@ -4,13 +4,34 @@
   import { commands } from '$lib/ipc/commands';
   import { uiStore } from '$lib/stores/ui.svelte';
   import { t } from '$lib/i18n';
+  import { createPluginPanelBridge, type PluginPanelBridge } from '$lib/services/plugin-panel-bridge';
 
   let { extension, paneId = 'pane-1' }: { extension: UIExtension; paneId?: string } = $props();
 
   let iframeEl = $state<HTMLIFrameElement | undefined>(undefined);
   let loaded = $state(false);
+  let bridge: PluginPanelBridge | null = null;
 
   let tab = $derived(tabsStore.getPaneActiveTab(paneId));
+
+  $effect(() => {
+    if (!iframeEl) return;
+    void (async () => {
+      if (bridge) {
+        await bridge.destroy();
+        bridge = null;
+      }
+      bridge = await createPluginPanelBridge({
+        iframe: iframeEl!,
+        pluginId: extension.pluginId,
+        permissions: extension.permissions,
+      });
+    })();
+    return () => {
+      void bridge?.destroy();
+      bridge = null;
+    };
+  });
 
   // Send file content to plugin when tab changes or iframe loads
   $effect(() => {

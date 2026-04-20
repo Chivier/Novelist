@@ -8,6 +8,8 @@ export interface UIExtension {
   entryUrl: string;
   width?: number;
   fileExtensions?: string[];
+  /** Permission tokens declared by the plugin manifest (forwarded to the bridge for gating). */
+  permissions: string[];
 }
 
 class ExtensionStore {
@@ -35,6 +37,7 @@ class ExtensionStore {
           entryUrl,
           width: plugin.ui.width ?? undefined,
           fileExtensions: plugin.ui.file_extensions ?? undefined,
+          permissions: plugin.permissions ?? [],
         };
 
         if (ext.type === 'panel') {

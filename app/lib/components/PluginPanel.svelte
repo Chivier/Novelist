@@ -2,15 +2,18 @@
   import type { UIExtension } from '$lib/stores/extensions.svelte';
   import { tabsStore, getEditorView } from '$lib/stores/tabs.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
+  import { createPluginPanelBridge, type PluginPanelBridge } from '$lib/services/plugin-panel-bridge';
 
   let { extension, onNavigate }: { extension: UIExtension; onNavigate?: (from: number) => void } = $props();
 
   let iframeEl = $state<HTMLIFrameElement | undefined>(undefined);
+  let loaded = $state(false);
+  let bridge: PluginPanelBridge | null = null;
 
   // Send content updates to the plugin iframe
   $effect(() => {
     const tab = tabsStore.activeTab;
-    if (!tab || !iframeEl?.contentWindow) return;
+    if (!tab || !iframeEl?.contentWindow || !loaded) return;
     const view = getEditorView(tab.id);
     const content = view?.state.doc.toString() ?? tab.content ?? '';
     iframeEl.contentWindow.postMessage({ type: 'content-update', content }, '*');
@@ -20,7 +23,7 @@
   $effect(() => {
     // Track theme changes
     const _theme = uiStore.themeId;
-    if (!iframeEl?.contentWindow) return;
+    if (!iframeEl?.contentWindow || !loaded) return;
     const styles = getComputedStyle(document.documentElement);
     const vars: Record<string, string> = {};
     for (const prop of ['--novelist-bg', '--novelist-bg-secondary', '--novelist-text', '--novelist-text-secondary', '--novelist-accent', '--novelist-border']) {
@@ -29,16 +32,28 @@
     iframeEl.contentWindow.postMessage({ type: 'theme-update', theme: vars }, '*');
   });
 
-  function handleMessage(event: MessageEvent) {
-    if (event.source !== iframeEl?.contentWindow) return;
-    const data = event.data;
-    if (data?.type === 'navigate' && typeof data.position === 'number') {
-      onNavigate?.(data.position);
+  async function attachBridge() {
+    if (!iframeEl) return;
+    if (bridge) {
+      await bridge.destroy();
+      bridge = null;
     }
+    bridge = await createPluginPanelBridge({
+      iframe: iframeEl,
+      pluginId: extension.pluginId,
+      permissions: extension.permissions,
+      onNavigate,
+    });
   }
-</script>
 
-<svelte:window onmessage={handleMessage} />
+  $effect(() => {
+    void attachBridge();
+    return () => {
+      void bridge?.destroy();
+      bridge = null;
+    };
+  });
+</script>
 
 <div class="plugin-panel">
   <!--
@@ -50,6 +65,7 @@
     bind:this={iframeEl}
     src={extension.entryUrl}
     title={extension.label}
+    onload={() => loaded = true}
   ></iframe>
 </div>
 
