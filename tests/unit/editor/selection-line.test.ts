@@ -37,7 +37,7 @@ function summarize(doc: Text, selection: EditorSelection): DecoSummary[] {
   return out;
 }
 
-describe('buildSelectionDecorations', () => {
+describe('[precision][regression] buildSelectionDecorations', () => {
   it('emits nothing for an empty (caret) selection', () => {
     const doc = docFrom('hello world');
     const sel = EditorSelection.single(3);
