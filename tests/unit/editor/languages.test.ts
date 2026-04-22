@@ -48,4 +48,18 @@ describe('[precision] codeLanguages', () => {
   it('returns null for an unknown alias', () => {
     expect(LanguageDescription.matchLanguageName(codeLanguages, 'brainfuck')).toBeNull();
   });
+
+  it('every lazy `load` resolves to a LanguageSupport (or language-like) value', async () => {
+    // Resolving every import is heavy but it's the only way coverage sees each
+    // `load` arrow. Run in parallel so the whole thing stays under a second.
+    const results = await Promise.all(codeLanguages.map(async (desc) => {
+      const support = await desc.load();
+      return support;
+    }));
+    for (const r of results) {
+      expect(r).toBeDefined();
+      // LanguageSupport from CM6 exposes `language` and `extension`.
+      expect((r as any).language || (r as any).extension).toBeDefined();
+    }
+  });
 });
