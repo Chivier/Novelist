@@ -5,6 +5,63 @@ All notable changes to Novelist will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-04-22
+
+Second minor release. Focuses on AI-assisted writing (multi-session
+AI Talk + AI Agent panels, prompt-preset library) and a hardened test
+foundation (three-tier hierarchy, describe-tag discipline, coverage
+campaign with enforced floors). Also ships a from-scratch SVG icon
+system and a rewritten selection-background subsystem.
+
+### Added
+- **AI Talk** — multi-session chat panel with preset picker, per-session
+  conversation state, save-as-Markdown to current project
+- **AI Agent** — multi-session UI with per-session Claude CLI
+  subprocess, save-chat-to-project action
+- **Prompt preset manager** — full CRUD UI in Settings, stored per
+  project; shared by Talk and Agent panels
+- **Keyboard shortcuts for AI panels** — toggle / new-session / save-chat
+  wired through the single `app-commands.ts` dispatch map
+- **Icon system** — hand-rolled SVG component batch replacing emoji
+  across the UI (Batch-1 spec in `docs/design/icon-batch-1-spec.md`)
+- **Three-tier test hierarchy** — `tests/unit/`, `tests/integration/`,
+  `tests/e2e/` split with vitest projects + fixtures skeleton
+- **`[precision]` / `[contract]` / `[regression]` / `[smoke]`
+  describe-tag convention** — documented in
+  `docs/architecture/testing-precision.md`, applied to starter set
+- **Coverage governance** — `@vitest/coverage-v8` pipeline, baseline
+  capture, waiver registry (`tests/COVERAGE.md`), CI artifact upload
+- **Enforced coverage floors** — stmt 73 / branch 67 / func 75 / line 75
+  (campaign raised ~160 new tests across stores, composables, editor,
+  services, utils, app-root)
+- **Extracted pure decoration builders** — `buildSelectionDecorations`
+  and friends exposed for precision-level unit testing
+
+### Changed
+- **Selection highlight rewrite** — three-layer paint system (line
+  decoration + native `::selection` + suppression inside selected
+  lines) with specificity override for CM6's `hideNativeSelection`
+  internal theme. See the "Unified selection background" section of
+  `docs/architecture/editor.md` before touching this subsystem
+- **Test runtime split** — previous `tests/unit/**` reorganised; pure
+  logic stays in unit, anything that boots a View or DOM moved to
+  integration
+- Runtime/integration-leaning suites migrated out of `unit/` per the
+  new hierarchy spec
+
+### Fixed
+- **Partial-character selection color mismatch** — partial ranges and
+  full-line ranges now render at the same 18% accent tint
+- **Wrapped partial selection ragged right edge** — continuation rows
+  of a wrapped selection now fill to the container right edge via
+  native `::selection` instead of fragmented `<span>` backgrounds
+- **Invisible partial selections** — overcome CM6's
+  `hideNativeSelection` at `Prec.highest` by bumping our rule's CSS
+  specificity to `(0,3,1)` plus `!important`
+- **Precise character-range selection background** — earlier fix for
+  the original paint-whole-line regression that motivated the
+  test-hierarchy and precision-testing work
+
 ## [0.1.0] - 2026-04-17
 
 First minor release. Consolidates all 0.0.5+ work into a feature-complete
