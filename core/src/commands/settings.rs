@@ -157,7 +157,7 @@ pub async fn write_project_settings(
 #[cfg(test)]
 mod tests {
     use super::*;
-        use tempfile::TempDir;
+    use tempfile::TempDir;
 
     fn write_minimal_project(dir: &TempDir, overlay_toml: &str) {
         let novelist_dir = dir.path().join(".novelist");

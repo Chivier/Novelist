@@ -468,7 +468,11 @@ pub(crate) async fn rename_item_inner(
     if new_path.exists() && new_path != old {
         if allow_collision_bump.unwrap_or(false) {
             let p = std::path::Path::new(&safe_name);
-            let stem = p.file_stem().unwrap_or_default().to_string_lossy().to_string();
+            let stem = p
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
             let ext = p
                 .extension()
                 .map(|e| format!(".{}", e.to_string_lossy()))
@@ -491,7 +495,10 @@ pub(crate) async fn rename_item_inner(
 
     // Canonicalize the OLD path BEFORE the rename -- after the rename, the old
     // file no longer exists and canonicalize would fail.
-    let old_canon = old.canonicalize().ok().map(|p| p.to_string_lossy().to_string());
+    let old_canon = old
+        .canonicalize()
+        .ok()
+        .map(|p| p.to_string_lossy().to_string());
     // Suppress the imminent file-watcher events for the old and new paths so
     // the frontend doesn't reload the file (which would lose editor state).
     crate::services::file_watcher::register_rename_ignore(
@@ -501,7 +508,10 @@ pub(crate) async fn rename_item_inner(
     .await;
     tokio::fs::rename(&old, &new_path).await?;
     // Canonicalize the NEW path AFTER the rename so the target exists.
-    let new_canon = new_path.canonicalize().ok().map(|p| p.to_string_lossy().to_string());
+    let new_canon = new_path
+        .canonicalize()
+        .ok()
+        .map(|p| p.to_string_lossy().to_string());
     if let (Some(o), Some(n)) = (old_canon, new_canon) {
         migrate_encoding_state(encoding_state, &o, &n);
     }
@@ -865,13 +875,11 @@ mod tests {
         assert!(names.contains(&"a.md"));
         assert!(names.contains(&"b.md"));
         assert!(!names.contains(&".hidden"));
-        assert!(
-            entries
-                .iter()
-                .find(|e| e.name == "chapters")
-                .map(|e| e.is_dir)
-                .unwrap_or(false)
-        );
+        assert!(entries
+            .iter()
+            .find(|e| e.name == "chapters")
+            .map(|e| e.is_dir)
+            .unwrap_or(false));
         assert!(
             entries.iter().any(|e| e.mtime.is_some()),
             "at least one entry should have mtime"
@@ -957,14 +965,12 @@ mod tests {
         let dir = TempDir::new().unwrap();
         fs::write(dir.path().join("a.md"), "").unwrap();
         fs::write(dir.path().join(".hidden"), "").unwrap();
-        let none_entries =
-            list_directory(dir.path().to_string_lossy().to_string(), None)
-                .await
-                .unwrap();
-        let false_entries =
-            list_directory(dir.path().to_string_lossy().to_string(), Some(false))
-                .await
-                .unwrap();
+        let none_entries = list_directory(dir.path().to_string_lossy().to_string(), None)
+            .await
+            .unwrap();
+        let false_entries = list_directory(dir.path().to_string_lossy().to_string(), Some(false))
+            .await
+            .unwrap();
         let n: Vec<&str> = none_entries.iter().map(|e| e.name.as_str()).collect();
         let f: Vec<&str> = false_entries.iter().map(|e| e.name.as_str()).collect();
         assert_eq!(n, f);
@@ -1042,8 +1048,8 @@ mod tests {
             None,
             &state,
         )
-            .await
-            .unwrap();
+        .await
+        .unwrap();
         assert!(!old_path.exists());
         assert!(Path::new(&new_path).exists());
         assert_eq!(fs::read_to_string(&new_path).unwrap(), "content");
@@ -1057,7 +1063,8 @@ mod tests {
             "new.md".to_string(),
             None,
             &state,
-        ).await;
+        )
+        .await;
         assert!(result.is_err());
     }
 
@@ -1092,7 +1099,9 @@ mod tests {
             "target.md".to_string(),
             Some(true),
             &state,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
         assert!(result.ends_with("target 3.md"));
         assert!(!src.exists());
     }
@@ -1110,7 +1119,8 @@ mod tests {
             "target.md".to_string(),
             Some(false),
             &state,
-        ).await;
+        )
+        .await;
         assert!(result.is_err());
         assert!(src.exists());
     }
@@ -1224,7 +1234,10 @@ mod tests {
         .unwrap();
 
         assert!(new_path.ends_with("Makefile 2"));
-        assert_eq!(fs::read_to_string(subdir.join("Makefile")).unwrap(), "existing");
+        assert_eq!(
+            fs::read_to_string(subdir.join("Makefile")).unwrap(),
+            "existing"
+        );
         assert_eq!(fs::read_to_string(&new_path).unwrap(), "src");
     }
 
@@ -1479,7 +1492,11 @@ mod tests {
         // Simulate rename
         tokio::fs::rename(&src, &new_path_raw).await.unwrap();
 
-        let canonical_new = new_path_raw.canonicalize().unwrap().to_string_lossy().to_string();
+        let canonical_new = new_path_raw
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
 
         migrate_encoding_state(&state, &old_copy, &canonical_new);
 

@@ -33,7 +33,8 @@ fn recent_projects_path() -> PathBuf {
 pub fn sort_projects(projects: &mut [RecentProject]) {
     projects.sort_by(|a, b| {
         // Pinned first.
-        b.pinned.cmp(&a.pinned)
+        b.pinned
+            .cmp(&a.pinned)
             // Then by sort_order ASC; None sorts after Some.
             .then_with(|| match (a.sort_order, b.sort_order) {
                 (Some(x), Some(y)) => x.cmp(&y),
@@ -102,7 +103,10 @@ pub async fn add_recent_project(path: String, name: String) -> Result<(), AppErr
     let mut projects = read_projects().await;
 
     // Preserve pin / sort_order if the project already exists.
-    let existing_pin = projects.iter().find(|p| p.path == path).map(|p| (p.pinned, p.sort_order));
+    let existing_pin = projects
+        .iter()
+        .find(|p| p.path == path)
+        .map(|p| (p.pinned, p.sort_order));
     projects.retain(|p| p.path != path);
 
     let timestamp = SystemTime::now()
@@ -133,7 +137,9 @@ pub async fn add_recent_project(path: String, name: String) -> Result<(), AppErr
                 unpinned_count += 1;
                 kept.push(p);
             }
-            if kept.len() >= 20 { break; }
+            if kept.len() >= 20 {
+                break;
+            }
         }
         projects = kept;
     }
@@ -207,7 +213,10 @@ mod tests {
     fn sort_puts_pinned_first() {
         let mut projects = vec![
             mk("/a", "A", "100"),
-            RecentProject { pinned: true, ..mk("/b", "B", "50") },
+            RecentProject {
+                pinned: true,
+                ..mk("/b", "B", "50")
+            },
             mk("/c", "C", "200"),
         ];
         sort_projects(&mut projects);
@@ -220,9 +229,18 @@ mod tests {
     #[test]
     fn sort_order_overrides_last_opened_within_a_group() {
         let mut projects = vec![
-            RecentProject { sort_order: Some(2), ..mk("/a", "A", "300") },
-            RecentProject { sort_order: Some(0), ..mk("/b", "B", "100") },
-            RecentProject { sort_order: Some(1), ..mk("/c", "C", "200") },
+            RecentProject {
+                sort_order: Some(2),
+                ..mk("/a", "A", "300")
+            },
+            RecentProject {
+                sort_order: Some(0),
+                ..mk("/b", "B", "100")
+            },
+            RecentProject {
+                sort_order: Some(1),
+                ..mk("/c", "C", "200")
+            },
         ];
         sort_projects(&mut projects);
         assert_eq!(projects[0].path, "/b");
@@ -234,7 +252,10 @@ mod tests {
     fn projects_without_sort_order_sort_after_those_with_it() {
         let mut projects = vec![
             mk("/a", "A", "999"),
-            RecentProject { sort_order: Some(0), ..mk("/b", "B", "10") },
+            RecentProject {
+                sort_order: Some(0),
+                ..mk("/b", "B", "10")
+            },
         ];
         sort_projects(&mut projects);
         assert_eq!(projects[0].path, "/b", "explicit sort_order wins");
@@ -253,10 +274,15 @@ mod tests {
     #[test]
     fn add_preserves_existing_pin_state_on_reopen() {
         // Simulate the add_recent_project code path on the in-memory list.
-        let mut projects = vec![
-            RecentProject { pinned: true, sort_order: Some(3), ..mk("/a", "Old Name", "100") },
-        ];
-        let existing_pin = projects.iter().find(|p| p.path == "/a").map(|p| (p.pinned, p.sort_order));
+        let mut projects = vec![RecentProject {
+            pinned: true,
+            sort_order: Some(3),
+            ..mk("/a", "Old Name", "100")
+        }];
+        let existing_pin = projects
+            .iter()
+            .find(|p| p.path == "/a")
+            .map(|p| (p.pinned, p.sort_order));
         projects.retain(|p| p.path != "/a");
         projects.insert(
             0,
@@ -275,7 +301,7 @@ mod tests {
 
     #[test]
     fn pin_filter_skips_unknown_project() {
-        let mut projects = vec![mk("/a", "A", "100")];
+        let mut projects = [mk("/a", "A", "100")];
         // Simulate the set_project_pinned loop for a missing path.
         let mut found = false;
         for p in projects.iter_mut() {

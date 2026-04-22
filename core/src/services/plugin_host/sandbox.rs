@@ -35,7 +35,8 @@ impl PluginHostInner {
     /// Create the runtime on first demand.
     fn ensure_runtime(&mut self) -> Result<&Runtime, String> {
         if self.runtime.is_none() {
-            let rt = Runtime::new().map_err(|e| format!("Failed to create QuickJS runtime: {e}"))?;
+            let rt =
+                Runtime::new().map_err(|e| format!("Failed to create QuickJS runtime: {e}"))?;
             self.runtime = Some(rt);
         }
         Ok(self.runtime.as_ref().expect("runtime just set"))
@@ -102,8 +103,7 @@ impl PluginHostState {
 
         // Create a new context for this plugin (spins up QuickJS on first load).
         let runtime = inner.ensure_runtime()?;
-        let context =
-            Context::full(runtime).map_err(|e| format!("QuickJS context error: {e}"))?;
+        let context = Context::full(runtime).map_err(|e| format!("QuickJS context error: {e}"))?;
 
         // Inject the novelist API and run plugin code
         let pid = plugin_id.clone();

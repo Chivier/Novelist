@@ -229,11 +229,8 @@ pub fn build_menu<R: Runtime>(
     } else {
         let mut sub = SubmenuBuilder::new(app, &labels.open_recent);
         for entry in recent.iter().take(10) {
-            let item = MenuItemBuilder::with_id(
-                format!("open-recent:{}", entry.path),
-                &entry.name,
-            )
-            .build(app)?;
+            let item = MenuItemBuilder::with_id(format!("open-recent:{}", entry.path), &entry.name)
+                .build(app)?;
             sub = sub.item(&item);
         }
         sub.build()?
@@ -364,7 +361,11 @@ pub fn build_menu<R: Runtime>(
 
     // ── Help ─────────────────────────────────────────────────────────
     let help_menu = SubmenuBuilder::new(app, &labels.help_menu)
-        .items(&[&custom(app, "check-for-updates", &labels.check_for_updates)?])
+        .items(&[&custom(
+            app,
+            "check-for-updates",
+            &labels.check_for_updates,
+        )?])
         .build()?;
 
     MenuBuilder::new(app)

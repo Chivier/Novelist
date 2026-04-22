@@ -63,6 +63,12 @@ use tauri_specta::{collect_commands, Builder};
 /// frontend via `get_pending_open_files` on mount.
 pub struct PendingOpenFiles(Mutex<Vec<String>>);
 
+impl Default for PendingOpenFiles {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PendingOpenFiles {
     pub fn new() -> Self {
         Self(Mutex::new(Vec::new()))

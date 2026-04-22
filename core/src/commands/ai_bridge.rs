@@ -27,9 +27,14 @@ const MAX_BODY_BYTES: usize = 2 * 1024 * 1024; // 2 MB — guards against runawa
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum AiStreamEvent {
-    Chunk { data: String },
+    Chunk {
+        data: String,
+    },
     Done,
-    Error { message: String, status: Option<u16> },
+    Error {
+        message: String,
+        status: Option<u16>,
+    },
 }
 
 #[derive(Debug, Deserialize, Type)]
@@ -102,8 +107,7 @@ fn spawn_uuid() -> String {
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     let thread = std::thread::current().id();
-    format!("{now:x}-{thread:?}")
-        .replace(|c: char| !c.is_ascii_alphanumeric() && c != '-', "")
+    format!("{now:x}-{thread:?}").replace(|c: char| !c.is_ascii_alphanumeric() && c != '-', "")
 }
 
 #[tauri::command]

@@ -129,9 +129,9 @@ pub fn parse_template(raw: &str) -> Result<ParsedTemplate, AppError> {
     let mut lines = raw.split_inclusive('\n');
 
     // Open fence
-    let first = lines.next().ok_or_else(|| {
-        AppError::InvalidInput("template is empty (no front-matter)".into())
-    })?;
+    let first = lines
+        .next()
+        .ok_or_else(|| AppError::InvalidInput("template is empty (no front-matter)".into()))?;
     if first.trim_end_matches(['\n', '\r']) != "---" {
         return Err(AppError::InvalidInput(
             "template must start with --- (YAML front-matter fence)".into(),
@@ -338,11 +338,7 @@ fn summary_from_parsed(
     })
 }
 
-async fn read_one(
-    path: &Path,
-    id: &str,
-    source: TemplateSource,
-) -> Result<TemplateFile, AppError> {
+async fn read_one(path: &Path, id: &str, source: TemplateSource) -> Result<TemplateFile, AppError> {
     let raw = tokio::fs::read_to_string(path).await?;
     let parsed = parse_template(&raw)?;
     let summary = summary_from_parsed(id, source, &parsed)?;
@@ -454,15 +450,14 @@ pub async fn read_template_file(
             read_one(&path, &id, TemplateSource::Bundled).await
         }
         TemplateSource::Project => {
-            let pd = project_dir
-                .ok_or_else(|| AppError::InvalidInput("project_dir required for project templates".into()))?;
+            let pd = project_dir.ok_or_else(|| {
+                AppError::InvalidInput("project_dir required for project templates".into())
+            })?;
             let pd = PathBuf::from(pd);
             validate_project_dir(&pd)?;
             let path = project_templates_dir(&pd).join(format!("{id}.md"));
             if !path.exists() {
-                return Err(AppError::FileNotFound(format!(
-                    "project template {id}.md"
-                )));
+                return Err(AppError::FileNotFound(format!("project template {id}.md")));
             }
             read_one(&path, &id, TemplateSource::Project).await
         }
@@ -498,7 +493,9 @@ pub async fn write_template_file(
     let pd = PathBuf::from(&project_dir);
     validate_project_dir(&pd)?;
     if front_matter.name.trim().is_empty() {
-        return Err(AppError::InvalidInput("template name must not be empty".into()));
+        return Err(AppError::InvalidInput(
+            "template name must not be empty".into(),
+        ));
     }
     if matches!(front_matter.mode, TemplateMode::NewFile) {
         let empty = front_matter
@@ -561,10 +558,7 @@ pub async fn rename_template_file(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn delete_template_file(
-    project_dir: String,
-    id: String,
-) -> Result<(), AppError> {
+pub async fn delete_template_file(project_dir: String, id: String) -> Result<(), AppError> {
     validate_id(&id)?;
     let pd = PathBuf::from(&project_dir);
     validate_project_dir(&pd)?;
@@ -706,8 +700,7 @@ mod tests {
     use tempfile::TempDir;
 
     fn make_project() -> TempDir {
-        let td = TempDir::new().unwrap();
-        td
+        TempDir::new().unwrap()
     }
 
     #[test]
@@ -838,15 +831,13 @@ mod tests {
         assert_eq!(summary.source, TemplateSource::Project);
 
         // rename
-        let summary =
-            rename_template_file(pd.clone(), "scene".into(), "scene-v2".into())
-                .await
-                .unwrap();
+        let summary = rename_template_file(pd.clone(), "scene".into(), "scene-v2".into())
+            .await
+            .unwrap();
         assert_eq!(summary.id, "scene-v2");
 
         // rename again to same id should fail
-        let err =
-            rename_template_file(pd.clone(), "scene-v2".into(), "scene-v2".into()).await;
+        let err = rename_template_file(pd.clone(), "scene-v2".into(), "scene-v2".into()).await;
         assert!(err.is_err());
 
         // delete
@@ -886,7 +877,11 @@ mod tests {
         write_template_file(pd, "x".into(), fm, "body".into())
             .await
             .unwrap();
-        assert!(pd_path.join(".novelist").join("templates").join("x.md").exists());
+        assert!(pd_path
+            .join(".novelist")
+            .join("templates")
+            .join("x.md")
+            .exists());
     }
 
     #[tokio::test]

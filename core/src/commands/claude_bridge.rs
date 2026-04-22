@@ -109,7 +109,11 @@ fn candidate_paths() -> Vec<PathBuf> {
                 continue;
             }
             let mut p = PathBuf::from(dir);
-            p.push(if cfg!(windows) { "claude.exe" } else { "claude" });
+            p.push(if cfg!(windows) {
+                "claude.exe"
+            } else {
+                "claude"
+            });
             out.push(p);
         }
     }

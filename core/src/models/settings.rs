@@ -241,7 +241,10 @@ mod tests {
         };
         let eff = resolve(&global, None, Some(&proj), None);
         assert_eq!(eff.new_file.default_dir.as_deref(), Some("/glob/pin"));
-        assert_eq!(eff.new_file.last_used_dir.as_deref(), Some("/proj/chapters"));
+        assert_eq!(
+            eff.new_file.last_used_dir.as_deref(),
+            Some("/proj/chapters")
+        );
     }
 
     #[test]
@@ -251,12 +254,16 @@ mod tests {
         global_map.insert("mindmap".to_string(), true);
         global_map.insert("kanban".to_string(), true);
         let global = GlobalSettings {
-            plugins: PluginsConfig { enabled: global_map },
+            plugins: PluginsConfig {
+                enabled: global_map,
+            },
             ..Default::default()
         };
         let mut project_map = HashMap::new();
         project_map.insert("mindmap".to_string(), false); // disable in this project
-        let project_plugins = PluginsConfig { enabled: project_map };
+        let project_plugins = PluginsConfig {
+            enabled: project_map,
+        };
 
         let eff = resolve(&global, None, None, Some(&project_plugins));
         assert_eq!(eff.plugins.enabled.get("canvas"), Some(&true));

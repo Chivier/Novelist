@@ -4,7 +4,7 @@ use crate::services::plugin_host::sandbox::PluginHostState;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::{Manager, State};
 
 /// Known built-in plugin IDs that ship with Novelist.
@@ -139,7 +139,7 @@ async fn ensure_bundled_plugins(app_handle: &tauri::AppHandle) -> Result<(), App
 /// are currently shipping." Reads one manifest.toml per bundled plugin and
 /// joins the plugin_id/version pairs. Returns None if any read fails (in
 /// which case we fall back to the legacy full-scan path, same as before).
-async fn compute_bundled_fingerprint(bundled_dir: &PathBuf) -> Option<String> {
+async fn compute_bundled_fingerprint(bundled_dir: &Path) -> Option<String> {
     let mut parts = Vec::with_capacity(BUILTIN_PLUGIN_IDS.len());
     for plugin_id in BUILTIN_PLUGIN_IDS {
         let manifest_path = bundled_dir.join(plugin_id).join("manifest.toml");
@@ -440,10 +440,7 @@ pub async fn get_plugins_dir() -> Result<String, AppError> {
 /// ID must match `[a-z0-9][a-z0-9-]*`. display_name defaults to id.
 #[tauri::command]
 #[specta::specta]
-pub async fn scaffold_plugin(
-    id: String,
-    display_name: Option<String>,
-) -> Result<String, AppError> {
+pub async fn scaffold_plugin(id: String, display_name: Option<String>) -> Result<String, AppError> {
     // Manual validation (no regex dep): non-empty, starts with [a-z0-9], remaining chars [a-z0-9-].
     let valid = !id.is_empty()
         && id
@@ -504,12 +501,16 @@ export default {\n\
 }
 
 #[cfg(test)]
+#[allow(clippy::await_holding_lock)]
 mod tests {
     use super::*;
     use std::sync::Mutex;
     use tempfile::TempDir;
 
     // Tests that mutate HOME must not run concurrently (env is process-global).
+    // HOME_MUTEX is intentionally held across .await so the entire test body
+    // runs serialized — tokio may move the task across threads, but std::Mutex
+    // is Send so this is sound in practice for test-only serialization.
     static HOME_MUTEX: Mutex<()> = Mutex::new(());
 
     // These tests mutate HOME to isolate the plugins_dir(). Run sequentially by

@@ -505,14 +505,10 @@ mod tests {
     async fn test_create_blank_project() {
         let dir = TempDir::new().unwrap();
         let parent = dir.path().to_string_lossy().to_string();
-        let result = create_project_from_template(
-            "blank".into(),
-            "TestProject".into(),
-            parent,
-            "en".into(),
-        )
-        .await
-        .unwrap();
+        let result =
+            create_project_from_template("blank".into(), "TestProject".into(), parent, "en".into())
+                .await
+                .unwrap();
         let project_dir = Path::new(&result);
         assert!(project_dir.join(".novelist").join("project.toml").exists());
     }
@@ -521,14 +517,10 @@ mod tests {
     async fn test_create_novel_project_en() {
         let dir = TempDir::new().unwrap();
         let parent = dir.path().to_string_lossy().to_string();
-        let result = create_project_from_template(
-            "novel".into(),
-            "MyNovel".into(),
-            parent,
-            "en".into(),
-        )
-        .await
-        .unwrap();
+        let result =
+            create_project_from_template("novel".into(), "MyNovel".into(), parent, "en".into())
+                .await
+                .unwrap();
         let project_dir = Path::new(&result);
         assert!(project_dir.join("Chapter 1.md").exists());
         assert!(project_dir.join("Chapter 2.md").exists());
@@ -541,14 +533,10 @@ mod tests {
     async fn test_create_novel_project_zh() {
         let dir = TempDir::new().unwrap();
         let parent = dir.path().to_string_lossy().to_string();
-        let result = create_project_from_template(
-            "novel".into(),
-            "中文小说".into(),
-            parent,
-            "zh-CN".into(),
-        )
-        .await
-        .unwrap();
+        let result =
+            create_project_from_template("novel".into(), "中文小说".into(), parent, "zh-CN".into())
+                .await
+                .unwrap();
         let project_dir = Path::new(&result);
         assert!(project_dir.join("第一章.md").exists());
         assert!(project_dir.join("第二章.md").exists());
@@ -580,14 +568,10 @@ mod tests {
     async fn test_create_long_novel_project_en() {
         let dir = TempDir::new().unwrap();
         let parent = dir.path().to_string_lossy().to_string();
-        let result = create_project_from_template(
-            "long-novel".into(),
-            "Epic".into(),
-            parent,
-            "en".into(),
-        )
-        .await
-        .unwrap();
+        let result =
+            create_project_from_template("long-novel".into(), "Epic".into(), parent, "en".into())
+                .await
+                .unwrap();
         let project_dir = Path::new(&result);
         assert!(project_dir.join("Outline.md").exists());
         assert!(project_dir.join("Characters.md").exists());
@@ -658,14 +642,10 @@ mod tests {
     async fn test_create_screenplay_project_en() {
         let dir = TempDir::new().unwrap();
         let parent = dir.path().to_string_lossy().to_string();
-        let result = create_project_from_template(
-            "screenplay".into(),
-            "Script".into(),
-            parent,
-            "en".into(),
-        )
-        .await
-        .unwrap();
+        let result =
+            create_project_from_template("screenplay".into(), "Script".into(), parent, "en".into())
+                .await
+                .unwrap();
         let project_dir = Path::new(&result);
         assert!(project_dir.join("Cast.md").exists());
         assert!(project_dir.join("Act 1.md").exists());
@@ -678,14 +658,10 @@ mod tests {
     async fn test_create_blog_project_en() {
         let dir = TempDir::new().unwrap();
         let parent = dir.path().to_string_lossy().to_string();
-        let result = create_project_from_template(
-            "blog".into(),
-            "MyBlog".into(),
-            parent,
-            "en".into(),
-        )
-        .await
-        .unwrap();
+        let result =
+            create_project_from_template("blog".into(), "MyBlog".into(), parent, "en".into())
+                .await
+                .unwrap();
         let project_dir = Path::new(&result);
         assert!(project_dir.join("posts").join("first-post.md").exists());
         assert!(project_dir.join("drafts").exists());
@@ -695,14 +671,10 @@ mod tests {
     async fn test_create_blog_project_zh() {
         let dir = TempDir::new().unwrap();
         let parent = dir.path().to_string_lossy().to_string();
-        let result = create_project_from_template(
-            "blog".into(),
-            "博客".into(),
-            parent,
-            "zh-CN".into(),
-        )
-        .await
-        .unwrap();
+        let result =
+            create_project_from_template("blog".into(), "博客".into(), parent, "zh-CN".into())
+                .await
+                .unwrap();
         let project_dir = Path::new(&result);
         assert!(project_dir.join("posts").join("第一篇.md").exists());
         assert!(project_dir.join("drafts").exists());
@@ -712,14 +684,9 @@ mod tests {
     async fn test_unknown_locale_falls_back_to_english() {
         let dir = TempDir::new().unwrap();
         let parent = dir.path().to_string_lossy().to_string();
-        let result = create_project_from_template(
-            "novel".into(),
-            "FR".into(),
-            parent,
-            "fr".into(),
-        )
-        .await
-        .unwrap();
+        let result = create_project_from_template("novel".into(), "FR".into(), parent, "fr".into())
+            .await
+            .unwrap();
         let project_dir = Path::new(&result);
         assert!(project_dir.join("Chapter 1.md").exists());
     }
@@ -728,14 +695,10 @@ mod tests {
     async fn test_outline_order_matches_locale_en() {
         let dir = TempDir::new().unwrap();
         let parent = dir.path().to_string_lossy().to_string();
-        let result = create_project_from_template(
-            "long-novel".into(),
-            "Epic".into(),
-            parent,
-            "en".into(),
-        )
-        .await
-        .unwrap();
+        let result =
+            create_project_from_template("long-novel".into(), "Epic".into(), parent, "en".into())
+                .await
+                .unwrap();
         let config =
             std::fs::read_to_string(Path::new(&result).join(".novelist/project.toml")).unwrap();
         assert!(
@@ -749,14 +712,10 @@ mod tests {
     async fn test_outline_order_matches_locale_zh() {
         let dir = TempDir::new().unwrap();
         let parent = dir.path().to_string_lossy().to_string();
-        let result = create_project_from_template(
-            "long-novel".into(),
-            "长".into(),
-            parent,
-            "zh-CN".into(),
-        )
-        .await
-        .unwrap();
+        let result =
+            create_project_from_template("long-novel".into(), "长".into(), parent, "zh-CN".into())
+                .await
+                .unwrap();
         let config =
             std::fs::read_to_string(Path::new(&result).join(".novelist/project.toml")).unwrap();
         assert!(
@@ -770,21 +729,11 @@ mod tests {
     async fn test_create_duplicate_fails() {
         let dir = TempDir::new().unwrap();
         let parent = dir.path().to_string_lossy().to_string();
-        create_project_from_template(
-            "blank".into(),
-            "Dup".into(),
-            parent.clone(),
-            "en".into(),
-        )
-        .await
-        .unwrap();
-        let result = create_project_from_template(
-            "blank".into(),
-            "Dup".into(),
-            parent,
-            "en".into(),
-        )
-        .await;
+        create_project_from_template("blank".into(), "Dup".into(), parent.clone(), "en".into())
+            .await
+            .unwrap();
+        let result =
+            create_project_from_template("blank".into(), "Dup".into(), parent, "en".into()).await;
         assert!(result.is_err());
     }
 

@@ -516,7 +516,7 @@ mod tests {
         };
         let json = serde_json::to_string(&config).unwrap();
         let parsed: SyncConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.enabled, true);
+        assert!(parsed.enabled);
         assert_eq!(parsed.webdav_url, "https://dav.example.com");
         assert_eq!(parsed.username, "user");
         assert_eq!(parsed.interval_minutes, 15);
@@ -648,7 +648,7 @@ mod tests {
         let root = dir.path().canonicalize().unwrap();
         std::fs::write(root.join("chapter1.md"), "content").unwrap();
         std::fs::write(root.join("notes.txt"), "notes").unwrap();
-        std::fs::write(root.join("image.png"), &[0u8; 10]).unwrap();
+        std::fs::write(root.join("image.png"), [0u8; 10]).unwrap();
 
         let files = collect_local_files(&root).unwrap();
         assert!(files.contains_key("chapter1.md"));
@@ -688,7 +688,7 @@ mod tests {
 
         save_sync_config_to_disk(&project, &config).unwrap();
         let loaded = read_sync_config(&project).unwrap();
-        assert_eq!(loaded.enabled, true);
+        assert!(loaded.enabled);
         assert_eq!(loaded.webdav_url, "https://example.com/dav");
         assert_eq!(loaded.username, "testuser");
         assert_eq!(loaded.interval_minutes, 10);

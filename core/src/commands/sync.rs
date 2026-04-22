@@ -79,7 +79,7 @@ mod tests {
         assert_eq!(masked.password, "****");
         assert_eq!(masked.username, "user");
         assert_eq!(masked.webdav_url, "https://dav.example.com");
-        assert_eq!(masked.enabled, true);
+        assert!(masked.enabled);
         assert_eq!(masked.interval_minutes, 15);
     }
 

@@ -13,7 +13,11 @@ pub struct ProjectConfig {
     #[serde(default, skip_serializing_if = "is_default_view")]
     pub view: ViewConfig,
     /// New-file template preferences. Overrides global.
-    #[serde(default, skip_serializing_if = "is_default_new_file", rename = "new_file")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default_new_file",
+        rename = "new_file"
+    )]
     pub new_file: NewFileConfig,
     /// Per-plugin enable flags (deltas from the global default map).
     #[serde(default, skip_serializing_if = "is_default_plugins")]
@@ -178,7 +182,10 @@ daily_goal = 1000
 "#;
         let config: ProjectConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.view, crate::models::settings::ViewConfig::default());
-        assert_eq!(config.new_file, crate::models::settings::NewFileConfig::default());
+        assert_eq!(
+            config.new_file,
+            crate::models::settings::NewFileConfig::default()
+        );
         assert!(config.plugins.enabled.is_empty());
     }
 

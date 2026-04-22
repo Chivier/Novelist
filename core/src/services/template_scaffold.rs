@@ -75,11 +75,9 @@ pub fn outline_order(id: &str, locale: ScaffoldLocale) -> Vec<String> {
                 "Chapter 2.md".into(),
                 "Chapter 3.md".into(),
             ],
-            ScaffoldLocale::ZhCN => vec![
-                "第一章.md".into(),
-                "第二章.md".into(),
-                "第三章.md".into(),
-            ],
+            ScaffoldLocale::ZhCN => {
+                vec!["第一章.md".into(), "第二章.md".into(), "第三章.md".into()]
+            }
         },
         "long-novel" => match locale {
             ScaffoldLocale::En => vec![
@@ -87,11 +85,9 @@ pub fn outline_order(id: &str, locale: ScaffoldLocale) -> Vec<String> {
                 "Characters.md".into(),
                 "Worldbuilding.md".into(),
             ],
-            ScaffoldLocale::ZhCN => vec![
-                "大纲.md".into(),
-                "人物设定.md".into(),
-                "世界观.md".into(),
-            ],
+            ScaffoldLocale::ZhCN => {
+                vec!["大纲.md".into(), "人物设定.md".into(), "世界观.md".into()]
+            }
         },
         "short-story" => match locale {
             ScaffoldLocale::En => vec!["Manuscript.md".into(), "Notes.md".into()],
@@ -262,10 +258,7 @@ fn blog_files(locale: ScaffoldLocale) -> Vec<ScaffoldFile> {
 
 fn journal_files() -> Vec<ScaffoldFile> {
     let today = today_ymd();
-    vec![file(
-        &format!("{}.md", today),
-        format!("# {}\n\n", today),
-    )]
+    vec![file(&format!("{}.md", today), format!("# {}\n\n", today))]
 }
 
 // --- helpers ---------------------------------------------------------------
