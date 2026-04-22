@@ -257,6 +257,16 @@ export const en: TranslationMap = {
   // --- Go to line ---
   'gotoline.prompt': 'Go to line:',
 
+  // --- Native menu bar ---
+  'menu.file': 'File',
+  'menu.edit': 'Edit',
+  'menu.view': 'View',
+  'menu.window': 'Window',
+  'menu.help': 'Help',
+  'menu.aboutNovelist': 'About Novelist',
+  'menu.openRecent': 'Open Recent',
+  'menu.noRecent': 'No Recent Projects',
+
   // --- Commands ---
   'command.newWindow': 'New Window',
   'command.toggleSidebar': 'Toggle Sidebar',

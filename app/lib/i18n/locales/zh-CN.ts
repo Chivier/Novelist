@@ -257,6 +257,16 @@ export const zhCN: TranslationMap = {
   // --- Go to line ---
   'gotoline.prompt': '跳转到行：',
 
+  // --- Native menu bar ---
+  'menu.file': '文件',
+  'menu.edit': '编辑',
+  'menu.view': '视图',
+  'menu.window': '窗口',
+  'menu.help': '帮助',
+  'menu.aboutNovelist': '关于 Novelist',
+  'menu.openRecent': '最近项目',
+  'menu.noRecent': '无最近项目',
+
   // --- Commands ---
   'command.newWindow': '新建窗口',
   'command.toggleSidebar': '切换侧边栏',

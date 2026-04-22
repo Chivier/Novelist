@@ -45,6 +45,8 @@
   import { promptGoToLine } from '$lib/utils/go-to-line';
   import { registerAppCommands } from '$lib/app-commands';
   import { wireAppEvents } from '$lib/composables/app-events.svelte';
+  import { wireMenuEvents } from '$lib/composables/menu-events.svelte';
+  import { useMenuSync } from '$lib/composables/menu-sync.svelte';
   import { useAppLifecycle } from '$lib/composables/app-lifecycle.svelte';
   import { handleKeepMine, handleLoadTheirs } from '$lib/conflict-handlers';
   import { createKeydownHandler } from '$lib/composables/app-shortcuts.svelte';
@@ -138,6 +140,9 @@
   let projectSwitcherTrigger = $state(0);
 
   useWindowTitle(t);
+  // Keep the native menu (labels + Open Recent) synced with the current
+  // locale and recent-projects list. See menu-sync.svelte.ts.
+  useMenuSync(() => recentProjects);
 
   // Conflict dialog state
   let conflictFilePath = $state<string | null>(null);
@@ -352,6 +357,13 @@
       isClosingTab: () => closeTab.isClosing(),
     });
 
+    // Native menu → commandRegistry dispatch bridge. Open Recent items
+    // carry their target path in the ID and are routed to the project
+    // open flow instead of a static command handler.
+    const unlistenMenu = wireMenuEvents({
+      onOpenRecent: (path) => { void handleOpenRecent(path); },
+    });
+
     startupMark('frontend.app.onMount.end');
     // Wait one frame so "first-paint" reflects the actual paint after mount.
     requestAnimationFrame(() => {
@@ -362,6 +374,7 @@
     return () => {
       unlistenAppEvents();
       unlistenLifecycle();
+      unlistenMenu();
     };
   });
 </script>

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { commandRegistry, type Command } from '$lib/stores/commands.svelte';
 
 /**
@@ -14,6 +14,7 @@ describe('[contract] commandRegistry', () => {
     // Drain the singleton — splice mutates in place so the `$state` proxy
     // reacts correctly (assigning `[]` also works, but splice keeps identity).
     commandRegistry.commands.splice(0, commandRegistry.commands.length);
+    commandRegistry._resetDedupe();
   });
 
   it('registers a command and makes it findable in `commands`', () => {
@@ -90,5 +91,80 @@ describe('[contract] commandRegistry', () => {
     });
     const cmd = commandRegistry.commands.find(c => c.id === 'test.with-shortcut');
     expect(cmd?.shortcut).toBe('Cmd+S');
+  });
+});
+
+/**
+ * [contract][regression] commandRegistry execute-dedupe — prevents
+ * double-fire when the OS menu accelerator and the JS keydown handler
+ * both dispatch the same command. A second execute within 50 ms is
+ * silently dropped.
+ *
+ * Uses vi.useFakeTimers so the window can be advanced deterministically.
+ * IDs are namespaced (`dedupe.*`) so they don't collide with the
+ * broader [contract] suite above.
+ */
+describe('[contract][regression] commandRegistry.execute dedupe window', () => {
+  beforeEach(() => {
+    commandRegistry.commands.splice(0, commandRegistry.commands.length);
+    commandRegistry._resetDedupe();
+    vi.useFakeTimers();
+    // Anchor Date.now to a deterministic starting point so earlier
+    // test calls don't leave dedupe timestamps in the private Map
+    // that would interact with these cases.
+    vi.setSystemTime(1_700_000_000_000);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('fires once on the first call', () => {
+    let calls = 0;
+    commandRegistry.register({
+      id: 'dedupe.simple',
+      label: 'Simple',
+      handler: () => { calls++; },
+    });
+    commandRegistry.execute('dedupe.simple');
+    expect(calls).toBe(1);
+  });
+
+  it('silently drops a second execute within 50 ms', () => {
+    let calls = 0;
+    commandRegistry.register({
+      id: 'dedupe.rapid',
+      label: 'Rapid',
+      handler: () => { calls++; },
+    });
+    commandRegistry.execute('dedupe.rapid');
+    vi.advanceTimersByTime(20);
+    commandRegistry.execute('dedupe.rapid');
+    expect(calls).toBe(1);
+  });
+
+  it('allows the second execute once the 50 ms window has elapsed', () => {
+    let calls = 0;
+    commandRegistry.register({
+      id: 'dedupe.window',
+      label: 'Window',
+      handler: () => { calls++; },
+    });
+    commandRegistry.execute('dedupe.window');
+    vi.advanceTimersByTime(60);
+    commandRegistry.execute('dedupe.window');
+    expect(calls).toBe(2);
+  });
+
+  it('dedupe is per-id — different commands in rapid succession both fire', () => {
+    let a = 0;
+    let b = 0;
+    commandRegistry.register({ id: 'dedupe.a', label: 'A', handler: () => { a++; } });
+    commandRegistry.register({ id: 'dedupe.b', label: 'B', handler: () => { b++; } });
+    commandRegistry.execute('dedupe.a');
+    vi.advanceTimersByTime(5);
+    commandRegistry.execute('dedupe.b');
+    expect(a).toBe(1);
+    expect(b).toBe(1);
   });
 });

@@ -1,5 +1,6 @@
 mod commands;
 mod error;
+mod menu;
 mod models;
 mod services;
 
@@ -20,6 +21,7 @@ use commands::file::{
     rename_item, reveal_in_file_manager, search_in_project, write_binary_file, write_file,
     EncodingState,
 };
+use commands::menu::refresh_menu;
 use commands::plugin::{
     get_plugin_commands, get_plugins_dir, invoke_plugin_command, list_plugins, load_plugin,
     reload_plugin, scaffold_plugin, set_plugin_document_state, set_plugin_enabled, unload_plugin,
@@ -177,6 +179,7 @@ pub fn run() {
         claude_cli_spawn,
         claude_cli_send,
         claude_cli_kill,
+        refresh_menu,
         get_sync_config,
         save_sync_config,
         sync_now,
@@ -264,6 +267,7 @@ pub fn run() {
         claude_cli_spawn,
         claude_cli_send,
         claude_cli_kill,
+        refresh_menu,
     ]);
 
     #[cfg(feature = "codegen")]
@@ -277,6 +281,14 @@ pub fn run() {
 
     #[allow(unused_mut)]
     let mut app_builder = tauri::Builder::default()
+        .menu(|handle| menu::build_menu(handle, &menu::MenuLabels::fallback(), &[]))
+        .on_menu_event(|app, event| {
+            // Menu item IDs match command IDs registered in
+            // app/lib/app-commands.ts. Emit the ID to the webview;
+            // the menu-events composable dispatches through
+            // commandRegistry.execute so there is a single handler map.
+            let _ = app.emit("menu-command", event.id().0.clone());
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build());
