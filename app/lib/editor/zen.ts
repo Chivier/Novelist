@@ -38,19 +38,18 @@ export const typewriterPlugin = ViewPlugin.fromClass(
 const dimLine = Decoration.line({ class: 'cm-novelist-zen-dim' });
 
 /**
- * Paragraph focus — dims non-active paragraphs.
+ * Line focus — dims every logical line except the cursor's current line.
  *
- * Optimizations vs original:
- * - Caches paragraph boundaries; skips rebuild if cursor is in the same paragraph
+ * Optimizations:
+ * - Caches the focused line number; skips rebuild if the cursor is still on it
  * - Does NOT call view.requestMeasure() (let CM6 schedule its own layout)
  * - Only processes visible lines
  */
-export const paragraphFocusPlugin = ViewPlugin.fromClass(
+export const lineFocusPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
     private pending: number | null = null;
-    private lastParaStart = -1;
-    private lastParaEnd = -1;
+    private lastFocusedLine = -1;
 
     constructor(view: EditorView) {
       this.decorations = this.buildDim(view);
@@ -58,19 +57,15 @@ export const paragraphFocusPlugin = ViewPlugin.fromClass(
 
     update(update: ViewUpdate) {
       if (update.docChanged || update.viewportChanged) {
-        // Doc or viewport changed — must rebuild
-        this.lastParaStart = -1;
+        this.lastFocusedLine = -1;
         this.scheduleBuild(update.view);
         return;
       }
 
       if (update.selectionSet) {
-        // Only rebuild if cursor moved to a different paragraph
         const { state } = update.view;
         const cursorLine = state.doc.lineAt(state.selection.main.head).number;
-        if (cursorLine >= this.lastParaStart && cursorLine <= this.lastParaEnd) {
-          return; // Still in same paragraph — skip rebuild
-        }
+        if (cursorLine === this.lastFocusedLine) return;
         this.scheduleBuild(update.view);
       }
     }
@@ -86,24 +81,14 @@ export const paragraphFocusPlugin = ViewPlugin.fromClass(
     buildDim(view: EditorView): DecorationSet {
       const { state } = view;
       const cursorLine = state.doc.lineAt(state.selection.main.head).number;
+      this.lastFocusedLine = cursorLine;
+
       const decos: Range<Decoration>[] = [];
-
-      // Find current paragraph boundaries
-      let paraStart = cursorLine;
-      let paraEnd = cursorLine;
-      while (paraStart > 1 && state.doc.line(paraStart - 1).text.trim() !== '') paraStart--;
-      while (paraEnd < state.doc.lines && state.doc.line(paraEnd + 1).text.trim() !== '') paraEnd++;
-
-      // Cache for fast same-paragraph check
-      this.lastParaStart = paraStart;
-      this.lastParaEnd = paraEnd;
-
-      // Only dim VISIBLE lines outside the current paragraph
       for (const { from, to } of view.visibleRanges) {
         const startLine = state.doc.lineAt(from).number;
         const endLine = state.doc.lineAt(to).number;
         for (let i = startLine; i <= endLine; i++) {
-          if (i < paraStart || i > paraEnd) {
+          if (i !== cursorLine) {
             decos.push(dimLine.range(state.doc.line(i).from));
           }
         }

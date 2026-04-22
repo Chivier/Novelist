@@ -18,7 +18,7 @@ import { mermaidPlugin } from './mermaid';
 import { mathPlugin } from './math';
 import { tablePlugin } from './table';
 import { imeComposingField, imeGuardPlugin } from './ime-guard';
-import { typewriterPlugin, paragraphFocusPlugin } from './zen';
+import { typewriterPlugin, lineFocusPlugin } from './zen';
 import { codeLanguages } from './languages';
 import { slashCommandExtension } from './slash-commands';
 import './wysiwyg.css';
@@ -286,12 +286,29 @@ const novelistTheme = EditorView.theme({
   '.cm-gutterElement': {
     overflow: 'hidden',
   },
+  // Active-line cue: a neutral 4% text-toned wash on the line body and a small
+  // accent-colored dot in the gutter. The wash is deliberately neutral (not the
+  // accent hue used by selection at 18%) so the two signals can't be confused.
+  // Selection's per-line deco `.cm-line.cm-novelist-selected-line` has higher
+  // specificity than `.cm-activeLine`, so a selected+active line never stacks tints.
   '.cm-activeLineGutter': {
     backgroundColor: 'transparent',
     color: 'var(--novelist-text-secondary)',
+    position: 'relative',
+  },
+  '.cm-activeLineGutter::before': {
+    content: '""',
+    position: 'absolute',
+    left: '3px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    width: '4px',
+    height: '4px',
+    borderRadius: '50%',
+    backgroundColor: 'var(--novelist-accent)',
   },
   '.cm-activeLine': {
-    backgroundColor: 'transparent',
+    backgroundColor: 'color-mix(in srgb, var(--novelist-text) 4%, transparent)',
   },
   // CM6's drawSelection paints rectangles for multi-line selections using
   // two different coordinate frames: the first line's rect is anchored to
@@ -564,7 +581,7 @@ export function createEditorExtensions(options?: EditorOptions): Extension[] {
   exts.push(scrollStabilizer);
 
   if (options?.zen) {
-    exts.push(typewriterPlugin, paragraphFocusPlugin);
+    exts.push(typewriterPlugin, lineFocusPlugin);
   }
 
   return exts;

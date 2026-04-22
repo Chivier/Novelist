@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import { EditorView, ViewPlugin } from '@codemirror/view';
-import { typewriterPlugin, paragraphFocusPlugin } from '$lib/editor/zen';
+import { typewriterPlugin, lineFocusPlugin } from '$lib/editor/zen';
 
 /**
- * [precision] zen — typewriterPlugin and paragraphFocusPlugin are CM6
+ * [precision] zen — typewriterPlugin and lineFocusPlugin are CM6
  * ViewPlugins. Their effects (scroll / dim decorations) depend on layout,
  * which is not testable under happy-dom. What IS testable and worth
  * guarding: they install cleanly (no constructor/update throws) and the
- * paragraph-focus plugin publishes a DecorationSet via its own
+ * line-focus plugin publishes a DecorationSet via its own
  * `decorations` field.
  */
 
@@ -37,15 +37,15 @@ describe('[precision] typewriterPlugin', () => {
   });
 });
 
-describe('[precision] paragraphFocusPlugin', () => {
+describe('[precision] lineFocusPlugin', () => {
   it('is a CM6 ViewPlugin', () => {
-    expect(paragraphFocusPlugin).toBeInstanceOf(ViewPlugin);
+    expect(lineFocusPlugin).toBeInstanceOf(ViewPlugin);
   });
 
   it('builds an initial decoration set during construction', () => {
-    const view = mountWith('para a\n\npara b\n\npara c', paragraphFocusPlugin);
+    const view = mountWith('para a\n\npara b\n\npara c', lineFocusPlugin);
     try {
-      const field = view.plugin(paragraphFocusPlugin);
+      const field = view.plugin(lineFocusPlugin);
       expect(field).toBeTruthy();
       expect(field!.decorations).toBeTruthy();
       // DecorationSet exposes an iterator — just check it's callable.
@@ -56,12 +56,12 @@ describe('[precision] paragraphFocusPlugin', () => {
     }
   });
 
-  it('survives a selection-change update (different paragraph path)', () => {
-    const view = mountWith('para a\n\npara b', paragraphFocusPlugin);
+  it('survives a selection-change update (different line path)', () => {
+    const view = mountWith('para a\n\npara b', lineFocusPlugin);
     try {
       // Move cursor from para a to para b — should trigger rebuild.
       view.dispatch({ selection: { anchor: 10 } });
-      const field = view.plugin(paragraphFocusPlugin);
+      const field = view.plugin(lineFocusPlugin);
       expect(field).toBeTruthy();
     } finally {
       view.destroy();
@@ -70,10 +70,10 @@ describe('[precision] paragraphFocusPlugin', () => {
   });
 
   it('survives a doc-change update (viewport path)', () => {
-    const view = mountWith('hello', paragraphFocusPlugin);
+    const view = mountWith('hello', lineFocusPlugin);
     try {
       view.dispatch({ changes: { from: 5, insert: ' world' } });
-      const field = view.plugin(paragraphFocusPlugin);
+      const field = view.plugin(lineFocusPlugin);
       expect(field).toBeTruthy();
     } finally {
       view.destroy();
