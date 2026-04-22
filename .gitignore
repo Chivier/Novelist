@@ -2,6 +2,7 @@
 core/target/
 node_modules/
 dist/
+*.tsbuildinfo
 
 # OS files
 .DS_Store
