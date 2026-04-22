@@ -339,7 +339,7 @@ mod tests {
         let doc = docs.get(&file_id).unwrap();
         let total = doc.rope.len_lines();
         // Request beyond bounds
-        let start = 0.min(total.saturating_sub(1));
+        let start = 0;
         let end = 999.min(total);
         let sc = doc.rope.line_to_char(start);
         let ec = doc.rope.line_to_char(end);

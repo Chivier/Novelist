@@ -121,7 +121,7 @@ pub async fn list_snapshots(project_dir: &str) -> Result<Vec<SnapshotMeta>, AppE
     }
 
     // Sort newest first
-    snapshots.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    snapshots.sort_by_key(|s| std::cmp::Reverse(s.timestamp));
     Ok(snapshots)
 }
 
