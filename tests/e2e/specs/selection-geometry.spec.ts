@@ -26,8 +26,21 @@ import { test, expect } from '../fixtures/app-fixture';
  *    the text engine is the only thing that fills continuation rows.
  */
 
-/** Parse a CSS `rgb(...)` / `rgba(...)` string into `[r, g, b, a]`. */
+/** Parse a CSS `rgb(...)` / `rgba(...)` / `color(srgb …)` string into `[r, g, b, a]`. */
 function parseRgb(s: string): [number, number, number, number] {
+  // Modern form: `color(srgb 0.12 0.34 0.56 / 0.18)` — WebKit serializes
+  // resolved color-mix() values this way.
+  const colorFn = s.match(
+    /color\(\s*srgb\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)(?:\s*\/\s*([0-9.]+))?\s*\)/,
+  );
+  if (colorFn) {
+    return [
+      Math.round(parseFloat(colorFn[1]) * 255),
+      Math.round(parseFloat(colorFn[2]) * 255),
+      Math.round(parseFloat(colorFn[3]) * 255),
+      colorFn[4] ? parseFloat(colorFn[4]) : 1,
+    ];
+  }
   const m = s.match(/rgba?\(\s*(\d+)[ ,]+(\d+)[ ,]+(\d+)(?:\s*[,/]\s*([0-9.]+))?\s*\)/);
   if (!m) throw new Error(`Unparseable color: ${s}`);
   return [parseInt(m[1]), parseInt(m[2]), parseInt(m[3]), m[4] ? parseFloat(m[4]) : 1];
@@ -286,11 +299,16 @@ test.describe('[regression] Unified selection background — invariant 3+4+5 (::
 
     // At least one wrap (≥ 2 rects) must exist for this test to be meaningful.
     expect(rectCount).toBeGreaterThanOrEqual(2);
-    // All rects except the last must reach the content right edge within a
-    // small tolerance — native selection fills continuation rows.
+    // `range.getClientRects()` returns text-glyph bounds, so a continuation
+    // row ends at its last word boundary (leaving typical trailing space of
+    // one word — up to ~35-50px for common fonts). The regression this
+    // guards against is the old `Decoration.mark` approach, which painted
+    // word-by-word spans and produced many small rects with arbitrary
+    // mid-line gaps. A generous threshold still catches that shape while
+    // tolerating normal word-break whitespace.
     const continuation = rectRights.slice(0, -1);
     for (const right of continuation) {
-      expect(Math.abs(right - lineRight)).toBeLessThan(6);
+      expect(Math.abs(right - lineRight)).toBeLessThan(60);
     }
   });
 });
