@@ -8,7 +8,6 @@
   import StatusBar from '$lib/components/StatusBar.svelte';
   import ConflictDialog from '$lib/components/ConflictDialog.svelte';
   import UnsavedChangesDialog from '$lib/components/UnsavedChangesDialog.svelte';
-  import { unsavedPromptState, resolveUnsavedPrompt } from '$lib/composables/unsaved-prompt.svelte';
   import Outline from '$lib/components/Outline.svelte';
   import ZenMode from '$lib/components/ZenMode.svelte';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
@@ -50,6 +49,7 @@
   import { wireMenuEvents } from '$lib/composables/menu-events.svelte';
   import { useMenuSync } from '$lib/composables/menu-sync.svelte';
   import { useAppLifecycle } from '$lib/composables/app-lifecycle.svelte';
+  import { unsavedPromptState, resolveUnsavedPrompt } from '$lib/composables/unsaved-prompt.svelte';
   import { handleKeepMine, handleLoadTheirs } from '$lib/conflict-handlers';
   import { createKeydownHandler } from '$lib/composables/app-shortcuts.svelte';
   import { createCloseTab } from '$lib/composables/close-tab.svelte';
