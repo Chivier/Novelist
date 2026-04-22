@@ -116,4 +116,87 @@ describe('[precision][regression] buildSelectionDecorations', () => {
     expect(decos).toHaveLength(1);
     expect(decos[0]).toMatchObject({ from: 4, klass: 'cm-novelist-selected-line' });
   });
+
+  it('treats a selection starting at line.from but ending mid-line as partial (no deco)', () => {
+    //  line1: "abcdef" (0..6)
+    const doc = docFrom('abcdef');
+    const sel = EditorSelection.single(0, 3); // from line start to mid-line
+    // Partial on the ONLY line — coversFromLeft=true, coversToRight=false.
+    expect(summarize(doc, sel)).toEqual([]);
+  });
+
+  it('treats a selection starting mid-line but ending at line.to as partial (no deco)', () => {
+    const doc = docFrom('abcdef');
+    const sel = EditorSelection.single(3, 6); // mid-line to line end
+    expect(summarize(doc, sel)).toEqual([]);
+  });
+
+  it('emits a line deco when a newline-only line is fully covered between two partial lines', () => {
+    //  line1: "abc"   (0..3)   \n at 3
+    //  line2: ""      (4..4)   \n at 4
+    //  line3: ""      (5..5)   \n at 5
+    //  line4: "def"   (6..9)
+    const doc = docFrom('abc\n\n\ndef');
+    const sel = EditorSelection.single(1, 7); // mid-line1 → mid-line4
+    const decos = summarize(doc, sel);
+    // line1 partial → no deco; line2 full empty → line deco at 4;
+    // line3 full empty → line deco at 5; line4 partial → no deco.
+    expect(decos).toHaveLength(2);
+    expect(decos.map(d => d.from)).toEqual([4, 5]);
+    expect(decos.every(d => d.klass === 'cm-novelist-selected-line')).toBe(true);
+  });
+
+  it('never emits a Decoration.mark (partial ranges go through native ::selection)', () => {
+    // A range of inputs that would have produced mark decorations under
+    // the previous implementation — assert none of them produce any deco
+    // other than `cm-novelist-selected-line`.
+    const doc = docFrom('hello world\nsecond line here\nthird line here too\n');
+    const cases = [
+      EditorSelection.single(2, 8),                        // mid-mid single line
+      EditorSelection.single(0, 5),                        // line-start → mid single line
+      EditorSelection.single(6, doc.line(1).to),           // mid → line-end single line
+      EditorSelection.single(2, 20),                       // multi-line partial→partial
+      EditorSelection.single(doc.line(1).from, 20),        // full line → partial
+    ];
+    for (const sel of cases) {
+      const decos = summarize(doc, sel);
+      for (const d of decos) {
+        expect(d.klass).toBe('cm-novelist-selected-line');
+      }
+    }
+  });
+
+  it('combines line decos and partials correctly across multiple disjoint ranges', () => {
+    //  line1: "aaaa"   (0..4)   \n at 4
+    //  line2: "bbbb"   (5..9)   \n at 9
+    //  line3: "cccc"   (10..14)
+    const doc = docFrom('aaaa\nbbbb\ncccc');
+    const sel = EditorSelection.create([
+      EditorSelection.range(0, 4),    // whole line1 → line deco at 0
+      EditorSelection.range(6, 8),    // mid-line2 partial → no deco
+      EditorSelection.range(10, 14),  // whole line3 → line deco at 10
+    ], 0);
+    const decos = summarize(doc, sel);
+    expect(decos).toHaveLength(2);
+    expect(decos.map(d => d.from).sort((a, b) => a - b)).toEqual([0, 10]);
+  });
+
+  it('does not emit a line deco for a selection that is empty after collapsing', () => {
+    // Two caret ranges — both `sel.empty === true`.
+    const doc = docFrom('abc\ndef');
+    const sel = EditorSelection.create(
+      [EditorSelection.cursor(1), EditorSelection.cursor(5)],
+      0,
+    );
+    expect(summarize(doc, sel)).toEqual([]);
+  });
+
+  it('covers a single-line document with one line deco when fully selected', () => {
+    // Single line with no trailing newline — verify line.to boundary logic.
+    const doc = docFrom('only line');
+    const sel = EditorSelection.single(0, doc.length);
+    const decos = summarize(doc, sel);
+    expect(decos).toHaveLength(1);
+    expect(decos[0]).toMatchObject({ from: 0, klass: 'cm-novelist-selected-line' });
+  });
 });

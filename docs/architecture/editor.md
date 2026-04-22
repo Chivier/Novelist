@@ -142,25 +142,130 @@ no self-destroy on null coords), and keyboard close behavior.
 
 ## Unified selection background
 
-CM6's `drawSelection` paints first-line and middle-line rects in different
-coordinate frames, leaving a ~19px stair-step on the left edge across
-heading lines. We neutralize this by making `.cm-selectionBackground`
-transparent (keeping it only for cursor/caret rendering) and painting
-selections ourselves in `app/lib/editor/selection-line.ts` via a hybrid:
+**Do not touch without reading this section end-to-end.** This subsystem
+has been broken and repaired three times (2026-04-17, 2026-04-21a,
+2026-04-21b) and each regression came from a plausible-looking edit that
+missed one of the invariants below.
 
-- **Fully-covered lines** → `Decoration.line`
-  (`cm-novelist-selected-line`) — uniform full-line background, handles
-  middle lines and empty lines inside the range.
-- **Partial lines** → no decoration; the theme's native `::selection`
-  rule (same 18% accent tint) paints the selected text. This matters for
-  wrapped lines: native selection fills continuation visual rows to the
-  container's right edge, while an inline-span `Decoration.mark` would
-  end each wrapped row at its last glyph and look ragged. To stop the
-  two layers stacking on fully-selected lines that contain text,
-  `::selection` is forced transparent inside `.cm-novelist-selected-line`.
+### Why we don't use CM6's default selection paint
 
-Regression tests in `tests/e2e/specs/selection-geometry.spec.ts` and
-`tests/unit/editor/selection-line.test.ts`.
+CM6's built-in `drawSelection` computes the selection rectangles in
+`rectanglesForRange` (in `@codemirror/view/dist/index.cjs`) using:
+
+```
+leftSide = contentRect.left + parseInt(firstLine.paddingLeft)
+```
+
+That adds only the **`.cm-line`** padding to the `.cm-content` rect's
+left. Our theme puts horizontal padding on `.cm-content` (`3rem 1.5rem`),
+**not** on `.cm-line` (which only has `0 0.25rem`). So `leftSide` lands
+~24px to the left of where the actual text starts. First/last-line rects
+use `coordsAtPos` (i.e. the real glyph position), so those align with
+the text — middle-line "between" rects use `leftSide` and don't. The
+result is a ~19px stair-step on the left edge of any multi-line
+selection, most visible across heading lines because the height deltas
+make the offset obvious. For that reason `.cm-selectionBackground` is
+forced `transparent !important` in the theme; those rects must never
+render. `selection-geometry.spec.ts` guards this invariant.
+
+### The three-layer paint system
+
+Selection backgrounds are painted from three coordinated places:
+
+1. **`.cm-line.cm-novelist-selected-line`** (line decoration emitted by
+   `app/lib/editor/selection-line.ts`) — covers **fully-covered logical
+   lines**: middle lines of a multi-line selection, empty lines inside a
+   range, and single-line selections whose extent equals the whole line.
+   Paints `18%` accent across the entire `.cm-line` div, so empty lines
+   and wrapped full lines are continuous rectangles.
+
+2. **Native browser `::selection`** (theme rule in
+   `app/lib/editor/setup.ts`) — covers **partial ranges**: the first /
+   last line of a multi-line selection when the caret stops mid-line,
+   and any single-line partial selection. Painted at `18%` accent too.
+   This must be native `::selection` (not `Decoration.mark`) because
+   browsers render `::selection` via the text engine, so on a logical
+   line that wraps into several visual rows the continuation rows fill
+   to the container's right edge — a wrap-aware behavior an inline-span
+   background cannot reproduce (a `<span>` background ends at the last
+   glyph of each wrapped fragment, producing a ragged per-word look).
+
+3. **Suppression inside fully-selected lines** — `::selection` is
+   forced `transparent` inside `.cm-line.cm-novelist-selected-line` to
+   prevent layer 1 and layer 2 from stacking on characters of a fully
+   selected line (which would tint glyphs ~33% while the rest of the
+   line is still 18%, making "selected text" look brighter than the
+   whitespace around it).
+
+All three use the same 18% accent tint — so partial, full, and
+mixed multi-line selections settle at one visually identical color.
+
+### The CSS specificity trap
+
+`drawSelection` installs an internal extension called
+`hideNativeSelection` at **`Prec.highest`** that emits:
+
+```
+.cm-theme_<hash> .cm-line ::selection { background-color: transparent !important }
+```
+
+Specificity is `(0,2,1)` and `!important` is set. A naïve theme rule of
+just `'::selection': { ... }` scopes to `.cm-theme_<hash> ::selection`
+→ `(0,1,1)` and loses. Our rule **must** outrank it, so we write:
+
+```
+'.cm-content .cm-line ::selection, .cm-content .cm-line::selection': {
+  backgroundColor: '… 18% …!important',
+}
+```
+
+The extra `.cm-content` ancestor takes specificity to `(0,3,1)` and the
+`!important` ties the tiebreak. The suppression rule for fully-selected
+lines adds one more class (`.cm-novelist-selected-line`) for `(0,4,1)`,
+so it beats our own "paint" rule.
+
+**If you simplify the selector, CM6's `hideNativeSelection` will silently
+reclaim `::selection` and partial selections will render invisible.**
+Verify by opening the devtools Styles pane on a `.cm-line` inside a
+selection: you should see our rule winning.
+
+### Invariants — things that must stay true
+
+| # | Invariant | Guard |
+|---|-----------|-------|
+| 1 | `.cm-selectionBackground` computes to a fully transparent color | `selection-geometry.spec.ts` → `native drawSelection backgrounds are suppressed` |
+| 2 | Every `.cm-novelist-selected-line` element shares one left x-coordinate | `selection-geometry.spec.ts` → `all selected-line backgrounds share a single left x-coordinate` |
+| 3 | Partial single-line selections produce a visible `::selection` paint (not transparent) | `selection-geometry.spec.ts` → `partial single-line selection paints a non-transparent ::selection` |
+| 4 | Partial-and-full selections produce the same computed RGB background on selected pixels | `selection-geometry.spec.ts` → `partial and full-line selection tints match` |
+| 5 | A multi-row wrapped partial selection fills each non-terminal visual row to the container's right edge | `selection-geometry.spec.ts` → `wrapped partial selection fills continuation rows` |
+| 6 | `buildSelectionDecorations` emits line decorations **only** for fully-covered lines | `tests/unit/editor/selection-line.test.ts` |
+
+### Where to change things
+
+- **Decoration logic (what lines get a line deco):**
+  `app/lib/editor/selection-line.ts` — pure builder
+  `buildSelectionDecorations(doc, selection)` is unit-tested in
+  `tests/unit/editor/selection-line.test.ts` with
+  `[precision][regression]` tag.
+- **Selection colors / CSS selectors / specificity:** the `novelistTheme`
+  block in `app/lib/editor/setup.ts` around lines 295–335. All three
+  paint layers and their specificity notes live there in one span so
+  changes stay coordinated.
+- **Visual / geometry assertions:**
+  `tests/e2e/specs/selection-geometry.spec.ts` — runs against a real
+  browser so CSS specificity wars are actually observable.
+
+### Why not revert to `Decoration.mark` for partial lines?
+
+We tried. An inline `<span>` wrapping the selected text with a
+background works for unwrapped lines, but on any logical line that
+wraps across visual rows the background box ends at each wrap's last
+glyph instead of the container's right edge, so a long partial
+selection looks like a stack of ragged per-word ribbons. CSS
+`box-decoration-break: clone` and pseudo-element tricks don't fix this —
+inline fragment backgrounds are fundamentally glyph-bound. Native
+`::selection` is the only mechanism that paints the full continuation
+row, so that's what we use.
 
 ## Editor right-click menu
 
