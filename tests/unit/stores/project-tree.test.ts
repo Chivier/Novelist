@@ -10,7 +10,7 @@ vi.mock('$lib/ipc/commands', () => ({
 import { commands } from '$lib/ipc/commands';
 
 function node(name: string, isDir: boolean, path = `/proj/${name}`): FileNode {
-  return { name, path, is_dir: isDir, size: 0, expanded: false, loading: false };
+  return { name, path, is_dir: isDir, size: 0, mtime: null, expanded: false, loading: false };
 }
 
 describe('projectStore tree extensions', () => {

@@ -11,7 +11,7 @@ export type SortMode =
 export interface SortableEntry {
   name: string;
   is_dir: boolean;
-  mtime?: number;
+  mtime?: number | null;
 }
 
 /**
