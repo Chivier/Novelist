@@ -8,8 +8,8 @@ import {
 
 describe('[contract] confirmUnsavedChanges', () => {
   beforeEach(() => {
-    // Ensure no pending prompt leaks between tests.
-    if (unsavedPromptState.pending) resolveUnsavedPrompt('cancel');
+    // Drain the entire queue so module-global state is clean.
+    while (unsavedPromptState.pending) resolveUnsavedPrompt('cancel');
   });
 
   it('sets pending state with fileNames and saveLabel', async () => {
