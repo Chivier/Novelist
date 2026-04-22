@@ -27,21 +27,21 @@ export function createKeydownHandler(ctx: AppShortcutContext) {
     const mod = e.metaKey || e.ctrlKey;
 
     // Cmd+Shift+N: new window
-    if (mod && e.shiftKey && e.key === 'N') {
+    if (mod && !e.altKey && e.shiftKey && e.key === 'N') {
       e.preventDefault();
       ctx.openNewWindow();
       return;
     }
 
     // Cmd+S: save current file (works even when editor isn't focused)
-    if (mod && !e.shiftKey && e.key === 's') {
+    if (mod && !e.altKey && !e.shiftKey && e.key === 's') {
       e.preventDefault();
       ctx.saveActiveFile();
       return;
     }
 
     // Cmd+Shift+F: project search
-    if (mod && e.shiftKey && e.key === 'F') {
+    if (mod && !e.altKey && e.shiftKey && e.key === 'F') {
       e.preventDefault();
       ctx.toggleProjectSearch();
       return;
@@ -63,25 +63,27 @@ export function createKeydownHandler(ctx: AppShortcutContext) {
       return;
     }
 
-    // Zoom
-    if (mod && (e.key === '=' || e.key === '+')) {
+    // Zoom (require no alt/shift so Cmd+Alt+- etc. can still be customized)
+    if (mod && !e.altKey && !e.shiftKey && (e.key === '=' || e.key === '+')) {
       e.preventDefault();
       uiStore.zoomIn();
       return;
     }
-    if (mod && e.key === '-') {
+    if (mod && !e.altKey && !e.shiftKey && e.key === '-') {
       e.preventDefault();
       uiStore.zoomOut();
       return;
     }
-    if (mod && e.key === '0') {
+    if (mod && !e.altKey && !e.shiftKey && e.key === '0') {
       e.preventDefault();
       uiStore.resetZoom();
       return;
     }
 
-    // Cmd+1~9: switch to recent project
-    if (mod && !e.shiftKey && e.key >= '1' && e.key <= '9') {
+    // Cmd+1~9: switch to recent project. MUST exclude alt/shift — otherwise
+    // Cmd+Alt+1..5 (right-rail panels) gets swallowed here before the generic
+    // loop ever sees it, and every right-panel toggle silently fails.
+    if (mod && !e.altKey && !e.shiftKey && e.key >= '1' && e.key <= '9') {
       const idx = parseInt(e.key) - 1;
       const recentProjects = ctx.getRecentProjects();
       if (idx < recentProjects.length) {
