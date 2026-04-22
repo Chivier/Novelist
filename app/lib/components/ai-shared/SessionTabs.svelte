@@ -82,7 +82,7 @@
           class="close"
           title="Delete session"
           aria-label="Delete session {item.title}"
-          data-testid="{testidPrefix}-tab-close-{item.id}"
+          data-testid="{testidPrefix}-close-{item.id}"
           onclick={(e) => { e.stopPropagation(); onDelete(item.id); }}
         >×</button>
       </div>

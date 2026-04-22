@@ -113,13 +113,13 @@ test.describe('AI Talk — sessions', () => {
     // Delete one — hover the tab to reveal the × button
     const firstTab = tabs.first();
     await firstTab.hover();
-    await firstTab.locator('[data-testid^="ai-talk-session-tab-close-"]').click();
+    await firstTab.locator('[data-testid^="ai-talk-session-close-"]').click();
     await expect(tabs).toHaveCount(1);
 
     // Delete the remaining one — the component auto-creates a fresh session
     const last = tabs.first();
     await last.hover();
-    await last.locator('[data-testid^="ai-talk-session-tab-close-"]').click();
+    await last.locator('[data-testid^="ai-talk-session-close-"]').click();
     await expect(tabs).toHaveCount(1);
   });
 
@@ -147,7 +147,8 @@ test.describe('AI Talk — sessions', () => {
     const stored = await app.evaluate(() =>
       JSON.parse(localStorage.getItem('novelist:ai-talk:sessions:v1') || 'null'),
     );
-    expect(stored?.sessions?.[0]?.presetId).toBe('builtin:editor');
+    // localStorage key holds a plain array of sessions (see sessions.svelte.ts).
+    expect(stored?.[0]?.presetId).toBe('builtin:editor');
   });
 });
 
