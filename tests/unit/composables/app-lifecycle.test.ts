@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const { hoisted } = vi.hoisted(() => {
   const invoke = vi.fn();
-  const ask = vi.fn();
+  const confirmUnsaved = vi.fn();
   const unlisten = vi.fn();
 
   let closeRequestedHandler: ((ev: { preventDefault: () => void }) => Promise<void> | void) | null =
@@ -33,7 +33,7 @@ const { hoisted } = vi.hoisted(() => {
   return {
     hoisted: {
       invoke,
-      ask,
+      confirmUnsaved,
       unlisten,
       getCurrentWindow,
       destroy,
@@ -46,7 +46,9 @@ const { hoisted } = vi.hoisted(() => {
 });
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: hoisted.invoke }));
-vi.mock('@tauri-apps/plugin-dialog', () => ({ ask: hoisted.ask }));
+vi.mock('$lib/composables/unsaved-prompt.svelte', () => ({
+  confirmUnsavedChanges: (opts: unknown) => hoisted.confirmUnsaved(opts),
+}));
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: hoisted.getCurrentWindow }));
 
 vi.mock('$lib/stores/tabs.svelte', () => ({
@@ -75,7 +77,7 @@ function ctx(isClosingTab = false) {
 beforeEach(() => {
   vi.useFakeTimers();
   hoisted.invoke.mockReset();
-  hoisted.ask.mockReset();
+  hoisted.confirmUnsaved.mockReset();
   hoisted.unlisten.mockReset();
   hoisted.getCurrentWindow.mockClear();
   hoisted.destroy.mockReset();
@@ -178,7 +180,7 @@ describe('[contract] useAppLifecycle — onCloseRequested', () => {
     const preventDefault = vi.fn();
     await hoisted.getCloseHandler()!({ preventDefault });
     expect(preventDefault).toHaveBeenCalled();
-    expect(hoisted.ask).not.toHaveBeenCalled();
+    expect(hoisted.confirmUnsaved).not.toHaveBeenCalled();
     teardown();
   });
 
@@ -188,19 +190,19 @@ describe('[contract] useAppLifecycle — onCloseRequested', () => {
     const preventDefault = vi.fn();
     await hoisted.getCloseHandler()!({ preventDefault });
     expect(preventDefault).not.toHaveBeenCalled();
-    expect(hoisted.ask).not.toHaveBeenCalled();
+    expect(hoisted.confirmUnsaved).not.toHaveBeenCalled();
     teardown();
   });
 
   it('prompts to save, saves, marks clean, and destroys when user confirms', async () => {
     hoisted.tabsState.dirtyTabs = [{ id: 't1', fileName: 'a.md' }];
-    hoisted.ask.mockResolvedValue(true);
+    hoisted.confirmUnsaved.mockResolvedValue('save');
     const teardown = useAppLifecycle(ctx());
     await flushListeners();
     const preventDefault = vi.fn();
     await hoisted.getCloseHandler()!({ preventDefault });
     expect(preventDefault).toHaveBeenCalled();
-    expect(hoisted.ask).toHaveBeenCalled();
+    expect(hoisted.confirmUnsaved).toHaveBeenCalled();
     expect(hoisted.tabsState.saveAllDirty).toHaveBeenCalled();
     expect(hoisted.tabsState.markSaved).toHaveBeenCalledWith('t1');
     expect(hoisted.destroy).toHaveBeenCalled();
@@ -209,7 +211,7 @@ describe('[contract] useAppLifecycle — onCloseRequested', () => {
 
   it('skips saveAllDirty but still destroys when user says "dont save"', async () => {
     hoisted.tabsState.dirtyTabs = [{ id: 't1', fileName: 'a.md' }];
-    hoisted.ask.mockResolvedValue(false);
+    hoisted.confirmUnsaved.mockResolvedValue('discard');
     const teardown = useAppLifecycle(ctx());
     await flushListeners();
     await hoisted.getCloseHandler()!({ preventDefault: vi.fn() });
@@ -218,16 +220,45 @@ describe('[contract] useAppLifecycle — onCloseRequested', () => {
     teardown();
   });
 
-  it('latches after confirm — second close request does not re-prompt', async () => {
+  it('does NOT destroy and does NOT save when user cancels', async () => {
     hoisted.tabsState.dirtyTabs = [{ id: 't1', fileName: 'a.md' }];
-    hoisted.ask.mockResolvedValue(true);
+    hoisted.confirmUnsaved.mockResolvedValue('cancel');
+    const teardown = useAppLifecycle(ctx());
+    await flushListeners();
+    const preventDefault = vi.fn();
+    await hoisted.getCloseHandler()!({ preventDefault });
+    expect(preventDefault).toHaveBeenCalled();
+    expect(hoisted.confirmUnsaved).toHaveBeenCalled();
+    expect(hoisted.tabsState.saveAllDirty).not.toHaveBeenCalled();
+    expect(hoisted.tabsState.markSaved).not.toHaveBeenCalled();
+    expect(hoisted.destroy).not.toHaveBeenCalled();
+    teardown();
+  });
+
+  it('does NOT latch closeConfirmed after cancel — subsequent close re-prompts', async () => {
+    hoisted.tabsState.dirtyTabs = [{ id: 't1', fileName: 'a.md' }];
+    hoisted.confirmUnsaved.mockResolvedValueOnce('cancel');
     const teardown = useAppLifecycle(ctx());
     await flushListeners();
     await hoisted.getCloseHandler()!({ preventDefault: vi.fn() });
-    // Second invocation: ask must NOT be called again.
-    hoisted.ask.mockClear();
+    // Second close attempt: helper must be called again (not latched).
+    hoisted.confirmUnsaved.mockResolvedValueOnce('discard');
     await hoisted.getCloseHandler()!({ preventDefault: vi.fn() });
-    expect(hoisted.ask).not.toHaveBeenCalled();
+    expect(hoisted.confirmUnsaved).toHaveBeenCalledTimes(2);
+    expect(hoisted.destroy).toHaveBeenCalledTimes(1); // only the discard call destroyed
+    teardown();
+  });
+
+  it('latches after confirm — second close request does not re-prompt', async () => {
+    hoisted.tabsState.dirtyTabs = [{ id: 't1', fileName: 'a.md' }];
+    hoisted.confirmUnsaved.mockResolvedValue('save');
+    const teardown = useAppLifecycle(ctx());
+    await flushListeners();
+    await hoisted.getCloseHandler()!({ preventDefault: vi.fn() });
+    // Second invocation: confirmUnsaved must NOT be called again.
+    hoisted.confirmUnsaved.mockClear();
+    await hoisted.getCloseHandler()!({ preventDefault: vi.fn() });
+    expect(hoisted.confirmUnsaved).not.toHaveBeenCalled();
     teardown();
   });
 });
