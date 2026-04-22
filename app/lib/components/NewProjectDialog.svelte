@@ -3,7 +3,8 @@
   import { open as openDialog } from '@tauri-apps/plugin-dialog';
   import { commands } from '$lib/ipc/commands';
   import type { TemplateInfo } from '$lib/ipc/commands';
-  import { t } from '$lib/i18n';
+  import { i18n, t } from '$lib/i18n';
+  import { categoryLabel, templateName, templateDescription } from '$lib/utils/templateI18n';
 
   interface Props {
     onClose: () => void;
@@ -36,15 +37,6 @@
     if (!selectedCategory) return templates;
     return templates.filter(t => t.category === selectedCategory);
   });
-
-  // Category display labels
-  const categoryLabels: Record<string, string> = {
-    general: 'General',
-    fiction: 'Fiction',
-    'non-fiction': 'Non-fiction',
-    personal: 'Personal',
-    custom: 'Custom',
-  };
 
   // Template icons (simple SVG paths)
   function templateIcon(id: string): string {
@@ -128,6 +120,7 @@
       selectedTemplate.id,
       projectName.trim(),
       parentDir.trim(),
+      i18n.locale,
     );
 
     if (result.status === 'ok') {
@@ -180,7 +173,7 @@
             class="category-item"
             class:category-active={selectedCategory === cat}
             onclick={() => selectedCategory = cat}
-          >{categoryLabels[cat] || cat}</button>
+          >{categoryLabel(cat)}</button>
         {/each}
       </div>
 
@@ -199,7 +192,7 @@
                   <path d={templateIcon(tpl.id)} />
                 </svg>
               </div>
-              <div class="template-name">{tpl.name}</div>
+              <div class="template-name">{templateName(tpl)}</div>
               {#if !tpl.builtin}
                 <div class="template-badge">{t('newProject.custom')}</div>
               {/if}
@@ -209,7 +202,7 @@
 
         {#if selectedTemplate}
           <div class="template-description">
-            {selectedTemplate.description}
+            {templateDescription(selectedTemplate)}
           </div>
         {/if}
       </div>

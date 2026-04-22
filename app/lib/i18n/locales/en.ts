@@ -432,6 +432,28 @@ export const en: TranslationMap = {
   'newProject.create': 'Create',
   'newProject.creating': 'Creating...',
 
+  // --- New Project: template categories & metadata ---
+  'template.category.general': 'General',
+  'template.category.fiction': 'Fiction',
+  'template.category.non-fiction': 'Non-fiction',
+  'template.category.personal': 'Personal',
+  'template.category.custom': 'Custom',
+
+  'template.blank.name': 'Blank',
+  'template.blank.description': 'Empty project with default settings',
+  'template.novel.name': 'Novel',
+  'template.novel.description': 'Novel project with chapter structure',
+  'template.long-novel.name': 'Long Novel',
+  'template.long-novel.description': 'Multi-volume novel with character profiles, world-building notes, and chapter folders',
+  'template.short-story.name': 'Short Story',
+  'template.short-story.description': 'Short story with a single manuscript file and planning notes',
+  'template.screenplay.name': 'Screenplay',
+  'template.screenplay.description': 'Three-act screenplay with character list and scene structure',
+  'template.blog.name': 'Blog',
+  'template.blog.description': 'Blog with posts and drafts folders',
+  'template.journal.name': 'Journal',
+  'template.journal.description': 'Daily journal with date-based files',
+
   'settings.plugins.noPlugins': 'No plugins installed.',
   'settings.plugins.scopeGlobal': 'Plugin settings apply globally (no project open).',
   'settings.plugins.scopeProject': 'Plugin settings apply to this project: {name}.',

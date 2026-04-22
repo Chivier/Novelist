@@ -432,6 +432,28 @@ export const zhCN: TranslationMap = {
   'newProject.create': '创建',
   'newProject.creating': '创建中...',
 
+  // --- 新建项目：模板分类与元数据 ---
+  'template.category.general': '通用',
+  'template.category.fiction': '虚构',
+  'template.category.non-fiction': '非虚构',
+  'template.category.personal': '个人',
+  'template.category.custom': '自定义',
+
+  'template.blank.name': '空白',
+  'template.blank.description': '使用默认设置的空项目',
+  'template.novel.name': '小说',
+  'template.novel.description': '按章节组织的小说项目',
+  'template.long-novel.name': '长篇小说',
+  'template.long-novel.description': '分卷长篇，含人物设定、世界观与章节目录',
+  'template.short-story.name': '短篇小说',
+  'template.short-story.description': '单文件正文加创作笔记的短篇项目',
+  'template.screenplay.name': '剧本',
+  'template.screenplay.description': '三幕剧结构，含人物表和场景分场',
+  'template.blog.name': '博客',
+  'template.blog.description': '包含 posts 与 drafts 文件夹的博客项目',
+  'template.journal.name': '日记',
+  'template.journal.description': '按日期命名的每日日记',
+
   'settings.plugins.noPlugins': '尚未安装插件。',
   'settings.plugins.scopeGlobal': '插件设置作用于全局（未打开项目）。',
   'settings.plugins.scopeProject': '插件设置作用于当前项目：{name}。',

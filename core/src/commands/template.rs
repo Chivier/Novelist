@@ -1,5 +1,6 @@
 use crate::error::AppError;
 use crate::models::template::{TemplateInfo, TemplateMeta};
+use crate::services::template_scaffold::{self, ScaffoldLocale};
 use std::path::{Path, PathBuf};
 
 /// Returns the base directory for user templates: ~/.novelist/templates/
@@ -10,6 +11,10 @@ fn templates_dir() -> Result<PathBuf, AppError> {
 }
 
 /// Built-in templates that are always available (generated in-memory, not on disk).
+///
+/// The `name` / `description` fields are English-only fallbacks — the
+/// frontend renders these templates via i18n keys (`template.<id>.name`
+/// etc.) and only falls back to these strings if a key is missing.
 fn builtin_templates() -> Vec<TemplateInfo> {
     vec![
         TemplateInfo {
@@ -28,21 +33,21 @@ fn builtin_templates() -> Vec<TemplateInfo> {
         },
         TemplateInfo {
             id: "long-novel".into(),
-            name: "长篇小说".into(),
+            name: "Long Novel".into(),
             description: "Multi-volume novel with character profiles, world-building notes, and chapter folders".into(),
             category: "fiction".into(),
             builtin: true,
         },
         TemplateInfo {
             id: "short-story".into(),
-            name: "短篇小说".into(),
+            name: "Short Story".into(),
             description: "Short story with a single manuscript file and planning notes".into(),
             category: "fiction".into(),
             builtin: true,
         },
         TemplateInfo {
             id: "screenplay".into(),
-            name: "剧本".into(),
+            name: "Screenplay".into(),
             description: "Three-act screenplay with character list and scene structure".into(),
             category: "fiction".into(),
             builtin: true,
@@ -101,215 +106,58 @@ fn scaffold_builtin(
     template_id: &str,
     project_name: &str,
     dest: &Path,
+    locale: ScaffoldLocale,
 ) -> Result<String, AppError> {
     let novelist_dir = dest.join(".novelist");
     std::fs::create_dir_all(&novelist_dir)?;
 
-    let project_type = match template_id {
-        "novel" | "long-novel" | "short-story" | "screenplay" => "novel",
-        "blog" => "blog",
-        "journal" => "journal",
-        _ => "novel",
-    };
-
-    let config = format!(
-        r#"[project]
-name = "{name}"
-type = "{ptype}"
-version = "0.1.0"
-
-[writing]
-daily_goal = 2000
-auto_save_minutes = 5
-"#,
-        name = project_name,
-        ptype = project_type,
-    );
-    std::fs::write(novelist_dir.join("project.toml"), &config)?;
-
-    match template_id {
-        "novel" => {
-            std::fs::write(dest.join("Chapter 1.md"), format!("# {}\n\n", project_name))?;
-            std::fs::write(dest.join("Chapter 2.md"), "# Chapter 2\n\n")?;
-            std::fs::write(dest.join("Chapter 3.md"), "# Chapter 3\n\n")?;
-            // Set outline order
-            let outline_config = format!(
-                r#"[project]
-name = "{name}"
-type = "novel"
-version = "0.1.0"
-
-[outline]
-order = ["Chapter 1.md", "Chapter 2.md", "Chapter 3.md"]
-
-[writing]
-daily_goal = 2000
-auto_save_minutes = 5
-"#,
-                name = project_name,
-            );
-            std::fs::write(novelist_dir.join("project.toml"), &outline_config)?;
+    for f in template_scaffold::files_for(template_id, locale, project_name) {
+        let full = dest.join(&f.name);
+        if let Some(parent) = full.parent() {
+            std::fs::create_dir_all(parent)?;
         }
-        "long-novel" => {
-            // Planning files
-            std::fs::write(
-                dest.join("大纲.md"),
-                "# 大纲\n\n## 故事梗概\n\n\n\n## 主题\n\n\n\n## 故事线\n\n### 主线\n\n\n\n### 副线\n\n\n",
-            )?;
-            std::fs::write(
-                dest.join("人物设定.md"),
-                "# 人物设定\n\n## 主角\n\n**姓名**：\n\n**年龄**：\n\n**性格**：\n\n**背景**：\n\n---\n\n## 配角\n\n\n\n---\n\n## 反派\n\n\n",
-            )?;
-            std::fs::write(
-                dest.join("世界观.md"),
-                "# 世界观\n\n## 时代背景\n\n\n\n## 地理环境\n\n\n\n## 社会结构\n\n\n\n## 重要设定\n\n\n",
-            )?;
-            // Volume 1
-            let vol1 = dest.join("第一卷");
-            std::fs::create_dir_all(&vol1)?;
-            std::fs::write(vol1.join("第一章.md"), "# 第一章\n\n")?;
-            std::fs::write(vol1.join("第二章.md"), "# 第二章\n\n")?;
-            std::fs::write(vol1.join("第三章.md"), "# 第三章\n\n")?;
-            // Volume 2
-            let vol2 = dest.join("第二卷");
-            std::fs::create_dir_all(&vol2)?;
-            std::fs::write(vol2.join("第四章.md"), "# 第四章\n\n")?;
-            std::fs::write(vol2.join("第五章.md"), "# 第五章\n\n")?;
-
-            let outline_config = format!(
-                r#"[project]
-name = "{name}"
-type = "novel"
-version = "0.1.0"
-
-[outline]
-order = ["大纲.md", "人物设定.md", "世界观.md"]
-
-[writing]
-daily_goal = 2000
-auto_save_minutes = 5
-"#,
-                name = project_name,
-            );
-            std::fs::write(novelist_dir.join("project.toml"), &outline_config)?;
-        }
-        "short-story" => {
-            std::fs::write(dest.join("正文.md"), format!("# {}\n\n", project_name))?;
-            std::fs::write(
-                dest.join("创作笔记.md"),
-                "# 创作笔记\n\n## 灵感来源\n\n\n\n## 核心冲突\n\n\n\n## 人物速写\n\n\n\n## 结局构想\n\n\n",
-            )?;
-
-            let outline_config = format!(
-                r#"[project]
-name = "{name}"
-type = "novel"
-version = "0.1.0"
-
-[outline]
-order = ["正文.md", "创作笔记.md"]
-
-[writing]
-daily_goal = 1000
-auto_save_minutes = 5
-"#,
-                name = project_name,
-            );
-            std::fs::write(novelist_dir.join("project.toml"), &outline_config)?;
-        }
-        "screenplay" => {
-            std::fs::write(
-                dest.join("人物表.md"),
-                "# 人物表\n\n## 主要人物\n\n**角色名**：\n**身份**：\n**简介**：\n\n---\n\n## 次要人物\n\n\n",
-            )?;
-            std::fs::write(
-                dest.join("第一幕.md"),
-                "# 第一幕\n\n## 场景一\n\n**场景**：\n**时间**：\n\n---\n\n",
-            )?;
-            std::fs::write(
-                dest.join("第二幕.md"),
-                "# 第二幕\n\n## 场景一\n\n**场景**：\n**时间**：\n\n---\n\n",
-            )?;
-            std::fs::write(
-                dest.join("第三幕.md"),
-                "# 第三幕\n\n## 场景一\n\n**场景**：\n**时间**：\n\n---\n\n",
-            )?;
-
-            let outline_config = format!(
-                r#"[project]
-name = "{name}"
-type = "novel"
-version = "0.1.0"
-
-[outline]
-order = ["人物表.md", "第一幕.md", "第二幕.md", "第三幕.md"]
-
-[writing]
-daily_goal = 1500
-auto_save_minutes = 5
-"#,
-                name = project_name,
-            );
-            std::fs::write(novelist_dir.join("project.toml"), &outline_config)?;
-        }
-        "blog" => {
-            std::fs::create_dir_all(dest.join("posts"))?;
-            std::fs::create_dir_all(dest.join("drafts"))?;
-            std::fs::write(
-                dest.join("posts").join("first-post.md"),
-                "# My First Post\n\n",
-            )?;
-        }
-        "journal" => {
-            let today = chrono_today();
-            let filename = format!("{}.md", today);
-            std::fs::write(dest.join(&filename), format!("# {}\n\n", today))?;
-        }
-        _ => {
-            // Blank — just the .novelist config is enough
-        }
+        std::fs::write(&full, &f.content)?;
     }
+
+    let config = build_project_toml(
+        project_name,
+        template_scaffold::project_type(template_id),
+        &template_scaffold::outline_order(template_id, locale),
+        template_scaffold::daily_goal(template_id),
+    );
+    std::fs::write(novelist_dir.join("project.toml"), config)?;
 
     Ok(dest.to_string_lossy().to_string())
 }
 
-/// Returns today's date as YYYY-MM-DD without pulling in chrono.
-fn chrono_today() -> String {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    // Simple date calculation
-    let days = now / 86400;
-    let mut y = 1970i64;
-    let mut remaining = days as i64;
-    loop {
-        let days_in_year = if is_leap(y) { 366 } else { 365 };
-        if remaining < days_in_year {
-            break;
-        }
-        remaining -= days_in_year;
-        y += 1;
-    }
-    let month_days = if is_leap(y) {
-        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+fn build_project_toml(
+    project_name: &str,
+    project_type: &str,
+    outline_order: &[String],
+    daily_goal: u32,
+) -> String {
+    let outline_block = if outline_order.is_empty() {
+        String::new()
     } else {
-        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        let items: Vec<String> = outline_order.iter().map(|s| format!("\"{}\"", s)).collect();
+        format!("\n[outline]\norder = [{}]\n", items.join(", "))
     };
-    let mut m = 1u32;
-    for &md in &month_days {
-        if remaining < md {
-            break;
-        }
-        remaining -= md;
-        m += 1;
-    }
-    let d = remaining + 1;
-    format!("{:04}-{:02}-{:02}", y, m, d)
-}
 
-fn is_leap(y: i64) -> bool {
-    (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
+    format!(
+        r#"[project]
+name = "{name}"
+type = "{ptype}"
+version = "0.1.0"
+{outline}
+[writing]
+daily_goal = {goal}
+auto_save_minutes = 5
+"#,
+        name = project_name,
+        ptype = project_type,
+        outline = outline_block,
+        goal = daily_goal,
+    )
 }
 
 #[tauri::command]
@@ -318,6 +166,7 @@ pub async fn create_project_from_template(
     template_id: String,
     project_name: String,
     parent_dir: String,
+    locale: String,
 ) -> Result<String, AppError> {
     let dest = Path::new(&parent_dir).join(&project_name);
     if dest.exists() {
@@ -327,6 +176,8 @@ pub async fn create_project_from_template(
         )));
     }
     std::fs::create_dir_all(&dest)?;
+
+    let scaffold_locale = ScaffoldLocale::from_tag(&locale);
 
     // Check if it's a built-in template
     let builtins: Vec<&str> = vec![
@@ -339,7 +190,7 @@ pub async fn create_project_from_template(
         "journal",
     ];
     if builtins.contains(&template_id.as_str()) {
-        return scaffold_builtin(&template_id, &project_name, &dest);
+        return scaffold_builtin(&template_id, &project_name, &dest, scaffold_locale);
     }
 
     // User template: copy .novelist/ directory from template
@@ -616,15 +467,6 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    #[test]
-    fn test_chrono_today() {
-        let today = chrono_today();
-        // Should be YYYY-MM-DD format
-        assert_eq!(today.len(), 10);
-        assert_eq!(&today[4..5], "-");
-        assert_eq!(&today[7..8], "-");
-    }
-
     #[tokio::test]
     async fn test_list_templates_includes_builtins() {
         let templates = list_templates().await.unwrap();
@@ -638,81 +480,311 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_list_templates_fallback_strings_are_english() {
+        // After the i18n refactor the Rust-side name/description are
+        // rendered by the frontend only when an i18n key is missing; they
+        // must all be English so a missing-key fallback never produces a
+        // mixed EN/ZH UI.
+        let templates = list_templates().await.unwrap();
+        for t in templates.iter().filter(|t| t.builtin) {
+            assert!(
+                t.name.is_ascii(),
+                "builtin template {} has non-ASCII name {:?}",
+                t.id,
+                t.name
+            );
+            assert!(
+                t.description.is_ascii(),
+                "builtin template {} has non-ASCII description",
+                t.id
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn test_create_blank_project() {
         let dir = TempDir::new().unwrap();
         let parent = dir.path().to_string_lossy().to_string();
-        let result = create_project_from_template("blank".into(), "TestProject".into(), parent)
-            .await
-            .unwrap();
+        let result = create_project_from_template(
+            "blank".into(),
+            "TestProject".into(),
+            parent,
+            "en".into(),
+        )
+        .await
+        .unwrap();
         let project_dir = Path::new(&result);
         assert!(project_dir.join(".novelist").join("project.toml").exists());
     }
 
     #[tokio::test]
-    async fn test_create_novel_project() {
+    async fn test_create_novel_project_en() {
         let dir = TempDir::new().unwrap();
         let parent = dir.path().to_string_lossy().to_string();
-        let result = create_project_from_template("novel".into(), "MyNovel".into(), parent)
-            .await
-            .unwrap();
+        let result = create_project_from_template(
+            "novel".into(),
+            "MyNovel".into(),
+            parent,
+            "en".into(),
+        )
+        .await
+        .unwrap();
         let project_dir = Path::new(&result);
         assert!(project_dir.join("Chapter 1.md").exists());
         assert!(project_dir.join("Chapter 2.md").exists());
+        assert!(project_dir.join("Chapter 3.md").exists());
+        assert!(!project_dir.join("第一章.md").exists());
         assert!(project_dir.join(".novelist").join("project.toml").exists());
     }
 
     #[tokio::test]
-    async fn test_create_long_novel_project() {
+    async fn test_create_novel_project_zh() {
         let dir = TempDir::new().unwrap();
         let parent = dir.path().to_string_lossy().to_string();
-        let result = create_project_from_template("long-novel".into(), "MyEpic".into(), parent)
-            .await
-            .unwrap();
+        let result = create_project_from_template(
+            "novel".into(),
+            "中文小说".into(),
+            parent,
+            "zh-CN".into(),
+        )
+        .await
+        .unwrap();
+        let project_dir = Path::new(&result);
+        assert!(project_dir.join("第一章.md").exists());
+        assert!(project_dir.join("第二章.md").exists());
+        assert!(project_dir.join("第三章.md").exists());
+        assert!(!project_dir.join("Chapter 1.md").exists());
+    }
+
+    #[tokio::test]
+    async fn test_create_long_novel_project_zh() {
+        let dir = TempDir::new().unwrap();
+        let parent = dir.path().to_string_lossy().to_string();
+        let result = create_project_from_template(
+            "long-novel".into(),
+            "长篇".into(),
+            parent,
+            "zh-CN".into(),
+        )
+        .await
+        .unwrap();
         let project_dir = Path::new(&result);
         assert!(project_dir.join("大纲.md").exists());
         assert!(project_dir.join("人物设定.md").exists());
         assert!(project_dir.join("世界观.md").exists());
         assert!(project_dir.join("第一卷").join("第一章.md").exists());
         assert!(project_dir.join("第二卷").join("第四章.md").exists());
-        assert!(project_dir.join(".novelist").join("project.toml").exists());
     }
 
     #[tokio::test]
-    async fn test_create_short_story_project() {
+    async fn test_create_long_novel_project_en() {
         let dir = TempDir::new().unwrap();
         let parent = dir.path().to_string_lossy().to_string();
-        let result = create_project_from_template("short-story".into(), "MyStory".into(), parent)
-            .await
-            .unwrap();
+        let result = create_project_from_template(
+            "long-novel".into(),
+            "Epic".into(),
+            parent,
+            "en".into(),
+        )
+        .await
+        .unwrap();
+        let project_dir = Path::new(&result);
+        assert!(project_dir.join("Outline.md").exists());
+        assert!(project_dir.join("Characters.md").exists());
+        assert!(project_dir.join("Worldbuilding.md").exists());
+        assert!(project_dir.join("Volume 1").join("Chapter 1.md").exists());
+        assert!(project_dir.join("Volume 1").join("Chapter 2.md").exists());
+        assert!(project_dir.join("Volume 1").join("Chapter 3.md").exists());
+        assert!(project_dir.join("Volume 2").join("Chapter 4.md").exists());
+        assert!(project_dir.join("Volume 2").join("Chapter 5.md").exists());
+        assert!(!project_dir.join("大纲.md").exists());
+    }
+
+    #[tokio::test]
+    async fn test_create_short_story_project_zh() {
+        let dir = TempDir::new().unwrap();
+        let parent = dir.path().to_string_lossy().to_string();
+        let result = create_project_from_template(
+            "short-story".into(),
+            "短篇".into(),
+            parent,
+            "zh-CN".into(),
+        )
+        .await
+        .unwrap();
         let project_dir = Path::new(&result);
         assert!(project_dir.join("正文.md").exists());
         assert!(project_dir.join("创作笔记.md").exists());
-        assert!(project_dir.join(".novelist").join("project.toml").exists());
     }
 
     #[tokio::test]
-    async fn test_create_screenplay_project() {
+    async fn test_create_short_story_project_en() {
         let dir = TempDir::new().unwrap();
         let parent = dir.path().to_string_lossy().to_string();
-        let result = create_project_from_template("screenplay".into(), "MyScript".into(), parent)
-            .await
-            .unwrap();
+        let result = create_project_from_template(
+            "short-story".into(),
+            "Shortie".into(),
+            parent,
+            "en".into(),
+        )
+        .await
+        .unwrap();
+        let project_dir = Path::new(&result);
+        assert!(project_dir.join("Manuscript.md").exists());
+        assert!(project_dir.join("Notes.md").exists());
+        assert!(!project_dir.join("正文.md").exists());
+    }
+
+    #[tokio::test]
+    async fn test_create_screenplay_project_zh() {
+        let dir = TempDir::new().unwrap();
+        let parent = dir.path().to_string_lossy().to_string();
+        let result = create_project_from_template(
+            "screenplay".into(),
+            "剧本".into(),
+            parent,
+            "zh-CN".into(),
+        )
+        .await
+        .unwrap();
         let project_dir = Path::new(&result);
         assert!(project_dir.join("人物表.md").exists());
         assert!(project_dir.join("第一幕.md").exists());
         assert!(project_dir.join("第二幕.md").exists());
         assert!(project_dir.join("第三幕.md").exists());
-        assert!(project_dir.join(".novelist").join("project.toml").exists());
+    }
+
+    #[tokio::test]
+    async fn test_create_screenplay_project_en() {
+        let dir = TempDir::new().unwrap();
+        let parent = dir.path().to_string_lossy().to_string();
+        let result = create_project_from_template(
+            "screenplay".into(),
+            "Script".into(),
+            parent,
+            "en".into(),
+        )
+        .await
+        .unwrap();
+        let project_dir = Path::new(&result);
+        assert!(project_dir.join("Cast.md").exists());
+        assert!(project_dir.join("Act 1.md").exists());
+        assert!(project_dir.join("Act 2.md").exists());
+        assert!(project_dir.join("Act 3.md").exists());
+        assert!(!project_dir.join("人物表.md").exists());
+    }
+
+    #[tokio::test]
+    async fn test_create_blog_project_en() {
+        let dir = TempDir::new().unwrap();
+        let parent = dir.path().to_string_lossy().to_string();
+        let result = create_project_from_template(
+            "blog".into(),
+            "MyBlog".into(),
+            parent,
+            "en".into(),
+        )
+        .await
+        .unwrap();
+        let project_dir = Path::new(&result);
+        assert!(project_dir.join("posts").join("first-post.md").exists());
+        assert!(project_dir.join("drafts").exists());
+    }
+
+    #[tokio::test]
+    async fn test_create_blog_project_zh() {
+        let dir = TempDir::new().unwrap();
+        let parent = dir.path().to_string_lossy().to_string();
+        let result = create_project_from_template(
+            "blog".into(),
+            "博客".into(),
+            parent,
+            "zh-CN".into(),
+        )
+        .await
+        .unwrap();
+        let project_dir = Path::new(&result);
+        assert!(project_dir.join("posts").join("第一篇.md").exists());
+        assert!(project_dir.join("drafts").exists());
+    }
+
+    #[tokio::test]
+    async fn test_unknown_locale_falls_back_to_english() {
+        let dir = TempDir::new().unwrap();
+        let parent = dir.path().to_string_lossy().to_string();
+        let result = create_project_from_template(
+            "novel".into(),
+            "FR".into(),
+            parent,
+            "fr".into(),
+        )
+        .await
+        .unwrap();
+        let project_dir = Path::new(&result);
+        assert!(project_dir.join("Chapter 1.md").exists());
+    }
+
+    #[tokio::test]
+    async fn test_outline_order_matches_locale_en() {
+        let dir = TempDir::new().unwrap();
+        let parent = dir.path().to_string_lossy().to_string();
+        let result = create_project_from_template(
+            "long-novel".into(),
+            "Epic".into(),
+            parent,
+            "en".into(),
+        )
+        .await
+        .unwrap();
+        let config =
+            std::fs::read_to_string(Path::new(&result).join(".novelist/project.toml")).unwrap();
+        assert!(
+            config.contains("\"Outline.md\""),
+            "project.toml missing EN outline entry: {}",
+            config
+        );
+    }
+
+    #[tokio::test]
+    async fn test_outline_order_matches_locale_zh() {
+        let dir = TempDir::new().unwrap();
+        let parent = dir.path().to_string_lossy().to_string();
+        let result = create_project_from_template(
+            "long-novel".into(),
+            "长".into(),
+            parent,
+            "zh-CN".into(),
+        )
+        .await
+        .unwrap();
+        let config =
+            std::fs::read_to_string(Path::new(&result).join(".novelist/project.toml")).unwrap();
+        assert!(
+            config.contains("\"大纲.md\""),
+            "project.toml missing ZH outline entry: {}",
+            config
+        );
     }
 
     #[tokio::test]
     async fn test_create_duplicate_fails() {
         let dir = TempDir::new().unwrap();
         let parent = dir.path().to_string_lossy().to_string();
-        create_project_from_template("blank".into(), "Dup".into(), parent.clone())
-            .await
-            .unwrap();
-        let result = create_project_from_template("blank".into(), "Dup".into(), parent).await;
+        create_project_from_template(
+            "blank".into(),
+            "Dup".into(),
+            parent.clone(),
+            "en".into(),
+        )
+        .await
+        .unwrap();
+        let result = create_project_from_template(
+            "blank".into(),
+            "Dup".into(),
+            parent,
+            "en".into(),
+        )
+        .await;
         assert!(result.is_err());
     }
 
