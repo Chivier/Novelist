@@ -268,10 +268,17 @@
     align-items: center;
     position: relative;
     padding: 0 4px 0 0;
+    border-radius: 4px;
     transition: background 0.1s, border-color 0.1s;
+  }
+  .recent-row:hover {
+    background: var(--novelist-bg-secondary);
   }
   .recent-row.pinned {
     background: color-mix(in srgb, var(--novelist-accent) 4%, transparent);
+  }
+  .recent-row.pinned:hover {
+    background: color-mix(in srgb, var(--novelist-accent) 8%, var(--novelist-bg-secondary));
   }
   .recent-row.dragging { opacity: 0.4; }
   .recent-row.drag-over {
@@ -290,9 +297,7 @@
     cursor: pointer;
     border-radius: 4px;
     color: var(--novelist-text);
-    transition: background 0.1s;
   }
-  .recent-item:hover { background: var(--novelist-bg-secondary); }
 
   .recent-name {
     font-size: 1rem;

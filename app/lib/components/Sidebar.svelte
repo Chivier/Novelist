@@ -789,10 +789,12 @@
             <span>{t('sidebar.projects')}</span>
           </div>
           {#each recentProjects as project, i (project.path)}
-            <div class="project-switcher-row">
+            <div
+              class="project-switcher-row"
+              class:project-switcher-row-active={project.path === projectStore.dirPath}
+            >
               <button
                 class="project-switcher-item"
-                class:project-switcher-item-active={project.path === projectStore.dirPath}
                 onclick={() => switchToProject(project.path)}
               >
                 <span class="project-switcher-num">{i < 9 ? i + 1 : '·'}</span>
@@ -824,10 +826,12 @@
             </div>
           {/each}
           <div class="project-switcher-divider"></div>
-          <button class="project-switcher-item" onclick={() => { switcherOpen = false; openDirectory(); }}>
-            <span class="project-switcher-num">+</span>
-            <span class="project-switcher-name">{t('sidebar.openFolderEllipsis')}</span>
-          </button>
+          <div class="project-switcher-row">
+            <button class="project-switcher-item" onclick={() => { switcherOpen = false; openDirectory(); }}>
+              <span class="project-switcher-num">+</span>
+              <span class="project-switcher-name">{t('sidebar.openFolderEllipsis')}</span>
+            </button>
+          </div>
         </div>
       {/if}
     </div>
@@ -1156,6 +1160,14 @@
     align-items: center;
     position: relative;
     padding-right: 4px;
+    border-radius: 5px;
+    transition: background 80ms;
+  }
+  .project-switcher-row:hover {
+    background: var(--novelist-sidebar-hover);
+  }
+  .project-switcher-row-active {
+    background: var(--novelist-sidebar-active);
   }
 
   .project-switcher-action-btn {
@@ -1204,13 +1216,6 @@
     font-size: 0.78rem;
     text-align: left;
     cursor: pointer;
-    transition: background 80ms;
-  }
-  .project-switcher-item:hover {
-    background: var(--novelist-sidebar-hover);
-  }
-  .project-switcher-item-active {
-    background: var(--novelist-sidebar-active);
   }
 
   .project-switcher-num {
