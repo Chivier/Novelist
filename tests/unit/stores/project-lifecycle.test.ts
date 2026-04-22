@@ -26,11 +26,11 @@ vi.mock('$lib/stores/settings.svelte', () => ({
   },
 }));
 
-import { projectStore, type FileNode } from '$lib/stores/project.svelte';
+import { projectStore } from '$lib/stores/project.svelte';
 import { commands } from '$lib/ipc/commands';
 
 function entry(name: string, isDir: boolean, path = `/proj/${name}`) {
-  return { name, path, is_dir: isDir, size: 0 };
+  return { name, path, is_dir: isDir, size: 0, mtime: 0 };
 }
 
 beforeEach(() => {
