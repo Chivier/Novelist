@@ -7,6 +7,7 @@
   import { tabsStore } from '$lib/stores/tabs.svelte';
   import { extensionStore } from '$lib/stores/extensions.svelte';
   import { t } from '$lib/i18n';
+  import { confirmUnsavedChanges } from '$lib/composables/unsaved-prompt.svelte';
   import FileTreeNode from '$lib/components/FileTreeNode.svelte';
   import { compareByMode, type SortMode } from '$lib/utils/file-sort';
 
@@ -106,9 +107,12 @@
       const dirty = tabsStore.dirtyTabs;
       if (dirty.length > 0) {
         const names = dirty.map(t => t.fileName).join(', ');
-        if (confirm(t('dialog.unsavedBeforeClose', { names }))) {
-          await tabsStore.saveAllDirty();
-        }
+        const choice = await confirmUnsavedChanges({
+          fileNames: names,
+          saveLabel: t('dialog.save'),
+        });
+        if (choice === 'cancel') return;
+        if (choice === 'save') await tabsStore.saveAllDirty();
       }
     }
     projectStore.isLoading = true;
