@@ -228,6 +228,7 @@ export const zhCN: TranslationMap = {
   'dialog.save': '保存',
   'dialog.saveAs': '另存为...',
   'dialog.dontSave': '不保存',
+  'dialog.unsavedCancel': '取消',
   'dialog.cancel': '取消',
   'dialog.saveFailed': '保存失败',
   'dialog.saveFailedGeneric': '无法保存文件。',

@@ -228,6 +228,7 @@ export const en: TranslationMap = {
   'dialog.save': 'Save',
   'dialog.saveAs': 'Save As...',
   'dialog.dontSave': "Don't Save",
+  'dialog.unsavedCancel': 'Cancel',
   'dialog.cancel': 'Cancel',
   'dialog.saveFailed': 'Save failed',
   'dialog.saveFailedGeneric': 'The file could not be saved.',
