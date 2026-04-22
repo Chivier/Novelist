@@ -7,6 +7,8 @@
   import TabBar from '$lib/components/TabBar.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
   import ConflictDialog from '$lib/components/ConflictDialog.svelte';
+  import UnsavedChangesDialog from '$lib/components/UnsavedChangesDialog.svelte';
+  import { unsavedPromptState, resolveUnsavedPrompt } from '$lib/composables/unsaved-prompt.svelte';
   import Outline from '$lib/components/Outline.svelte';
   import ZenMode from '$lib/components/ZenMode.svelte';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
@@ -697,6 +699,16 @@
     onKeepMine={() => handleKeepMine(conflictFilePath!)}
     onLoadTheirs={() => handleLoadTheirs(conflictFilePath!)}
     onClose={() => { conflictFilePath = null; }}
+  />
+{/if}
+
+{#if unsavedPromptState.pending}
+  <UnsavedChangesDialog
+    fileNames={unsavedPromptState.pending.fileNames}
+    saveLabel={unsavedPromptState.pending.saveLabel}
+    onSave={() => resolveUnsavedPrompt('save')}
+    onDontSave={() => resolveUnsavedPrompt('discard')}
+    onCancel={() => resolveUnsavedPrompt('cancel')}
   />
 {/if}
 
