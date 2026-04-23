@@ -5,6 +5,47 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Novelist</title>
+    <!--
+      Paint the themed background before CSS/JS loads. Prevents a white flash
+      between window-show and Svelte mount — especially obvious in dark themes.
+      Built-in theme colors are duplicated from app/lib/themes.ts; if they
+      drift, the first frame will briefly mismatch before the JS theme system
+      catches up (bounded by app.css's 0.3s color transition).
+    -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('novelist-theme') || 'system';
+          var builtin = {
+            light:   { bg: '#fcfcfa', dark: false },
+            dark:    { bg: '#1c1c1e', dark: true  },
+            sepia:   { bg: '#f5f0e8', dark: false },
+            nord:    { bg: '#2e3440', dark: true  },
+            github:  { bg: '#ffffff', dark: false },
+            dracula: { bg: '#282a36', dark: true  }
+          };
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var picked = null;
+          if (saved === 'system') {
+            picked = prefersDark ? builtin.dark : builtin.light;
+          } else if (builtin[saved]) {
+            picked = builtin[saved];
+          } else {
+            try {
+              var customs = JSON.parse(localStorage.getItem('novelist-custom-themes') || '[]');
+              var found = customs.find(function (t) { return t && t.id === saved; });
+              if (found && found.vars && found.vars['--novelist-bg']) {
+                picked = { bg: found.vars['--novelist-bg'], dark: !!found.dark };
+              }
+            } catch (e) {}
+          }
+          if (!picked) picked = prefersDark ? builtin.dark : builtin.light;
+          var root = document.documentElement;
+          root.style.background = picked.bg;
+          root.style.colorScheme = picked.dark ? 'dark' : 'light';
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll } from 'vitest';
 
 /**
  * [contract] templateI18n — New Project dialog label helpers. Verifies
@@ -33,6 +33,15 @@ const userTpl: TemplateInfo = {
 };
 
 const originalLocale = i18n.locale;
+
+// zh-CN is lazy-loaded in the app; tests that flip `i18n.locale` directly
+// must pre-warm both locales so the translation map is present when they
+// read translated strings via `t()`.
+beforeAll(async () => {
+  await i18n.setLocale('zh-CN');
+  await i18n.setLocale('en');
+  i18n.locale = originalLocale;
+});
 
 afterEach(() => {
   i18n.locale = originalLocale;

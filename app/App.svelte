@@ -2,35 +2,39 @@
   import { onMount } from 'svelte';
   import { open } from '@tauri-apps/plugin-dialog';
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+  // First-paint critical shell: keep these static.
   import Sidebar from '$lib/components/Sidebar.svelte';
-  import Editor from '$lib/components/Editor.svelte';
   import TabBar from '$lib/components/TabBar.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
-  import ConflictDialog from '$lib/components/ConflictDialog.svelte';
-  import UnsavedChangesDialog from '$lib/components/UnsavedChangesDialog.svelte';
-  import Outline from '$lib/components/Outline.svelte';
-  import ZenMode from '$lib/components/ZenMode.svelte';
-  import CommandPalette from '$lib/components/CommandPalette.svelte';
-  import MoveFilePalette from '$lib/components/MoveFilePalette.svelte';
-  import ExportDialog from '$lib/components/ExportDialog.svelte';
-  import Settings from '$lib/components/Settings.svelte';
   import Welcome from '$lib/components/Welcome.svelte';
-  import DraftNote from '$lib/components/DraftNote.svelte';
-  import SnapshotPanel from '$lib/components/SnapshotPanel.svelte';
-  import StatsPanel from '$lib/components/StatsPanel.svelte';
-  import TemplatePanel from '$lib/components/TemplatePanel.svelte';
-  import type { TemplateFileSummary } from '$lib/ipc/commands';
-  import ProjectSearch from '$lib/components/ProjectSearch.svelte';
-  import NewProjectDialog from '$lib/components/NewProjectDialog.svelte';
   import ErrorBoundary from '$lib/components/ErrorBoundary.svelte';
+  // Everything else is dynamic-imported at the point of use so CodeMirror,
+  // canvas/kanban/mindmap, modal dialogs, and right-panel components stay
+  // out of the initial JS chunk.
+  const loadEditor = () => import('$lib/components/Editor.svelte');
+  const loadZenMode = () => import('$lib/components/ZenMode.svelte');
+  const loadConflictDialog = () => import('$lib/components/ConflictDialog.svelte');
+  const loadUnsavedChangesDialog = () => import('$lib/components/UnsavedChangesDialog.svelte');
+  const loadCommandPalette = () => import('$lib/components/CommandPalette.svelte');
+  const loadMoveFilePalette = () => import('$lib/components/MoveFilePalette.svelte');
+  const loadExportDialog = () => import('$lib/components/ExportDialog.svelte');
+  const loadSettings = () => import('$lib/components/Settings.svelte');
+  const loadProjectSearch = () => import('$lib/components/ProjectSearch.svelte');
+  const loadNewProjectDialog = () => import('$lib/components/NewProjectDialog.svelte');
+  const loadMindmapOverlay = () => import('$lib/components/MindmapOverlay.svelte');
+  const loadOutline = () => import('$lib/components/Outline.svelte');
+  const loadDraftNote = () => import('$lib/components/DraftNote.svelte');
+  const loadSnapshotPanel = () => import('$lib/components/SnapshotPanel.svelte');
+  const loadStatsPanel = () => import('$lib/components/StatsPanel.svelte');
+  const loadTemplatePanel = () => import('$lib/components/TemplatePanel.svelte');
+  const loadPluginPanel = () => import('$lib/components/PluginPanel.svelte');
+  const loadAiTalkPanel = () => import('$lib/components/AiTalkPanel.svelte');
+  const loadAiAgentPanel = () => import('$lib/components/AiAgentPanel.svelte');
+  const loadPluginFileEditor = () => import('$lib/components/PluginFileEditor.svelte');
+  const loadCanvasFileEditor = () => import('$lib/components/CanvasFileEditor.svelte');
+  const loadKanbanFileEditor = () => import('$lib/components/KanbanFileEditor.svelte');
+  import type { TemplateFileSummary } from '$lib/ipc/commands';
   import { extensionStore } from '$lib/stores/extensions.svelte';
-  import PluginPanel from '$lib/components/PluginPanel.svelte';
-  import AiTalkPanel from '$lib/components/AiTalkPanel.svelte';
-  import AiAgentPanel from '$lib/components/AiAgentPanel.svelte';
-  import PluginFileEditor from '$lib/components/PluginFileEditor.svelte';
-  import CanvasFileEditor from '$lib/components/CanvasFileEditor.svelte';
-  import KanbanFileEditor from '$lib/components/KanbanFileEditor.svelte';
-  import MindmapOverlay from '$lib/components/MindmapOverlay.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
   import { projectStore } from '$lib/stores/project.svelte';
   import { tabsStore, getEditorView } from '$lib/stores/tabs.svelte';
@@ -312,12 +316,8 @@
       };
     }
 
-    // Load recent projects for Cmd+Number switching
-    refreshRecentProjects();
-
-    // Load UI extensions from installed plugins
-    extensionStore.loadFromPlugins();
-
+    // Commands must be registered before first-paint so global shortcuts
+    // (Cmd+P, Cmd+K, Cmd+Shift+P, …) respond from the very first frame.
     registerAppCommands({
       t,
       getActiveEditorView,
@@ -338,45 +338,65 @@
       requestProjectSwitcher: () => { uiStore.sidebarVisible = true; projectSwitcherTrigger++; },
     });
 
-    // Check for updates silently after startup (5s delay to not block UI)
-    setTimeout(async () => {
-      const { checkForUpdates } = await import('$lib/updater');
-      checkForUpdates(true);
-    }, 5000);
-
-    // Async event listeners — consolidated in $lib/composables/app-events.
-    const unlistenAppEvents = wireAppEvents({
-      onConflict: (path) => { conflictFilePath = path; },
-      onRecentProjectsUpdated: (list) => { recentProjects = list; },
-      onGotoLine: (line) => {
-        const ref = tabsStore.activePaneId === 'pane-2' ? pane2EditorRef : pane1EditorRef;
-        ref?.jumpToAbsoluteLine(line);
-      },
-    });
-
+    // Lifecycle wiring (onCloseRequested, WebDAV auto-sync) stays pre-paint so
+    // quitting during the first frame still prompts on unsaved changes.
     const unlistenLifecycle = useAppLifecycle({
       t,
       isClosingTab: () => closeTab.isClosing(),
     });
 
-    // Native menu → commandRegistry dispatch bridge. Open Recent items
-    // carry their target path in the ID and are routed to the project
-    // open flow instead of a static command handler.
-    const unlistenMenu = wireMenuEvents({
-      onOpenRecent: (path) => { void handleOpenRecent(path); },
-    });
+    // Deferred teardown handles — nulled until the rAF fires. The cleanup
+    // closure optional-chains so unmounting before first-paint is safe.
+    let unlistenAppEvents: (() => void) | null = null;
+    let unlistenMenu: (() => void) | null = null;
 
     startupMark('frontend.app.onMount.end');
     // Wait one frame so "first-paint" reflects the actual paint after mount.
+    // After painting, wire the non-critical event bridges + kick off
+    // deferred startup work (plugin scan, recent-projects refresh, updater).
     requestAnimationFrame(() => {
       startupMark('frontend.app.first-paint');
       void startupReport();
+
+      // Load recent projects for Cmd+Number switching.
+      refreshRecentProjects();
+
+      // Load UI extensions from installed plugins. Deferred to idle so the
+      // plugin disk scan (ensure_bundled_plugins + manifest parsing) runs
+      // outside of the first-paint window. Built-in AI panels are hardcoded
+      // into extensionStore so the toggle-tabs render without the scan.
+      const scheduleIdle: (cb: () => void) => void =
+        typeof (globalThis as any).requestIdleCallback === 'function'
+          ? (cb) => (globalThis as any).requestIdleCallback(cb, { timeout: 2000 })
+          : (cb) => setTimeout(cb, 200);
+      scheduleIdle(() => { void extensionStore.loadFromPlugins(); });
+
+      // Async event listeners — consolidated in $lib/composables/app-events.
+      unlistenAppEvents = wireAppEvents({
+        onConflict: (path) => { conflictFilePath = path; },
+        onRecentProjectsUpdated: (list) => { recentProjects = list; },
+        onGotoLine: (line) => {
+          const ref = tabsStore.activePaneId === 'pane-2' ? pane2EditorRef : pane1EditorRef;
+          ref?.jumpToAbsoluteLine(line);
+        },
+      });
+
+      // Native menu → commandRegistry dispatch bridge.
+      unlistenMenu = wireMenuEvents({
+        onOpenRecent: (path) => { void handleOpenRecent(path); },
+      });
+
+      // Check for updates silently after startup (5s delay to not block UI)
+      setTimeout(async () => {
+        const { checkForUpdates } = await import('$lib/updater');
+        checkForUpdates(true);
+      }, 5000);
     });
 
     return () => {
-      unlistenAppEvents();
+      unlistenAppEvents?.();
       unlistenLifecycle();
-      unlistenMenu();
+      unlistenMenu?.();
     };
   });
 </script>
@@ -445,26 +465,30 @@
 {#if !projectStore.isOpen}
   <Welcome onOpenDirectory={handleOpenDirectory} onOpenRecent={handleOpenRecent} onNewFile={handleNewScratchFile} onNewProject={() => { newProjectDialogOpen = true; }} />
 {:else if uiStore.zenMode}
-  <ZenMode {wordCount}>
-    <div class="flex-1 min-h-0 overflow-hidden w-full">
-      {#if tabsStore.getPaneActiveTab('pane-1')}
-        <ErrorBoundary><Editor paneId="pane-1" bind:wordCount={pane1WordCount} bind:cursorLine={pane1CursorLine} bind:cursorCol={pane1CursorCol} bind:headings={pane1Headings} bind:this={pane1EditorRef} /></ErrorBoundary>
-      {:else}
-        <div class="flex items-center justify-center h-full" style="color: var(--novelist-text-secondary);">
-          <div class="text-center">
-            <p class="text-lg mb-2">{t('app.name')}</p>
-            <p class="text-sm">{t('app.openFolder')}</p>
+  {#await loadZenMode() then { default: ZenMode }}
+    <ZenMode {wordCount}>
+      <div class="flex-1 min-h-0 overflow-hidden w-full">
+        {#if tabsStore.getPaneActiveTab('pane-1')}
+          {#await loadEditor() then { default: Editor }}
+            <ErrorBoundary><Editor paneId="pane-1" bind:wordCount={pane1WordCount} bind:cursorLine={pane1CursorLine} bind:cursorCol={pane1CursorCol} bind:headings={pane1Headings} bind:this={pane1EditorRef} /></ErrorBoundary>
+          {/await}
+        {:else}
+          <div class="flex items-center justify-center h-full" style="color: var(--novelist-text-secondary);">
+            <div class="text-center">
+              <p class="text-lg mb-2">{t('app.name')}</p>
+              <p class="text-sm">{t('app.openFolder')}</p>
+            </div>
           </div>
-        </div>
-      {/if}
-    </div>
-  </ZenMode>
+        {/if}
+      </div>
+    </ZenMode>
+  {/await}
 {:else}
   <!--
     Layout: sidebar | [editor-area] | outline
     Editor area: [pane1] | [pane2 if split] stacked vertically with shared status bar
   -->
-  <div data-testid="app-layout" class="flex h-full w-full" style="{isDraggingAny ? 'cursor: col-resize; user-select: none;' : ''}">
+  <div data-testid="app-layout" class="novelist-view-fade-in flex h-full w-full" style="{isDraggingAny ? 'cursor: col-resize; user-select: none;' : ''}">
     {#if uiStore.sidebarVisible}
       <div data-testid="sidebar-region" class="shrink-0" style="width: {uiStore.sidebarWidth}px;">
         <Sidebar
@@ -502,15 +526,23 @@
               {@const fileName1 = tabsStore.getPaneActiveTab('pane-1')?.fileName ?? ''}
               {@const lower1 = fileName1.toLowerCase()}
               {#if lower1.endsWith('.canvas')}
-                <ErrorBoundary><CanvasFileEditor paneId="pane-1" /></ErrorBoundary>
+                {#await loadCanvasFileEditor() then { default: CanvasFileEditor }}
+                  <ErrorBoundary><CanvasFileEditor paneId="pane-1" /></ErrorBoundary>
+                {/await}
               {:else if lower1.endsWith('.kanban')}
-                <ErrorBoundary><KanbanFileEditor paneId="pane-1" /></ErrorBoundary>
+                {#await loadKanbanFileEditor() then { default: KanbanFileEditor }}
+                  <ErrorBoundary><KanbanFileEditor paneId="pane-1" /></ErrorBoundary>
+                {/await}
               {:else}
                 {@const fileHandler1 = extensionStore.getFileHandler(fileName1)}
                 {#if fileHandler1}
-                  <ErrorBoundary><PluginFileEditor extension={fileHandler1} paneId="pane-1" /></ErrorBoundary>
+                  {#await loadPluginFileEditor() then { default: PluginFileEditor }}
+                    <ErrorBoundary><PluginFileEditor extension={fileHandler1} paneId="pane-1" /></ErrorBoundary>
+                  {/await}
                 {:else}
-                  <ErrorBoundary><Editor paneId="pane-1" bind:wordCount={pane1WordCount} bind:cursorLine={pane1CursorLine} bind:cursorCol={pane1CursorCol} bind:headings={pane1Headings} bind:this={pane1EditorRef} /></ErrorBoundary>
+                  {#await loadEditor() then { default: Editor }}
+                    <ErrorBoundary><Editor paneId="pane-1" bind:wordCount={pane1WordCount} bind:cursorLine={pane1CursorLine} bind:cursorCol={pane1CursorCol} bind:headings={pane1Headings} bind:this={pane1EditorRef} /></ErrorBoundary>
+                  {/await}
                 {/if}
               {/if}
             {:else}
@@ -549,15 +581,23 @@
                 {@const fileName2 = tabsStore.getPaneActiveTab('pane-2')?.fileName ?? ''}
                 {@const lower2 = fileName2.toLowerCase()}
                 {#if lower2.endsWith('.canvas')}
-                  <ErrorBoundary><CanvasFileEditor paneId="pane-2" /></ErrorBoundary>
+                  {#await loadCanvasFileEditor() then { default: CanvasFileEditor }}
+                    <ErrorBoundary><CanvasFileEditor paneId="pane-2" /></ErrorBoundary>
+                  {/await}
                 {:else if lower2.endsWith('.kanban')}
-                  <ErrorBoundary><KanbanFileEditor paneId="pane-2" /></ErrorBoundary>
+                  {#await loadKanbanFileEditor() then { default: KanbanFileEditor }}
+                    <ErrorBoundary><KanbanFileEditor paneId="pane-2" /></ErrorBoundary>
+                  {/await}
                 {:else}
                   {@const fileHandler2 = extensionStore.getFileHandler(fileName2)}
                   {#if fileHandler2}
-                    <ErrorBoundary><PluginFileEditor extension={fileHandler2} paneId="pane-2" /></ErrorBoundary>
+                    {#await loadPluginFileEditor() then { default: PluginFileEditor }}
+                      <ErrorBoundary><PluginFileEditor extension={fileHandler2} paneId="pane-2" /></ErrorBoundary>
+                    {/await}
                   {:else}
-                    <ErrorBoundary><Editor paneId="pane-2" bind:wordCount={pane2WordCount} bind:cursorLine={pane2CursorLine} bind:cursorCol={pane2CursorCol} bind:headings={pane2Headings} bind:this={pane2EditorRef} /></ErrorBoundary>
+                    {#await loadEditor() then { default: Editor }}
+                      <ErrorBoundary><Editor paneId="pane-2" bind:wordCount={pane2WordCount} bind:cursorLine={pane2CursorLine} bind:cursorCol={pane2CursorCol} bind:headings={pane2Headings} bind:this={pane2EditorRef} /></ErrorBoundary>
+                    {/await}
                   {/if}
                 {/if}
               {:else}
@@ -587,45 +627,61 @@
       <!-- Panel content -->
       {#if uiStore.outlineVisible}
         <div class="overflow-y-auto" style="width: {uiStore.rightPanelWidth}px;">
-          <Outline {headings} onNavigate={(from) => activeEditorRef?.scrollToPosition(from)} onMoveSection={handleMoveSection} />
+          {#await loadOutline() then { default: Outline }}
+            <Outline {headings} onNavigate={(from) => activeEditorRef?.scrollToPosition(from)} onMoveSection={handleMoveSection} />
+          {/await}
         </div>
       {/if}
       {#if uiStore.draftVisible && tabsStore.activeTab}
         <div style="width: {uiStore.rightPanelWidth}px;">
-          <DraftNote filePath={tabsStore.activeTab.filePath} />
+          {#await loadDraftNote() then { default: DraftNote }}
+            <DraftNote filePath={tabsStore.activeTab.filePath} />
+          {/await}
         </div>
       {:else if uiStore.snapshotVisible}
         <div style="width: {uiStore.rightPanelWidth}px;">
-          <SnapshotPanel />
+          {#await loadSnapshotPanel() then { default: SnapshotPanel }}
+            <SnapshotPanel />
+          {/await}
         </div>
       {:else if uiStore.statsVisible && projectStore.dirPath}
         <div style="width: {uiStore.rightPanelWidth}px;">
-          <StatsPanel
-            projectDir={projectStore.dirPath}
-            chapters={projectChapters}
-          />
+          {#await loadStatsPanel() then { default: StatsPanel }}
+            <StatsPanel
+              projectDir={projectStore.dirPath}
+              chapters={projectChapters}
+            />
+          {/await}
         </div>
       {:else if uiStore.templateVisible}
         <div style="width: {uiStore.rightPanelWidth}px;">
-          <TemplatePanel
-            onExecute={executeTemplateWrapper}
-            openDialogRequest={templateDialogRequest}
-            onDialogHandled={() => { templateDialogRequest = null; }}
-          />
+          {#await loadTemplatePanel() then { default: TemplatePanel }}
+            <TemplatePanel
+              onExecute={executeTemplateWrapper}
+              openDialogRequest={templateDialogRequest}
+              onDialogHandled={() => { templateDialogRequest = null; }}
+            />
+          {/await}
         </div>
       {:else if extensionStore.activePanelId}
         {@const activePanel = extensionStore.panels.find(p => p.pluginId === extensionStore.activePanelId)}
         {#if activePanel?.pluginId === 'ai-talk'}
           <div style="width: {uiStore.rightPanelWidth}px;">
-            <ErrorBoundary><AiTalkPanel /></ErrorBoundary>
+            {#await loadAiTalkPanel() then { default: AiTalkPanel }}
+              <ErrorBoundary><AiTalkPanel /></ErrorBoundary>
+            {/await}
           </div>
         {:else if activePanel?.pluginId === 'ai-agent'}
           <div style="width: {uiStore.rightPanelWidth}px;">
-            <ErrorBoundary><AiAgentPanel /></ErrorBoundary>
+            {#await loadAiAgentPanel() then { default: AiAgentPanel }}
+              <ErrorBoundary><AiAgentPanel /></ErrorBoundary>
+            {/await}
           </div>
         {:else if activePanel && tabsStore.activeTab}
           <div style="width: {uiStore.rightPanelWidth}px;">
-            <PluginPanel extension={activePanel} onNavigate={(from) => activeEditorRef?.scrollToPosition(from)} />
+            {#await loadPluginPanel() then { default: PluginPanel }}
+              <PluginPanel extension={activePanel} onNavigate={(from) => activeEditorRef?.scrollToPosition(from)} />
+            {/await}
           </div>
         {/if}
       {/if}
@@ -694,62 +750,80 @@
 {/if}
 
 {#if conflictFilePath}
-  <ConflictDialog
-    filePath={conflictFilePath}
-    onKeepMine={() => handleKeepMine(conflictFilePath!)}
-    onLoadTheirs={() => handleLoadTheirs(conflictFilePath!)}
-    onClose={() => { conflictFilePath = null; }}
-  />
+  {#await loadConflictDialog() then { default: ConflictDialog }}
+    <ConflictDialog
+      filePath={conflictFilePath}
+      onKeepMine={() => handleKeepMine(conflictFilePath!)}
+      onLoadTheirs={() => handleLoadTheirs(conflictFilePath!)}
+      onClose={() => { conflictFilePath = null; }}
+    />
+  {/await}
 {/if}
 
 {#if unsavedPromptState.pending}
-  <UnsavedChangesDialog
-    fileNames={unsavedPromptState.pending.fileNames}
-    saveLabel={unsavedPromptState.pending.saveLabel}
-    onSave={() => resolveUnsavedPrompt('save')}
-    onDontSave={() => resolveUnsavedPrompt('discard')}
-    onCancel={() => resolveUnsavedPrompt('cancel')}
-  />
+  {#await loadUnsavedChangesDialog() then { default: UnsavedChangesDialog }}
+    <UnsavedChangesDialog
+      fileNames={unsavedPromptState.pending.fileNames}
+      saveLabel={unsavedPromptState.pending.saveLabel}
+      onSave={() => resolveUnsavedPrompt('save')}
+      onDontSave={() => resolveUnsavedPrompt('discard')}
+      onCancel={() => resolveUnsavedPrompt('cancel')}
+    />
+  {/await}
 {/if}
 
 {#if paletteOpen}
-  <CommandPalette onClose={() => { paletteOpen = false; }} />
+  {#await loadCommandPalette() then { default: CommandPalette }}
+    <CommandPalette onClose={() => { paletteOpen = false; }} />
+  {/await}
 {/if}
 
 {#if movePaletteOpen}
-  <MoveFilePalette onClose={() => {
-    movePaletteOpen = false;
-    // Return focus to the editor on the next frame so typing resumes without
-    // a manual click. rAF waits for the palette's input to unmount first.
-    const tabId = tabsStore.activeTab?.id;
-    if (tabId) requestAnimationFrame(() => getEditorView(tabId)?.focus());
-  }} />
+  {#await loadMoveFilePalette() then { default: MoveFilePalette }}
+    <MoveFilePalette onClose={() => {
+      movePaletteOpen = false;
+      // Return focus to the editor on the next frame so typing resumes without
+      // a manual click. rAF waits for the palette's input to unmount first.
+      const tabId = tabsStore.activeTab?.id;
+      if (tabId) requestAnimationFrame(() => getEditorView(tabId)?.focus());
+    }} />
+  {/await}
 {/if}
 
 {#if exportDialogOpen}
-  <ExportDialog onClose={() => { exportDialogOpen = false; }} />
+  {#await loadExportDialog() then { default: ExportDialog }}
+    <ExportDialog onClose={() => { exportDialogOpen = false; }} />
+  {/await}
 {/if}
 
 {#if uiStore.settingsOpen}
-  <Settings onClose={() => { uiStore.settingsOpen = false; }} />
+  {#await loadSettings() then { default: Settings }}
+    <Settings onClose={() => { uiStore.settingsOpen = false; }} />
+  {/await}
 {/if}
 
 {#if projectSearchOpen}
-  <ProjectSearch onClose={() => { projectSearchOpen = false; }} />
+  {#await loadProjectSearch() then { default: ProjectSearch }}
+    <ProjectSearch onClose={() => { projectSearchOpen = false; }} />
+  {/await}
 {/if}
 
 {#if mindmapOverlayOpen}
   {@const activeTab = tabsStore.activeTab}
   {@const view = activeTab ? getEditorView(activeTab.id) : undefined}
   {@const mdContent = view?.state.doc.toString() ?? activeTab?.content ?? ''}
-  <MindmapOverlay content={mdContent} onClose={() => { mindmapOverlayOpen = false; }} />
+  {#await loadMindmapOverlay() then { default: MindmapOverlay }}
+    <MindmapOverlay content={mdContent} onClose={() => { mindmapOverlayOpen = false; }} />
+  {/await}
 {/if}
 
 {#if newProjectDialogOpen}
-  <NewProjectDialog
-    onClose={() => { newProjectDialogOpen = false; }}
-    onProjectCreated={(path) => openProjectFromPath(path)}
-  />
+  {#await loadNewProjectDialog() then { default: NewProjectDialog }}
+    <NewProjectDialog
+      onClose={() => { newProjectDialogOpen = false; }}
+      onProjectCreated={(path) => openProjectFromPath(path)}
+    />
+  {/await}
 {/if}
 
 <style>

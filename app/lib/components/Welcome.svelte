@@ -114,7 +114,7 @@
   }
 </script>
 
-<div class="welcome-root" data-testid="welcome-screen" data-tauri-drag-region>
+<div class="welcome-root novelist-view-fade-in" data-testid="welcome-screen" data-tauri-drag-region>
   <div class="welcome-card">
     <div class="welcome-header">
       <h1 class="welcome-title">{t('app.name')}</h1>

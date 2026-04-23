@@ -11,6 +11,8 @@
  * in the numbers.
  */
 
+import { invoke } from '@tauri-apps/api/core';
+
 type Mark = { name: string; at: number };
 
 const marks: Mark[] = [];
@@ -55,16 +57,12 @@ export async function startupReport(): Promise<void> {
   console.table(rows);
 
   // Forward to Rust tracing so backend + frontend phases appear in one log.
-  // Best-effort: swallow errors (e.g. running outside Tauri, or command missing).
-  try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    for (const r of rows) {
-      invoke('log_startup_phase', {
-        name: r.phase,
-        sinceStartMs: r['since_start (ms)'],
-      }).catch(() => {});
-    }
-  } catch {
-    // Not running inside Tauri (e.g. vitest or browser E2E); skip.
+  // Best-effort: outside Tauri (vitest/browser E2E) `invoke` rejects and the
+  // per-call `.catch(() => {})` swallows it.
+  for (const r of rows) {
+    invoke('log_startup_phase', {
+      name: r.phase,
+      sinceStartMs: r['since_start (ms)'],
+    }).catch(() => {});
   }
 }

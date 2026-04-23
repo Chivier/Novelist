@@ -61,6 +61,35 @@ html, body, #app {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Fade the app shell in on first mount so the transition from the themed
+   pre-paint background to the rendered UI isn't a hard snap. The animation
+   runs once on page load; later Svelte rerenders don't re-trigger it. */
+@keyframes novelist-app-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+#app {
+  animation: novelist-app-fade-in 200ms ease-out both;
+}
+
+/* View-level fade for top-level route switches (Welcome ↔ project layout).
+   CSS animations fire once per element mount, so toggling projectStore.isOpen
+   re-runs this naturally without needing a Svelte transition. 120ms keeps it
+   below the "feels sluggish" threshold while still softening the snap. */
+@keyframes novelist-view-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.novelist-view-fade-in {
+  animation: novelist-view-fade-in 120ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  #app,
+  .novelist-view-fade-in {
+    animation: none;
+  }
+}
+
 /* Auto-hide scrollbars: only visible during scroll */
 * {
   scrollbar-width: thin;

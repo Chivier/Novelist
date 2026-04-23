@@ -110,7 +110,9 @@ describe('[contract] i18n plural forms', () => {
     const zhCNMessages = (await import('$lib/i18n/locales/zh-CN')).zhCN;
     // Temporarily inject a plural key.
     (zhCNMessages as any).__plural_test__ = { zero: 'no items', one: '1 item', other: '{count} items' };
-    i18n.setLocale('zh-CN');
+    // Await setLocale so the lazy-loaded zh-CN translation map is registered
+    // in the store before we read it back via `t()`.
+    await i18n.setLocale('zh-CN');
     try {
       expect(i18n.t('__plural_test__', { count: 0 })).toBe('no items');
       expect(i18n.t('__plural_test__', { count: 1 })).toBe('1 item');
