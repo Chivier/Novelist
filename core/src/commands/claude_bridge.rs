@@ -544,8 +544,12 @@ mod tests {
         let c = candidate_paths();
         // Spot-check that we scan common Node version manager locations.
         // Use Path::ends_with so it compares components (cross-platform).
-        assert!(c.iter().any(|p| p.ends_with(Path::new(".volta/bin/claude"))));
+        assert!(c
+            .iter()
+            .any(|p| p.ends_with(Path::new(".volta/bin/claude"))));
         assert!(c.iter().any(|p| p.ends_with(Path::new(".bun/bin/claude"))));
-        assert!(c.iter().any(|p| p.ends_with(Path::new(".asdf/shims/claude"))));
+        assert!(c
+            .iter()
+            .any(|p| p.ends_with(Path::new(".asdf/shims/claude"))));
     }
 }
