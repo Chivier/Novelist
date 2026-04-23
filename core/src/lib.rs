@@ -46,6 +46,7 @@ use commands::template_files::{
     create_file_with_body, delete_template_file, duplicate_bundled_template, list_template_files,
     read_template_file, rename_template_file, write_template_file,
 };
+use commands::window::set_window_appearance;
 use services::file_watcher::{
     register_open_file, register_write_ignore, start_file_watcher, stop_file_watcher,
     unregister_open_file, FileWatcherState,
@@ -85,6 +86,30 @@ impl PendingOpenFiles {
 #[specta::specta]
 fn get_pending_open_files(state: tauri::State<'_, PendingOpenFiles>) -> Vec<String> {
     state.drain()
+}
+
+/// macOS 11+ draws a 1px hairline under the titlebar even when the titlebar
+/// itself is transparent (Overlay mode). That shows up as a thin white edge
+/// at the very top of the window. Setting the style to `.none` removes it.
+/// No-op on older macOS where the selector doesn't exist.
+#[cfg(target_os = "macos")]
+fn remove_titlebar_separator(window: &tauri::WebviewWindow) {
+    use objc::runtime::{Object, Sel};
+    use objc::{msg_send, sel, sel_impl};
+
+    let ptr = match window.ns_window() {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+    let ns_window = ptr as *mut Object;
+    unsafe {
+        let sel: Sel = sel!(setTitlebarSeparatorStyle:);
+        let responds: bool = msg_send![ns_window, respondsToSelector: sel];
+        if responds {
+            // NSTitlebarSeparatorStyleNone = 1
+            let _: () = msg_send![ns_window, setTitlebarSeparatorStyle: 1i64];
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -186,6 +211,7 @@ pub fn run() {
         claude_cli_send,
         claude_cli_kill,
         refresh_menu,
+        set_window_appearance,
         get_sync_config,
         save_sync_config,
         sync_now,
@@ -274,6 +300,7 @@ pub fn run() {
         claude_cli_send,
         claude_cli_kill,
         refresh_menu,
+        set_window_appearance,
     ]);
 
     #[cfg(feature = "codegen")]
@@ -327,6 +354,25 @@ pub fn run() {
                 "backend phase"
             );
             builder.mount_events(app);
+
+            // macOS chrome tweaks — run after the main window exists.
+            #[cfg(target_os = "macos")]
+            match app.get_webview_window("main") {
+                Some(win) => {
+                    remove_titlebar_separator(&win);
+                    tracing::info!(
+                        target: "novelist::startup",
+                        phase = "backend.macos.titlebar-separator-tamed",
+                        "called setTitlebarSeparatorStyle:.none on main window"
+                    );
+                }
+                None => {
+                    tracing::warn!(
+                        target: "novelist::startup",
+                        "main webview window not found during setup; macOS chrome tweaks skipped"
+                    );
+                }
+            }
 
             // Check CLI args for a file path to open in single-file mode.
             // Push to PendingOpenFiles so the frontend can pick them up on mount.

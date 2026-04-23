@@ -15,3 +15,4 @@ pub mod stats;
 pub mod sync;
 pub mod template;
 pub mod template_files;
+pub mod window;

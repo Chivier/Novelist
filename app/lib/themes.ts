@@ -218,6 +218,24 @@ export function applyTheme(theme: Theme) {
 
   // Set color-scheme for scrollbar theming
   root.style.setProperty('color-scheme', theme.dark ? 'dark' : 'light');
+
+  // Sync the NSWindow's appearance on macOS so the system-drawn title-bar
+  // chrome (top-edge highlight, traffic-light styling) matches the content.
+  // Without this, a dark theme leaves a bright 1px line at the very top of
+  // the window because macOS is still drawing light-mode chrome. Best-effort
+  // via raw invoke — the typed wrapper only appears in commands.ts after the
+  // next tauri-specta codegen run, and calling directly keeps this file free
+  // of a circular import through the IPC layer.
+  void invokeSetWindowAppearance(theme.dark);
+}
+
+async function invokeSetWindowAppearance(dark: boolean): Promise<void> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('set_window_appearance', { dark });
+  } catch {
+    // Not running under Tauri (vitest / browser E2E), or command missing.
+  }
 }
 
 /**

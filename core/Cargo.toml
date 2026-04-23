@@ -43,6 +43,20 @@ futures-util = "0.3"
 url = "2"
 specta-typescript = { version = "0.0.11", optional = true }
 
+# macOS-only: needed to poke the NSWindow at setup time to disable the
+# titlebar separator hairline (macOS 11+ draws a 1px line under the overlay
+# title bar by default). Tauri doesn't expose this config, so we send the
+# selector directly.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = "0.2"
+
+# `objc` 0.2's `sel!` / `msg_send!` macros expand with `#[cfg(cargo-clippy)]`
+# and the unmaintained crate never registered that cfg. Newer rustc flags it
+# as `unexpected_cfgs`, which CI's `-D warnings` then turns into an error.
+# Silence only this lint; the rest of the strict-warning policy stays.
+[lints.rust]
+unexpected_cfgs = "allow"
+
 [features]
 default = ["sync"]
 dev = ["tauri/devtools", "codegen"]
