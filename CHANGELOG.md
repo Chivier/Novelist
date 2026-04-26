@@ -5,6 +5,95 @@ All notable changes to Novelist will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-04-27
+
+Patch release. Focuses on **rounding out the two AI panels** introduced
+in 0.2.0 — AI Talk and AI Agent both gain a shared composer scaffold
+(slash commands, @-mention context, inline edit review) and
+project-scoped persistence of sessions, skills, and memory. Also lands
+a docs reorganisation, a unified verification harness, and the
+project's first formal third-party / inspiration credits file.
+
+本次 patch 主要补充 0.2.0 引入的两个 AI 面板:AI Talk 与 AI Agent 现在共享
+统一的输入脚手架(斜杠命令 / @-mention 上下文 / 内联改写审阅),并将会话、
+skill、memory 持久化到项目目录。此外完成文档结构整理、统一验证脚本,以及
+首次提供正式的第三方致谢与设计灵感清单。
+
+### Added
+- **Shared AI composer scaffold** (`app/lib/components/ai-shared/`) —
+  used by both AI Talk and AI Agent:
+  - **Slash commands** (`/rewrite`, `/summarize`, `/continue`,
+    `/translate`, `/line-edit`, `/brainstorm`, `/compact`, `/clear`,
+    `/save`, `/plan`, `/act`) via `AiCommandMenu`
+  - **@-mention picker** for current selection / current file /
+    outline / project files / folder summaries via `AiMentionMenu`
+  - **Context bar** (`AiContextBar`) for reviewing and pruning per-turn
+    context items before sending
+  - **Inline edit review** (`InlineEditReview`) with diff preview for
+    rewrite-style commands (`diff.ts`)
+  - **Built-in skills** plus project-scoped skills loaded from
+    `.novelist/ai/skills/**/*.md`
+- **Project-scoped AI persistence** (Rust core, `commands/ai_files.rs`) —
+  path-validated and atomically written, with unit tests:
+  - `list_ai_sessions`, `read_ai_session`, `write_ai_session`,
+    `delete_ai_session` writing to `.novelist/ai/sessions/`
+  - `list_ai_prompt_assets` reading `.novelist/ai/{commands,skills}/*.md`
+  - `write_ai_memory` for `.novelist/ai/memory.md`
+- **Unified verification harness** — `scripts/harness.sh` plus
+  `pnpm verify:{quick,unit,coverage,e2e,rust,ci}` aliases mirroring CI
+  gates locally
+- **New unit suites** for `ai-agent` sessions, `ai-shared` context
+  builder, and `ai-shared` diff helpers
+- **`CREDITS.md`** — design inspiration and third-party software
+  acknowledgements (see *Acknowledgements* below)
+
+### Changed
+- **AI Talk / AI Agent panels** now mount the shared context bar,
+  command menu, mention menu, and inline review surfaces
+- **AI Talk settings store** loads project preset / skill assets via
+  the new prompt-asset commands
+- **Documentation reorg** — legacy `docs/architecture/`, `docs/design/`,
+  `docs/plans/`, `docs/superpowers/`, and ad-hoc top-level design
+  docs consolidated under `docs/{design-docs,exec-plans,product-specs,
+  references,generated}/`. New top-level `ARCHITECTURE.md` and
+  `docs/index.md` for navigation
+- **CLAUDE.md / README.md** updated to point at the new docs layout
+  and the new `CREDITS.md`
+
+### Acknowledgements
+The shared AI scaffold was inspired by two MIT-licensed projects whose
+authors showed how an embedded AI agent can fit naturally inside a
+writing tool. No code was vendored or forked from either project; these
+are design references credited in good faith.
+
+- [**claudian**](https://github.com/YishenTu/claudian) by *YishenTu* —
+  embedded coding-agent UX inside an editor host
+- [**obsidian-yolo**](https://github.com/Lapis0x0/obsidian-yolo) by
+  *Lapis0x0* — agent-native chat + writing assistant integrated into
+  a notes app
+
+A complete list of design references and bundled third-party software
+is in [`CREDITS.md`](CREDITS.md).
+
+## [0.2.1] - 2026-04-23
+
+Patch release. Startup performance and macOS chrome polish.
+
+### Changed
+- **Startup performance** — code-split heavy components, async i18n
+  loading, view-fade transitions to mask first paint
+- **Diagnostic instrumentation** — `log_startup_phase` plumbed through
+  the boot path; tracing wired up on macOS
+
+### Fixed
+- **Window visibility on launch** — wired the missing `window.show`
+  capability so the main window reliably surfaces after splash
+- **macOS top-edge titlebar hairline** — tamed the 1px artefact under
+  the unified titlebar
+
+### Docs
+- README aligned with novelist.dev messaging and v0.2.0 download links
+
 ## [0.2.0] - 2026-04-22
 
 Second minor release. Focuses on AI-assisted writing (multi-session
