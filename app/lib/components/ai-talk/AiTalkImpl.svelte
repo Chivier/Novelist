@@ -13,6 +13,31 @@
   import { cancelPendingStreams } from './cleanup';
   import AiTalkSettings from './AiTalkSettings.svelte';
   import SessionTabs from '$lib/components/ai-shared/SessionTabs.svelte';
+  import AiContextBar from '$lib/components/ai-shared/AiContextBar.svelte';
+  import AiCommandMenu from '$lib/components/ai-shared/AiCommandMenu.svelte';
+  import AiMentionMenu from '$lib/components/ai-shared/AiMentionMenu.svelte';
+  import InlineEditReview from '$lib/components/ai-shared/InlineEditReview.svelte';
+  import {
+    BUILTIN_SKILLS,
+    buildContextPack,
+    commandInstruction,
+    contextPackToPrompt,
+    parseSkillTokens,
+    parseSlashCommand,
+    resolveMentionContexts,
+    skillAssetsForTokens,
+    stripMentionTokens,
+    stripSkillTokens,
+    type AiContextItem,
+  } from '$lib/components/ai-shared/context';
+  import {
+    listAiPromptAssets,
+    listAiSessions,
+    readAiSession,
+    writeAiMemory,
+    writeAiSession,
+    type AiPromptAsset,
+  } from '$lib/components/ai-shared/persistence';
   import { aiTalkSessions, type DisplayMessage } from './sessions.svelte';
   import { promptPresets } from './presets.svelte';
   import { commands } from '$lib/ipc/commands';
@@ -23,6 +48,9 @@
   let activeTab = $state<Tab>('chat');
   let settingsOpen = $state(false);
   let saveStatus = $state<string | null>(null); // brief toast after saving
+  let contextItems = $state<AiContextItem[]>([]);
+  let promptAssets = $state<AiPromptAsset[]>([...BUILTIN_SKILLS]);
+  let projectSessionsLoaded = $state(false);
 
   // -------- Live editor selection (poll 300ms) --------
   // Shows a selection chip above the composer so the user knows their
@@ -56,6 +84,10 @@
   let chatStreaming = $state(false);
   let chatStreamId: string | null = null;
   let chatScroller = $state<HTMLDivElement | undefined>(undefined);
+  let commandMenuVisible = $derived(/^\/[a-z-]*$/.test(chatInput.trim()));
+  let commandQuery = $derived(chatInput.trim().startsWith('/') ? chatInput.trim().slice(1) : '');
+  let mentionMenuVisible = $derived(/(^|\s)@[^\s]*$/.test(chatInput));
+  let mentionQuery = $derived((/(?:^|\s)@([^\s]*)$/.exec(chatInput)?.[1] ?? '').toLowerCase());
 
   /**
    * Resolves the effective system prompt / model / temperature for the
@@ -77,7 +109,7 @@
     };
   }
 
-  function buildChatContext(userText: string): ChatMessage[] {
+  function buildChatContext(userText: string, extraContext: AiContextItem[] = []): ChatMessage[] {
     const ctx: ChatMessage[] = [];
     const s = aiTalkSettings.value;
     const cfg = activeConfig();
@@ -101,6 +133,14 @@
       }
     }
 
+    if (extraContext.length > 0) {
+      const pack = buildContextPack('Use the attached context for this turn.', extraContext);
+      ctx.push({
+        role: 'user',
+        content: contextPackToPrompt(pack),
+      });
+    }
+
     for (const m of messages) {
       ctx.push({ role: m.role, content: m.content });
     }
@@ -110,11 +150,103 @@
     return ctx;
   }
 
+  function addContext(items: AiContextItem[]) {
+    const seen = new Set(contextItems.map((item) => item.id));
+    contextItems = [...contextItems, ...items.filter((item) => !seen.has(item.id))];
+  }
+
+  function removeContext(id: string) {
+    contextItems = contextItems.filter((item) => item.id !== id);
+  }
+
+  function clearContext() {
+    contextItems = [];
+  }
+
+  function pickCommand(id: string) {
+    chatInput = `/${id} `;
+  }
+
+  function pickMention(token: string) {
+    chatInput = chatInput.replace(/(^|\s)@[^\s]*$/, `$1${token}`);
+  }
+
+  async function handleSpecialTalkCommand(commandId: string): Promise<boolean> {
+    if (commandId === 'clear') {
+      clearChat();
+      return true;
+    }
+    if (commandId === 'save') {
+      await saveChatToProject();
+      return true;
+    }
+    if (commandId === 'compact') {
+      await compactConversation();
+      return true;
+    }
+    return false;
+  }
+
+  async function compactConversation() {
+    const sessionId = aiTalkSessions.ensureOne();
+    if (messages.length < 2) {
+      saveStatus = 'Need a longer conversation to compact.';
+      setTimeout(() => (saveStatus = null), 2500);
+      return;
+    }
+    if (!aiTalkSettings.value.apiKey) {
+      saveStatus = 'Set an API key before compacting.';
+      setTimeout(() => (saveStatus = null), 2500);
+      return;
+    }
+    chatStreaming = true;
+    let summary = '';
+    try {
+      const cfg = activeConfig();
+      const req = buildChatRequest({
+        baseUrl: aiTalkSettings.value.baseUrl,
+        apiKey: aiTalkSettings.value.apiKey,
+        model: cfg.model,
+        temperature: 0.2,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Compact this conversation into a concise memory summary for future writing context. Preserve names, decisions, unresolved questions, and user preferences.',
+          },
+          { role: 'user', content: messages.map((m) => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n') },
+        ],
+      });
+      chatStreamId = await startAiStream(req);
+      for await (const ev of aiStream(chatStreamId)) {
+        if (ev.kind === 'chunk') {
+          const delta = parseChatDelta(ev.data);
+          if (delta) summary += delta;
+        }
+      }
+      aiTalkSessions.compactActive(summary || 'Conversation compacted.');
+      await persistProjectSessions();
+    } catch (e) {
+      aiTalkSessions.updateMessages(sessionId, [
+        ...messages,
+        { role: 'assistant', content: `Compact failed: ${e instanceof Error ? e.message : String(e)}` },
+      ]);
+    } finally {
+      chatStreaming = false;
+      chatStreamId = null;
+    }
+  }
+
   async function sendChat() {
     const text = chatInput.trim();
     if (!text || chatStreaming) return;
     // Make sure we have a session to write into.
     const sessionId = aiTalkSessions.ensureOne();
+    const slash = parseSlashCommand(text);
+    if (slash && await handleSpecialTalkCommand(slash.id)) {
+      chatInput = '';
+      return;
+    }
 
     if (!aiTalkSettings.value.apiKey) {
       aiTalkSessions.updateMessages(sessionId, [
@@ -124,10 +256,29 @@
       return;
     }
 
+    const mentionContexts = await resolveMentionContexts(text);
+    const skillTokens = parseSkillTokens(text);
+    const skillContext: AiContextItem[] = skillAssetsForTokens(skillTokens, promptAssets).map((skill) => ({
+      id: `skill:${skill.id}`,
+      kind: 'manual-note',
+      label: `Skill: ${skill.name}`,
+      path: skill.path,
+      content: skill.content,
+    }));
+    const turnContext = [...contextItems, ...mentionContexts, ...skillContext];
+    if (mentionContexts.length > 0 || skillContext.length > 0) {
+      addContext([...mentionContexts, ...skillContext]);
+    }
+    const cleaned = stripSkillTokens(stripMentionTokens(slash ? slash.rest || text : text));
+    const instruction = commandInstruction(slash);
+    const effectiveText = instruction
+      ? `${instruction}\n\nUser request: ${cleaned || slash?.rest || text}`
+      : cleaned || text;
+
     // Snapshot messages through this turn locally so we can index into
     // the assistant slot as deltas arrive; we push the full array back
     // into the store after each update.
-    const base: DisplayMessage[] = [...messages, { role: 'user', content: text }];
+    const base: DisplayMessage[] = [...messages, { role: 'user', content: effectiveText }];
     chatInput = '';
     aiTalkSessions.updateMessages(sessionId, base);
     scrollChat();
@@ -145,7 +296,7 @@
         apiKey: aiTalkSettings.value.apiKey,
         model: cfg.model,
         temperature: cfg.temperature,
-        messages: buildChatContext(text),
+        messages: buildChatContext(effectiveText, turnContext),
       });
       chatStreamId = await startAiStream(req);
       for await (const ev of aiStream(chatStreamId)) {
@@ -174,6 +325,7 @@
     } finally {
       chatStreaming = false;
       chatStreamId = null;
+      await persistProjectSessions();
     }
   }
 
@@ -188,6 +340,7 @@
 
   function clearChat() {
     if (activeSessionId) aiTalkSessions.clearMessages(activeSessionId);
+    void persistProjectSessions();
   }
 
   // -------- Save current session to project as markdown --------
@@ -200,7 +353,7 @@
     lines.push(`_Exported from AI Talk · ${iso}_`);
     lines.push('');
     for (const m of msgs) {
-      lines.push(m.role === 'user' ? '## You' : '## Assistant');
+      lines.push(m.role === 'user' ? '## You' : m.role === 'system' ? '## Memory' : '## Assistant');
       lines.push('');
       lines.push(m.content);
       lines.push('');
@@ -243,6 +396,61 @@
       saveStatus = `Save failed: ${e instanceof Error ? e.message : String(e)}`;
     }
     setTimeout(() => (saveStatus = null), 4000);
+  }
+
+  async function saveMemory() {
+    const projectDir = projectStore.dirPath;
+    if (!projectDir || messages.length === 0) return;
+    const memory = messages.map((m) => `## ${m.role}\n\n${m.content}`).join('\n\n');
+    try {
+      await writeAiMemory(projectDir, memory);
+      saveStatus = 'Saved · .novelist/ai/memory.md';
+    } catch (e) {
+      saveStatus = `Memory failed: ${e instanceof Error ? e.message : String(e)}`;
+    }
+    setTimeout(() => (saveStatus = null), 3000);
+  }
+
+  async function loadProjectSessions() {
+    const projectDir = projectStore.dirPath;
+    if (!projectDir || projectSessionsLoaded) return;
+    projectSessionsLoaded = true;
+    try {
+      const assets = await listAiPromptAssets(projectDir);
+      promptAssets = [...BUILTIN_SKILLS, ...assets.skills];
+      if (assets.memory?.content) {
+        addContext([{
+          id: 'memory',
+          kind: 'manual-note',
+          label: 'Project memory',
+          path: assets.memory.path,
+          content: assets.memory.content,
+        }]);
+      }
+      const files = await listAiSessions(projectDir, 'talk');
+      if (files.length > 0) {
+        const sessions = [];
+        for (const file of files) {
+          const raw = await readAiSession(projectDir, 'talk', file.id);
+          if (raw) sessions.push(JSON.parse(raw));
+        }
+        if (sessions.length > 0) aiTalkSessions.replaceAll(sessions, aiTalkSessions.activeId);
+      } else if (aiTalkSessions.sessions.length > 0) {
+        await persistProjectSessions();
+      }
+    } catch (e) {
+      console.warn('[ai-talk] failed to load project AI assets', e);
+    }
+  }
+
+  async function persistProjectSessions() {
+    const projectDir = projectStore.dirPath;
+    if (!projectDir) return;
+    await Promise.all(
+      aiTalkSessions.sessions.map((session) =>
+        writeAiSession(projectDir, 'talk', session.id, session).catch(() => {}),
+      ),
+    );
   }
 
   function scrollChat() {
@@ -363,6 +571,7 @@
       settingsOpen = true;
     }
     aiTalkSessions.ensureOne();
+    void loadProjectSessions();
     refreshLiveSnapshot();
     selectionTimer = setInterval(refreshLiveSnapshot, 300);
     window.addEventListener('novelist:ai-talk:save-chat', saveChatToProject);
@@ -381,20 +590,24 @@
     aiTalkSessions.delete(id);
     // Always keep at least one session so the UI doesn't collapse to empty.
     if (aiTalkSessions.sessions.length === 0) aiTalkSessions.create();
+    void persistProjectSessions();
   }
 
   function handleSessionNew() {
     if (chatStreaming) void cancelChat();
     aiTalkSessions.create();
+    void persistProjectSessions();
   }
 
   function handleSessionRename(id: string, title: string) {
     aiTalkSessions.rename(id, title);
+    void persistProjectSessions();
   }
 
   function handlePresetChange(presetId: string) {
     if (!activeSessionId) return;
     aiTalkSessions.setPreset(activeSessionId, presetId === 'none' ? undefined : presetId);
+    void persistProjectSessions();
   }
 
   let activePresetId = $derived(aiTalkSessions.active?.presetId ?? 'none');
@@ -457,7 +670,7 @@
     <div class="chat" data-testid="ai-talk-chat" bind:this={chatScroller}>
       {#each messages as m, i (i)}
         <div class="msg {m.role}" data-testid="ai-talk-msg-{m.role}">
-          <div class="role">{m.role === 'user' ? 'You' : 'Assistant'}</div>
+          <div class="role">{m.role === 'user' ? 'You' : m.role === 'system' ? 'Memory' : 'Assistant'}</div>
           <div class="content">{m.content}</div>
         </div>
       {/each}
@@ -484,6 +697,9 @@
           ><IconClose size={12} /></button>
         </div>
       {/if}
+      <AiContextBar items={contextItems} onRemove={removeContext} onClear={clearContext} />
+      <AiCommandMenu visible={commandMenuVisible} query={commandQuery} onPick={pickCommand} />
+      <AiMentionMenu visible={mentionMenuVisible} query={mentionQuery} onPick={pickMention} />
       <textarea
         data-testid="ai-talk-input"
         rows="3"
@@ -510,6 +726,18 @@
           disabled={chatStreaming || messages.length === 0}
           title="Save chat as markdown into &lt;project&gt;/.novelist/chats/"
         >Save</button>
+        <button
+          class="novelist-btn novelist-btn-ghost"
+          onclick={saveMemory}
+          disabled={chatStreaming || messages.length === 0 || !projectStore.dirPath}
+          title="Save current chat as .novelist/ai/memory.md"
+        >Memory</button>
+        <button
+          class="novelist-btn novelist-btn-ghost"
+          onclick={compactConversation}
+          disabled={chatStreaming || messages.length < 2}
+          title="Compact current conversation"
+        >Compact</button>
         {#if chatStreaming}
           <button class="novelist-btn novelist-btn-primary" data-testid="ai-talk-stop" onclick={cancelChat}>Stop</button>
         {:else}
@@ -545,14 +773,13 @@
         </div>
       {/if}
       {#if rewriteOutput}
-        <details open>
-          <summary>Rewritten</summary>
-          <pre>{rewriteOutput}</pre>
-        </details>
-        <div class="row">
-          <button class="novelist-btn novelist-btn-primary" onclick={acceptRewrite} disabled={rewriteStreaming}>Accept &amp; replace</button>
-          <button class="novelist-btn novelist-btn-ghost" onclick={rejectRewrite} disabled={rewriteStreaming}>Discard</button>
-        </div>
+        <InlineEditReview
+          original={rewriteSnap?.original ?? ''}
+          revised={rewriteOutput}
+          onAccept={acceptRewrite}
+          onReject={rejectRewrite}
+          onRegenerate={runRewrite}
+        />
       {/if}
       {#if rewriteError}
         <div class="banner">{rewriteError}</div>

@@ -29,6 +29,12 @@ export const AI_TALK_PRESETS: readonly AiTalkProviderPreset[] = [
 export function applyAiTalkPreset(id: string): boolean {
   const p = AI_TALK_PRESETS.find((x) => x.id === id);
   if (!p) return false;
-  aiTalkSettings.update({ baseUrl: p.baseUrl, model: p.model });
+  aiTalkSettings.update({
+    activeProfileId: p.id,
+    baseUrl: p.baseUrl,
+    model: p.model,
+    apiKey: aiTalkSettings.value.apiKey,
+    temperature: aiTalkSettings.value.temperature,
+  });
   return true;
 }

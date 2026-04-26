@@ -15,7 +15,7 @@
 import { killClaudeSession } from './host';
 
 export type ToolCard = { kind: 'tool'; name: string; input: unknown };
-export type ToolResultCard = { kind: 'tool-result'; content: string };
+export type ToolResultCard = { kind: 'tool-result'; content: string; status?: 'pending' | 'success' | 'error' | 'cancelled' };
 export type Card = ToolCard | ToolResultCard;
 
 export type Turn =
@@ -24,6 +24,8 @@ export type Turn =
 
 export type AgentSession = {
   id: string;
+  providerId: 'claude' | 'codex';
+  mode: 'act' | 'plan';
   title: string;
   createdAt: number;
   updatedAt: number;
@@ -32,6 +34,8 @@ export type AgentSession = {
   turns: Turn[];
   /** Cumulative cost across the session ($USD, best-effort from result frames). */
   totalCost?: number;
+  interrupted?: boolean;
+  providerState?: Record<string, unknown>;
 };
 
 const SESSIONS_KEY = 'novelist:ai-agent:sessions:v1';
@@ -67,7 +71,12 @@ export function deriveAgentTitle(turns: Turn[]): string {
 }
 
 function loadSessions(): AgentSession[] {
-  return safeParse<AgentSession[]>(localStorage.getItem(SESSIONS_KEY), []);
+  return safeParse<AgentSession[]>(localStorage.getItem(SESSIONS_KEY), []).map((s) => ({
+    ...s,
+    providerId: s.providerId ?? 'claude',
+    mode: s.mode ?? 'act',
+    providerState: s.providerState ?? {},
+  }));
 }
 
 function persist(sessions: AgentSession[]) {
@@ -110,6 +119,8 @@ class AiAgentSessionStore {
     const now = Date.now();
     const session: AgentSession = {
       id: uuid(),
+      providerId: 'claude',
+      mode: 'act',
       title: 'New agent',
       createdAt: now,
       updatedAt: now,
@@ -121,6 +132,79 @@ class AiAgentSessionStore {
     persist(this.sessions);
     persistActive(this.activeId);
     return session.id;
+  }
+
+  setMode(id: string, mode: 'act' | 'plan') {
+    this.sessions = this.sessions.map((s) =>
+      s.id === id ? { ...s, mode, updatedAt: Date.now() } : s,
+    );
+    persist(this.sessions);
+  }
+
+  markInterrupted(id: string) {
+    this.sessions = this.sessions.map((s) =>
+      s.id === id ? { ...s, interrupted: true, updatedAt: Date.now() } : s,
+    );
+    persist(this.sessions);
+  }
+
+  fork(id: string, throughTurnIndex?: number): string | null {
+    const source = this.sessions.find((s) => s.id === id);
+    if (!source) return null;
+    const now = Date.now();
+    const turns = throughTurnIndex == null ? source.turns : source.turns.slice(0, throughTurnIndex + 1);
+    const session: AgentSession = {
+      ...source,
+      id: uuid(),
+      sessionUuid: uuid(),
+      title: `${source.title} fork`,
+      createdAt: now,
+      updatedAt: now,
+      turns,
+      totalCost: undefined,
+      interrupted: false,
+      providerState: { forkedFrom: source.id },
+    };
+    this.sessions = [session, ...this.sessions].slice(0, MAX_SESSIONS);
+    this.activeId = session.id;
+    persist(this.sessions);
+    persistActive(this.activeId);
+    return session.id;
+  }
+
+  replaceAll(sessions: AgentSession[], activeId?: string | null) {
+    this.sessions = sessions.map((s) => ({
+      ...s,
+      providerId: s.providerId ?? 'claude',
+      mode: s.mode ?? 'act',
+      providerState: s.providerState ?? {},
+    }));
+    this.activeId = activeId && this.sessions.some((s) => s.id === activeId)
+      ? activeId
+      : this.sessions[0]?.id ?? null;
+    persist(this.sessions);
+    persistActive(this.activeId);
+  }
+
+  snapshot(): { sessions: AgentSession[]; activeId: string | null } {
+    return {
+      sessions: this.sessions,
+      activeId: this.activeId,
+    };
+  }
+
+  compactActive(summary: string): void {
+    if (!this.activeId) return;
+    this.sessions = this.sessions.map((s) =>
+      s.id === this.activeId
+        ? {
+            ...s,
+            turns: [{ role: 'assistant', text: summary, cards: [] }],
+            updatedAt: Date.now(),
+          }
+        : s,
+    );
+    persist(this.sessions);
   }
 
   setActive(id: string) {

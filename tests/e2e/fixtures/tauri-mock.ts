@@ -30,6 +30,7 @@ export function buildTauriMockScript(config: TauriMockConfig): string {
       const eventListeners = {};
       let aiStreamCounter = 0;
       let claudeCliDetectResult = null;
+      const aiSessions = {};
       // In-memory project snippet templates. Keyed by id.
       // Each entry: { summary: TemplateFileSummary, body: string }
       const mockTemplates = {};
@@ -385,6 +386,64 @@ export function buildTauriMockScript(config: TauriMockConfig): string {
               new_file: p?.new_file ?? {},
               plugins: p?.plugins ?? { enabled: {} },
             };
+          }
+          case 'list_ai_sessions': {
+            const prefix = args.kind + ':';
+            return Object.keys(aiSessions)
+              .filter(k => k.startsWith(prefix))
+              .map(k => {
+                const id = k.slice(prefix.length);
+                return {
+                  id,
+                  kind: args.kind,
+                  path: args.projectDir + '/.novelist/ai/sessions/' + args.kind + '-' + id + '.json',
+                  updatedAt: aiSessions[k].updatedAt,
+                };
+              })
+              .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+          }
+          case 'read_ai_session': {
+            return aiSessions[args.kind + ':' + args.id]?.body ?? null;
+          }
+          case 'write_ai_session': {
+            aiSessions[args.kind + ':' + args.id] = { body: args.bodyJson, updatedAt: Date.now() };
+            const path = args.projectDir + '/.novelist/ai/sessions/' + args.kind + '-' + args.id + '.json';
+            fileContents[path] = args.bodyJson;
+            writtenFiles[path] = args.bodyJson;
+            return null;
+          }
+          case 'delete_ai_session': {
+            delete aiSessions[args.kind + ':' + args.id];
+            return null;
+          }
+          case 'list_ai_prompt_assets': {
+            const root = args.projectDir + '/.novelist/ai/';
+            const allContents = { ...fileContents, ...writtenFiles };
+            const assetFor = (path, kind) => ({
+              id: path.slice(root.length),
+              kind,
+              path,
+              name: path.slice(path.lastIndexOf('/') + 1).replace(/\\.md$/, ''),
+              content: allContents[path],
+            });
+            const commands = Object.keys(allContents)
+              .filter(p => p.startsWith(root + 'commands/') && p.endsWith('.md') && !p.slice(root.length).split('/').some(part => part.startsWith('.')))
+              .map(p => assetFor(p, 'command'));
+            const skills = Object.keys(allContents)
+              .filter(p => p.startsWith(root + 'skills/') && p.endsWith('.md') && !p.slice(root.length).split('/').some(part => part.startsWith('.')))
+              .map(p => assetFor(p, 'skill'));
+            const memoryPath = root + 'memory.md';
+            return {
+              commands,
+              skills,
+              memory: allContents[memoryPath] != null ? assetFor(memoryPath, 'memory') : null,
+            };
+          }
+          case 'write_ai_memory': {
+            const path = args.projectDir + '/.novelist/ai/memory.md';
+            fileContents[path] = args.body;
+            writtenFiles[path] = args.body;
+            return null;
           }
           case 'ai_fetch_stream_start': return 'mock-stream-' + (++aiStreamCounter);
           case 'ai_fetch_stream_cancel': return null;

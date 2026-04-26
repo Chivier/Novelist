@@ -12,7 +12,7 @@
  * run twice.
  */
 
-export type DisplayMessage = { role: 'user' | 'assistant'; content: string };
+export type DisplayMessage = { role: 'user' | 'assistant' | 'system'; content: string };
 
 export type TalkSession = {
   id: string;
@@ -189,6 +189,36 @@ class AiTalkSessionStore {
     this.sessions = this.sessions.map((s) =>
       s.id === id
         ? { ...s, messages: [], title: 'New chat', updatedAt: Date.now() }
+        : s,
+    );
+    persist(this.sessions);
+  }
+
+  replaceAll(sessions: TalkSession[], activeId?: string | null) {
+    this.sessions = sessions;
+    this.activeId = activeId && sessions.some((s) => s.id === activeId)
+      ? activeId
+      : sessions[0]?.id ?? null;
+    persist(this.sessions);
+    persistActive(this.activeId);
+  }
+
+  snapshot(): { sessions: TalkSession[]; activeId: string | null } {
+    return {
+      sessions: this.sessions,
+      activeId: this.activeId,
+    };
+  }
+
+  compactActive(summary: string): void {
+    if (!this.activeId) return;
+    this.sessions = this.sessions.map((s) =>
+      s.id === this.activeId
+        ? {
+            ...s,
+            messages: [{ role: 'system', content: summary }],
+            updatedAt: Date.now(),
+          }
         : s,
     );
     persist(this.sessions);

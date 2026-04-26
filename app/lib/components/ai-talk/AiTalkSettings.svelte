@@ -20,6 +20,17 @@
     {/each}
   </div>
   <label>
+    <span>Provider profile</span>
+    <select
+      value={aiTalkSettings.value.activeProfileId}
+      onchange={(e) => aiTalkSettings.update({ activeProfileId: e.currentTarget.value })}
+    >
+      {#each aiTalkSettings.value.profiles as p}
+        <option value={p.id}>{p.label}</option>
+      {/each}
+    </select>
+  </label>
+  <label>
     <span>Base URL</span>
     <input
       type="text"
@@ -123,6 +134,7 @@
     font-size: 12px;
   }
   input,
+  select,
   textarea {
     background: var(--novelist-bg);
     border: 1px solid var(--novelist-border);

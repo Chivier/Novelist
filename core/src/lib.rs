@@ -9,6 +9,10 @@ pub use error::AppError;
 use std::sync::Mutex;
 
 use commands::ai_bridge::{ai_fetch_stream_cancel, ai_fetch_stream_start, AiBridgeState};
+use commands::ai_files::{
+    delete_ai_session, list_ai_prompt_assets, list_ai_sessions, read_ai_session, write_ai_memory,
+    write_ai_session,
+};
 use commands::bench::log_startup_phase;
 use commands::claude_bridge::{
     claude_cli_detect, claude_cli_kill, claude_cli_send, claude_cli_spawn, ClaudeBridgeState,
@@ -206,6 +210,12 @@ pub fn run() {
         log_startup_phase,
         ai_fetch_stream_start,
         ai_fetch_stream_cancel,
+        list_ai_sessions,
+        read_ai_session,
+        write_ai_session,
+        delete_ai_session,
+        list_ai_prompt_assets,
+        write_ai_memory,
         claude_cli_detect,
         claude_cli_spawn,
         claude_cli_send,
@@ -295,6 +305,12 @@ pub fn run() {
         log_startup_phase,
         ai_fetch_stream_start,
         ai_fetch_stream_cancel,
+        list_ai_sessions,
+        read_ai_session,
+        write_ai_session,
+        delete_ai_session,
+        list_ai_prompt_assets,
+        write_ai_memory,
         claude_cli_detect,
         claude_cli_spawn,
         claude_cli_send,

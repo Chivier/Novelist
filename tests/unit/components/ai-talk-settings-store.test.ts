@@ -11,7 +11,8 @@ describe('aiTalkSettings store', () => {
   });
 
   it('exposes the documented defaults on a fresh profile', () => {
-    expect(aiTalkSettings.value).toEqual({
+    expect(aiTalkSettings.value).toMatchObject({
+      activeProfileId: 'openai',
       baseUrl: 'https://api.openai.com/v1',
       apiKey: '',
       model: 'gpt-4o-mini',
@@ -20,6 +21,15 @@ describe('aiTalkSettings store', () => {
       includeCurrentFile: false,
       includeSelection: true,
     });
+    expect(aiTalkSettings.value.profiles.map((p) => p.id)).toEqual([
+      'openai',
+      'anthropic',
+      'deepseek',
+      'openrouter',
+      'groq',
+      'ollama',
+      'custom',
+    ]);
   });
 
   it('update() merges a partial patch into the current value', () => {

@@ -1,4 +1,5 @@
 pub mod ai_bridge;
+pub mod ai_files;
 pub mod bench;
 pub mod claude_bridge;
 pub mod draft;
