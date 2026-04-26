@@ -8,7 +8,7 @@
 
 **Tech Stack:** Vitest 4 + `@vitest/coverage-v8`; happy-dom env; Svelte 5 runes (`$state`, `$derived`); CM6 `EditorState` for pure editor tests; plain TS for utils.
 
-**Spec:** `docs/superpowers/specs/2026-04-21-coverage-campaign-design.md`
+**Spec:** `docs/exec-plans/completed/2026-04-21-coverage-campaign-design.md`
 
 ---
 
@@ -16,7 +16,7 @@
 
 1. **Work on branch `test/coverage-campaign`.** Do NOT switch branches.
 2. **Never touch user's dirty files.** Before staging, run `git status --short` and confirm you're only staging paths you created or modified. Explicit paths only — never `git add -A` or `git add .`.
-3. **Follow describe-tag conventions** from `docs/architecture/testing-precision.md`:
+3. **Follow describe-tag conventions** from `docs/design-docs/testing-precision.md`:
    - Pure function → `[precision]`
    - Public API boundary → `[contract]`
    - Past-bug reproducer → `[regression]`
@@ -56,7 +56,7 @@ Classify every source file into one of six buckets: **covered**, **partial**, **
 # Coverage Audit — 2026-04-22
 
 Generated from `pnpm test:coverage` + manual source-file classification.
-Informs the batches in `docs/superpowers/plans/2026-04-22-coverage-campaign.md`.
+Informs the batches in `docs/exec-plans/completed/2026-04-22-coverage-campaign.md`.
 
 ## Baseline before campaign
 
@@ -529,8 +529,8 @@ Body template:
 | Branches | 23.34 % | <X> % | <X−2> % |
 | Statements | 19.64 % | <X> % | <X−2> % |
 
-Spec: `docs/superpowers/specs/2026-04-21-coverage-campaign-design.md`
-Plan: `docs/superpowers/plans/2026-04-22-coverage-campaign.md`
+Spec: `docs/exec-plans/completed/2026-04-21-coverage-campaign-design.md`
+Plan: `docs/exec-plans/completed/2026-04-22-coverage-campaign.md`
 
 ## Test plan
 

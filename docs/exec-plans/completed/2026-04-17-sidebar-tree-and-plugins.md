@@ -8,7 +8,7 @@
 
 **Tech Stack:** Svelte 5 runes, CodeMirror 6, Tauri v2 + `tauri-specta` (auto-regenerated `app/lib/ipc/commands.ts`), Tokio async fs, Playwright, Vitest.
 
-**Spec:** `docs/superpowers/specs/2026-04-17-sidebar-tree-and-plugins-design.md`
+**Spec:** `docs/exec-plans/completed/2026-04-17-sidebar-tree-and-plugins-design.md`
 
 ---
 

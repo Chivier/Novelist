@@ -8,7 +8,7 @@
 
 **Tech Stack:** Rust (tokio, walkdir, blake3, reqwest via services::webdav), Svelte 5 runes, tauri-specta-generated IPC bindings, Vitest for unit tests, Playwright for E2E.
 
-**Spec:** `docs/superpowers/specs/2026-04-20-snapshot-retention-webdav-design.md`
+**Spec:** `docs/exec-plans/completed/2026-04-20-snapshot-retention-webdav-design.md`
 
 ---
 

@@ -5,7 +5,7 @@ whole lines instead of the character-range. Root cause: the builder
 emitted `Decoration.line` for every line a selection touched. No unit
 test asserted the builder's output shape — tests covered downstream
 behavior, not the builder's contract. See the spec at
-`docs/superpowers/specs/2026-04-21-test-hierarchy-and-coverage-design.md`
+`docs/exec-plans/completed/2026-04-21-test-hierarchy-and-coverage-design.md`
 for the full incident write-up.
 
 To prevent this class of regression we (a) hierarchized tests into
@@ -124,7 +124,7 @@ assertion. Follow the same pattern elsewhere:
 
 ## Where Tests Live
 
-See also `docs/architecture/testing.md` for the three-tier strategy.
+See also `docs/design-docs/testing.md` for the three-tier strategy.
 
 | Dir | Env | Scope | Typical tags |
 |---|---|---|---|

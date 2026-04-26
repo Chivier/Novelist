@@ -23,11 +23,15 @@ pnpm test:e2e:debug   # Playwright step-through debugger
 pnpm test:rust        # Rust backend tests (cargo test)
 pnpm test:all         # Unit + Rust tests
 pnpm check            # Svelte type checking
+pnpm harness --help   # Unified development/test harness
+pnpm verify:quick     # Fast local gate
+pnpm verify:ci        # Local CI mirror
 ```
 
 ## Testing
 
-Three tiers — see `CLAUDE.md` for details:
+Three tiers — see [design-docs/testing.md](design-docs/testing.md) and
+[RELIABILITY.md](RELIABILITY.md) for details:
 
 1. **Unit (Vitest)** — pure functions, stores, editor logic (`tests/unit/`)
 2. **Browser E2E (Playwright)** — full Svelte app against a real browser with mocked Tauri IPC (`tests/e2e/specs/`)
@@ -51,6 +55,10 @@ core/                         # Backend (Rust + Tauri v2)
 │   ├── services/             # File watcher, rope, plugins
 │   └── models/               # Data models
 docs/                         # Documentation
+├── design-docs/              # Durable architecture and design decisions
+├── product-specs/            # Product behavior specs
+├── exec-plans/               # Active/completed execution plans
+├── references/               # Lookup docs
 assets/                       # DMG backgrounds, logos, icons
 plugins/                      # Plugin templates
 tests/                        # Unit, e2e, benchmark tests

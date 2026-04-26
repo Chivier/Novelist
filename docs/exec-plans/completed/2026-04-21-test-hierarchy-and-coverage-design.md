@@ -158,7 +158,7 @@ first, or lower the gate and set a calendar reminder?" Per user
 decision (§4 of brainstorm), default is "one-shot target"; deviation
 requires explicit user sign-off, not autonomous downgrade.
 
-## 5. Precision-Testing Discipline (`docs/architecture/testing-precision.md`)
+## 5. Precision-Testing Discipline (`docs/design-docs/testing-precision.md`)
 
 A new architecture doc, load-bearing — linked from `CLAUDE.md` next to
 the existing testing doc.

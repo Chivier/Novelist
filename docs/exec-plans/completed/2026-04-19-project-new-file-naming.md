@@ -8,7 +8,7 @@
 
 **Tech Stack:** Svelte 5 + TypeScript (frontend), Rust + Tauri v2 (backend), Vitest (unit), Playwright (E2E), cargo test (Rust).
 
-**Spec:** `docs/superpowers/specs/2026-04-19-project-new-file-naming-design.md` — read it before starting Phase 1.
+**Spec:** `docs/exec-plans/completed/2026-04-19-project-new-file-naming-design.md` — read it before starting Phase 1.
 
 ---
 
@@ -3429,7 +3429,7 @@ git commit -m "docs(placeholder): note legacy novelist_scratch removal target"
 
 **Files:**
 - Modify: `Novelist-app/CLAUDE.md`
-- Modify: `Novelist-app/docs/keyboard-shortcuts.md` (if any new shortcut is introduced — none in this plan)
+- Modify: `Novelist-app/docs/references/keyboard-shortcuts.md` (if any new shortcut is introduced — none in this plan)
 - Modify: `Novelist-app/docs/development.md` (no change needed)
 
 - [ ] **Step 1: Add a "Recent Additions" entry**

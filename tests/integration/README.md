@@ -16,5 +16,5 @@ component rendering, cross-store interactions.
 If your test only models pure logic (functions, state transitions,
 reducers) without DOM, keep it in `tests/unit/`.
 
-See `docs/architecture/testing-precision.md` for describe-tag
+See `docs/design-docs/testing-precision.md` for describe-tag
 conventions (`[precision]`, `[contract]`, `[regression]`, `[smoke]`).

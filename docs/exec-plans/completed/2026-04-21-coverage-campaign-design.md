@@ -29,7 +29,7 @@ branch, one PR.
 - **Do not force 80 %.** Write tests for what's testable; accept the resulting number. Inflating coverage with shallow tests (`it('imports', () => expect(mod).toBeDefined())`) is worse than a low number.
 - **Do not retrofit DOM/component tests.** `.svelte` files stay waived unless an existing test already covers them. Real UI testing is e2e (Playwright), scheduled separately.
 - **Do not refactor production code for testability** unless a pure-helper extraction is small and clearly an improvement (same pattern used for `buildSelectionDecorations`). Larger refactors are out of scope.
-- **Do not invent new describe tags.** Reuse `[precision]` / `[contract]` / `[regression]` / `[smoke]` from `docs/architecture/testing-precision.md`.
+- **Do not invent new describe tags.** Reuse `[precision]` / `[contract]` / `[regression]` / `[smoke]` from `docs/design-docs/testing-precision.md`.
 
 ## Approach
 

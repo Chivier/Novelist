@@ -3,7 +3,7 @@ import { test, expect } from '../fixtures/app-fixture';
 /**
  * Regression guards for the unified selection-background subsystem.
  *
- * See `docs/architecture/editor.md` → "Unified selection background"
+ * See `docs/design-docs/editor.md` → "Unified selection background"
  * for the full design; this spec enforces the invariants listed there.
  * Each invariant has been broken at least once in the past — every
  * test below corresponds to a concrete past regression:

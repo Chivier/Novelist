@@ -89,23 +89,23 @@ and `app/lib/services/` (new dir).
 ### Target structure
 
 Keep `CLAUDE.md` as a **pointer index** (~80–100 lines max), with deep dives
-moved into `docs/architecture/*.md`:
+moved into `docs/design-docs/*.md`:
 
-- `docs/architecture/editor-wysiwyg.md` — block decorations, height-map rules,
+- `docs/design-docs/editor-wysiwyg.md` — block decorations, height-map rules,
   CSS zoom migration, image block strategy, scroll stabilizer link
-- `docs/architecture/editor-slash-menu.md` — trigger rules, precedence,
+- `docs/design-docs/editor-slash-menu.md` — trigger rules, precedence,
   positioning retry, IME fallback
-- `docs/architecture/editor-context-menu.md` — snapshot semantics, why
+- `docs/design-docs/editor-context-menu.md` — snapshot semantics, why
   right-click needs a custom menu only inside `.cm-content`
-- `docs/architecture/plugin-system.md` — asset protocol, WKWebView iframe
+- `docs/design-docs/plugin-system.md` — asset protocol, WKWebView iframe
   rules, bundled plugin pipeline, file-handler extensions
-- `docs/architecture/settings.md` — two-tier overlay, plugin deltas,
+- `docs/design-docs/settings.md` — two-tier overlay, plugin deltas,
   localStorage migration, new-file location tracking
-- `docs/architecture/file-lifecycle.md` — watcher hashing, rename-ignore,
+- `docs/design-docs/file-lifecycle.md` — watcher hashing, rename-ignore,
   cross-window broadcast, encoding migration
-- `docs/architecture/testing.md` — three-tier strategy, testid conventions,
+- `docs/design-docs/testing.md` — three-tier strategy, testid conventions,
   `__test_api__` bridge, mock IPC
-- `docs/architecture/feature-boundaries.md` — Phase 3 output (see below)
+- `docs/design-docs/feature-boundaries.md` — Phase 3 output (see below)
 
 `CLAUDE.md` post-consolidation holds: project overview, tech stack, commands,
 "where to find X" pointers, `## Key Conventions` (CJK, atomic writes,
@@ -118,7 +118,7 @@ and any phrasing I've preserved in memory still refers to real text.
 
 ## Phase 3 — Document feature boundaries
 
-Output: `docs/architecture/feature-boundaries.md`.
+Output: `docs/design-docs/feature-boundaries.md`.
 
 Purpose: make it explicit (for AI assistants and future contributors) which
 modules are **core product features** vs. **pure infrastructure**. This is
@@ -148,7 +148,7 @@ Deliverable is a markdown table listing each module and its category, with a
 - [ ] Memory entries under `~/.claude/projects/...Novelist-app/memory/` —
       **done 2026-04-20** (initial set; update as refactor discovers new
       invariants).
-- [ ] `docs/architecture/refactor-plan-2026-04-20.md` — **this file**.
+- [ ] `docs/design-docs/refactor-plan-2026-04-20.md` — **this file**.
 - [ ] Per-extraction commits with `refactor(app): ...` prefix.
 - [ ] End-of-phase checkpoint: all three test tiers green + user sign-off
       before moving to the next phase.

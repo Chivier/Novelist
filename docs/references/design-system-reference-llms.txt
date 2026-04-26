@@ -1,0 +1,22 @@
+Novelist design system reference for coding assistants
+Last updated: 2026-04-25
+
+Product feel:
+- Quiet, writer-focused desktop tool.
+- Dense enough for repeated work, never a marketing page inside the app.
+- Plain Markdown and CJK writing are first-class.
+
+UI principles:
+- Prefer native-feeling controls, predictable sidebars, compact toolbars, and
+  stable editor layout.
+- Use cards only for repeated items, dialogs, or framed tools.
+- Do not demote canvas, kanban, mindmap, plugins, or templates.
+- Keep text small and scannable in panels; reserve large type for welcome or
+  document content.
+
+Implementation principles:
+- Svelte components own presentation.
+- Stores own reactive state.
+- Services orchestrate IPC and avoid reactive ownership.
+- CodeMirror owns document state.
+- Rust owns filesystem and platform work.

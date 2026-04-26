@@ -47,7 +47,7 @@ pnpm test:all         # Unit + Rust tests
 - **CJK text support is non-negotiable** — always consider CJK in word
   counting, IME handling, and layout.
 - **File watcher uses BLAKE3 hashing** with self-write suppression — see
-  [docs/architecture/file-lifecycle.md](docs/architecture/file-lifecycle.md).
+  [docs/design-docs/file-lifecycle.md](docs/design-docs/file-lifecycle.md).
 - Plugins (canvas, mindmap, kanban) and the template panel are **core
   product features** — no hiding or demoting.
 
@@ -74,25 +74,27 @@ or AI model integrations in the binary.
 
 ## Architecture Deep Dives
 
-Detailed design docs live under `docs/architecture/` — load these when
+Detailed design docs live under `docs/design-docs/` — load these when
 touching the relevant code:
 
 | Topic | File |
 |-------|------|
-| CM6 editor (WYSIWYG, slash menu, context menu, image blocks, selection, zoom, tall-doc mode) | [editor.md](docs/architecture/editor.md) |
-| Plugin system (WKWebView quirks, bundled plugins, mindmap overlay, `.kanban`/`.canvas` routing) | [plugin-system.md](docs/architecture/plugin-system.md) |
-| Settings (two-tier global+project overlay, plugin deltas, new-file location, sidebar menus) | [settings.md](docs/architecture/settings.md) |
-| File lifecycle (watcher, self-write suppression, rename broadcast, recent projects) | [file-lifecycle.md](docs/architecture/file-lifecycle.md) |
-| Testing (three-tier strategy, `data-testid`, `__test_api__`, mock IPC) | [testing.md](docs/architecture/testing.md) |
-| Startup instrumentation | [startup-instrumentation.md](docs/architecture/startup-instrumentation.md) |
-| Feature boundaries (core editor / core product / infrastructure / diagnostics) | [feature-boundaries.md](docs/architecture/feature-boundaries.md) |
-| Refactor plan (2026-04-20 App.svelte split + this consolidation) | [refactor-plan-2026-04-20.md](docs/architecture/refactor-plan-2026-04-20.md) |
-| Testing precision & describe-tag convention | [testing-precision.md](docs/architecture/testing-precision.md) |
+| CM6 editor (WYSIWYG, slash menu, context menu, image blocks, selection, zoom, tall-doc mode) | [editor.md](docs/design-docs/editor.md) |
+| Plugin system (WKWebView quirks, bundled plugins, mindmap overlay, `.kanban`/`.canvas` routing) | [plugin-system.md](docs/design-docs/plugin-system.md) |
+| Settings (two-tier global+project overlay, plugin deltas, new-file location, sidebar menus) | [settings.md](docs/design-docs/settings.md) |
+| File lifecycle (watcher, self-write suppression, rename broadcast, recent projects) | [file-lifecycle.md](docs/design-docs/file-lifecycle.md) |
+| Testing (three-tier strategy, `data-testid`, `__test_api__`, mock IPC) | [testing.md](docs/design-docs/testing.md) |
+| Startup instrumentation | [startup-instrumentation.md](docs/design-docs/startup-instrumentation.md) |
+| Feature boundaries (core editor / core product / infrastructure / diagnostics) | [feature-boundaries.md](docs/design-docs/feature-boundaries.md) |
+| Testing precision & describe-tag convention | [testing-precision.md](docs/design-docs/testing-precision.md) |
 | Coverage policy & waiver registry | [COVERAGE.md](tests/COVERAGE.md) |
 | Coverage baseline numbers | [COVERAGE-BASELINE.md](tests/COVERAGE-BASELINE.md) |
 
-Huge-file scroll stabilizer details: `docs/design/scroll-stabilizer-bug.md`.
-Pre-implementation feature specs: `docs/superpowers/specs/`.
+Huge-file scroll stabilizer details: `docs/design-docs/scroll-stabilizer-bug.md`.
+Current project map: `ARCHITECTURE.md`.
+Docs index: `docs/design-docs/index.md`, `docs/product-specs/index.md`,
+`docs/exec-plans/index.md`, and `docs/references/index.md`.
+Completed implementation drafts are archived under `docs/exec-plans/completed/`.
 
 ## File Layout
 
@@ -106,10 +108,13 @@ core/                   # Backend (Rust + Tauri v2)
   src/{commands,services,models}/
   src/lib.rs            # App entry + command registration
 docs/
-  architecture/         # Deep dives (see table above)
-  superpowers/specs/    # Feature specs (written before implementation)
+  design-docs/          # Durable architecture and design decisions
+  product-specs/        # User-facing behavior specs
+  exec-plans/           # Active/completed execution plans
+  references/           # Lookup docs and external-reference notes
 plugins/                # Bundled plugin templates
 tests/{unit,e2e,bench}/
+scripts/harness.sh      # Unified development and test harness
 ```
 
 ## Recent Notable Additions

@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stand up the test-hierarchy + coverage governance infrastructure defined in `docs/superpowers/specs/2026-04-21-test-hierarchy-and-coverage-design.md` — directory split, vitest multi-env config, policy docs, baseline coverage, CI gate. No new test content beyond re-tagging existing tests.
+**Goal:** Stand up the test-hierarchy + coverage governance infrastructure defined in `docs/exec-plans/completed/2026-04-21-test-hierarchy-and-coverage-design.md` — directory split, vitest multi-env config, policy docs, baseline coverage, CI gate. No new test content beyond re-tagging existing tests.
 
 **Architecture:** Split `tests/unit/` (node env, pure) from `tests/integration/` (happy-dom env, boots CM6). Move four existing runtime tests into integration. Add `@vitest/coverage-v8` with explicit thresholds and a waiver list. Ship as one commit set under a single PR.
 
 **Tech Stack:** vitest 4.x (already installed), happy-dom 20.x (already installed), `@vitest/coverage-v8` (to be added), GitHub Actions (macOS + Linux runners).
 
-**Spec reference:** `docs/superpowers/specs/2026-04-21-test-hierarchy-and-coverage-design.md`
+**Spec reference:** `docs/exec-plans/completed/2026-04-21-test-hierarchy-and-coverage-design.md`
 
 **Scope boundary:** This plan covers only Phase 1 (§6 of spec). Phases 2–7 (per-module precision audits + test-writing) get their own plans, triggered once P1 ships.
 
@@ -29,7 +29,7 @@
 | `tests/fixtures/` | **Create** (dir, empty) | Reserved for shared helpers in P2+. Must exist so later PRs can add files without ambiguity. |
 | `tests/fixtures/.gitkeep` | **Create** | Makes empty dir tracked. |
 | `tests/COVERAGE.md` | **Create** | Waiver registry per spec §3. |
-| `docs/architecture/testing-precision.md` | **Create** | Precision-testing discipline per spec §5. |
+| `docs/design-docs/testing-precision.md` | **Create** | Precision-testing discipline per spec §5. |
 | `CLAUDE.md` | **Modify** | Link the two new docs. |
 | `.github/workflows/ci.yml` | **Modify** | Add `pnpm test:coverage` step. |
 | `tests/unit/editor/selection-line.test.ts` | **Modify** | Re-tag describe block as `[precision][regression]`. |
@@ -407,7 +407,7 @@ git commit -m "docs(test): waiver registry for untested source files"
 ## Task 9: Write the precision-testing discipline doc
 
 **Files:**
-- Create: `docs/architecture/testing-precision.md`
+- Create: `docs/design-docs/testing-precision.md`
 
 - [ ] **Step 1: Write the full doc**
 
@@ -557,7 +557,7 @@ Running only precision tests: `pnpm test -t "\[precision\]"`.
 - [ ] **Step 2: Commit**
 
 ```bash
-git add docs/architecture/testing-precision.md
+git add docs/design-docs/testing-precision.md
 git commit -m "docs(test): precision-testing discipline + PR checklist"
 ```
 
@@ -570,7 +570,7 @@ git commit -m "docs(test): precision-testing discipline + PR checklist"
 
 - [ ] **Step 1: Locate the existing testing-doc reference**
 
-Run: `grep -n "docs/architecture/testing" CLAUDE.md`
+Run: `grep -n "docs/design-docs/testing" CLAUDE.md`
 
 Expected: one match, the row in the "Architecture Deep Dives" table mentioning `testing.md`.
 
@@ -579,8 +579,8 @@ Expected: one match, the row in the "Architecture Deep Dives" table mentioning `
 After the `testing.md` row in the Architecture Deep Dives table, add:
 
 ```markdown
-| Precision-testing discipline (decorations, coord mapping, projections) | [testing-precision.md](docs/architecture/testing-precision.md) |
-| Coverage waivers + the waiver process | [tests/COVERAGE.md](tests/COVERAGE.md) |
+| Precision-testing discipline (decorations, coord mapping, projections) | [testing-precision.md](../../design-docs/testing-precision.md) |
+| Coverage waivers + the waiver process | [tests/COVERAGE.md](../../../tests/COVERAGE.md) |
 ```
 
 - [ ] **Step 3: Add a one-line rule in the Critical Rules section**
@@ -590,9 +590,9 @@ In the `## Critical Rules` block, after the existing bullets, add:
 ```markdown
 - **Precision tests are required** for decoration plugins, coord mappings,
   and store→DOM projections. See
-  [docs/architecture/testing-precision.md](docs/architecture/testing-precision.md).
+  [docs/design-docs/testing-precision.md](../../design-docs/testing-precision.md).
   Untested source files need a row in
-  [tests/COVERAGE.md](tests/COVERAGE.md).
+  [tests/COVERAGE.md](../../../tests/COVERAGE.md).
 ```
 
 - [ ] **Step 4: Commit**
@@ -830,11 +830,11 @@ gh pr create --title "test: phase-1 test hierarchy + coverage governance" --body
 - Split vitest into unit (node) + integration (happy-dom) projects
 - Moved CM6-view tests to tests/integration/editor/
 - Added @vitest/coverage-v8 with thresholds 80/85/70/80 and a waiver registry (tests/COVERAGE.md)
-- Published the precision-testing discipline doc (docs/architecture/testing-precision.md)
+- Published the precision-testing discipline doc (docs/design-docs/testing-precision.md)
 - Re-tagged existing tests to seed the [precision]/[contract]/[regression] convention
 - Wired coverage step into CI
 
-Implements Phase 1 of docs/superpowers/specs/2026-04-21-test-hierarchy-and-coverage-design.md.
+Implements Phase 1 of docs/exec-plans/completed/2026-04-21-test-hierarchy-and-coverage-design.md.
 
 ## Test plan
 - [x] pnpm test:unit passes

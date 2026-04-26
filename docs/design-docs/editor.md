@@ -24,7 +24,7 @@ this drift becomes user-visible. The fix: disable all height-changing
 decorations and use uniform heading font sizes via
 `flatNovelistHighlightStyle` in `app/lib/editor/setup.ts`.
 
-Huge-file scroll stabilizer: see `docs/design/scroll-stabilizer-bug.md`
+Huge-file scroll stabilizer: see `docs/design-docs/scroll-stabilizer-bug.md`
 for the three-layer native guard that prevents catastrophic `scrollTop`
 jumps after scrollbar-drag in 150k+ line files.
 
