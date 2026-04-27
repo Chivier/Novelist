@@ -247,6 +247,8 @@ export const zhCN: TranslationMap = {
   'updater.skipMessage': '是否跳过版本 v{version}？\n\n此版本将不再提醒。有更新版本时仍会通知。',
   'updater.skipVersion': '跳过此版本',
   'updater.remindLater': '稍后提醒',
+  'updater.downloadFailed': '更新下载失败',
+  'updater.downloadFailedMessage': '无法下载或安装更新。\n\n详情：{detail}\n\n如问题持续，请前往官网手动下载最新版本。',
 
   // --- Crash Recovery ---
   'recovery.title': '恢复未保存的草稿？',

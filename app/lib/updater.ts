@@ -135,22 +135,32 @@ async function promptAndInstall(): Promise<void> {
   let downloaded = 0;
   let contentLength = 0;
 
-  await update.downloadAndInstall((event: DownloadEvent) => {
-    switch (event.event) {
-      case 'Started':
-        contentLength = event.data.contentLength ?? 0;
-        break;
-      case 'Progress':
-        downloaded += event.data.chunkLength;
-        setStatus({
-          ..._status,
-          downloading: true,
-          progress: contentLength > 0 ? Math.round((downloaded / contentLength) * 100) : 0,
-        });
-        break;
-      case 'Finished':
-        setStatus({ ..._status, downloading: false, progress: 100 });
-        break;
-    }
-  });
+  try {
+    await update.downloadAndInstall((event: DownloadEvent) => {
+      switch (event.event) {
+        case 'Started':
+          contentLength = event.data.contentLength ?? 0;
+          break;
+        case 'Progress':
+          downloaded += event.data.chunkLength;
+          setStatus({
+            ..._status,
+            downloading: true,
+            progress: contentLength > 0 ? Math.round((downloaded / contentLength) * 100) : 0,
+          });
+          break;
+        case 'Finished':
+          setStatus({ ..._status, downloading: false, progress: 100 });
+          break;
+      }
+    });
+  } catch (e) {
+    console.warn('[updater] Download/install failed:', e);
+    setStatus({ ..._status, downloading: false, progress: 0 });
+    const detail = e instanceof Error ? e.message : String(e);
+    await message(t('updater.downloadFailedMessage', { detail }), {
+      title: t('updater.downloadFailed'),
+      kind: 'error',
+    });
+  }
 }

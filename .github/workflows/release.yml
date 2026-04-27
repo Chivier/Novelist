@@ -132,3 +132,49 @@ jobs:
             artifacts/**/*.tar.gz
             artifacts/**/*.tar.gz.sig
           tag_name: ${{ github.ref_name }}
+
+      # `tauri-action` runs only on the Linux + Windows matrix legs, so the
+      # `latest.json` it generates contains only the linux-* and windows-*
+      # platform entries. The macOS ARM job is self-hosted and bypasses
+      # tauri-action entirely, which means without this step macOS users
+      # would never see updates surfaced via the updater plugin. Inject the
+      # darwin-aarch64 entry by reading the .app.tar.gz.sig produced by the
+      # ARM build and merging it into the existing latest.json.
+      - name: Patch latest.json with darwin-aarch64 entry
+        if: hashFiles('artifacts/**/*.app.tar.gz.sig') != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          SIG_FILE=$(find artifacts -name 'Novelist.app.tar.gz.sig' -print -quit)
+          if [ -z "$SIG_FILE" ]; then
+            echo "No darwin signature file found; skipping latest.json patch."
+            exit 0
+          fi
+          SIG=$(tr -d '\n' < "$SIG_FILE")
+          URL="https://github.com/$REPO/releases/download/$TAG/Novelist.app.tar.gz"
+
+          # Wait briefly for tauri-action's latest.json upload to settle in
+          # case this job races ahead of the matrix legs' final asset push.
+          for attempt in 1 2 3 4 5; do
+            if gh release download "$TAG" --pattern latest.json --output latest.json --repo "$REPO" --clobber 2>/dev/null; then
+              break
+            fi
+            echo "latest.json not yet available (attempt $attempt); retrying in 10s..."
+            sleep 10
+          done
+          if [ ! -s latest.json ]; then
+            echo "Could not fetch latest.json from release after retries; aborting." >&2
+            exit 1
+          fi
+
+          jq --arg sig "$SIG" --arg url "$URL" \
+             '.platforms["darwin-aarch64"] = { signature: $sig, url: $url }' \
+             latest.json > latest.json.new
+          mv latest.json.new latest.json
+
+          echo "--- Patched latest.json ---"
+          jq '.platforms | keys' latest.json
+          gh release upload "$TAG" latest.json --clobber --repo "$REPO"

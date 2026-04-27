@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost https: data:; media-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' asset: http://asset.localhost; font-src 'self' data:; connect-src ipc: http://ipc.localhost https://github.com https://api.github.com https://objects.githubusercontent.com; frame-src 'self' asset: http://asset.localhost blob:",
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost https: data:; media-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' asset: http://asset.localhost; font-src 'self' data:; connect-src ipc: http://ipc.localhost https://github.com https://api.github.com https://objects.githubusercontent.com https://release-assets.githubusercontent.com; frame-src 'self' asset: http://asset.localhost blob:",
       "assetProtocol": {
         "enable": true,
         "scope": [
@@ -34,7 +34,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/Chivier/Novelist/releases/latest/download/latest.json"
+        "https://github.com/Saber-AI-Research/Novelist/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk1Njk5RDVEMjMyRjc1OEIKUldTTGRTOGpYWjFwbFE0alI4Ym5aMldpcWJqa0UvUW5BUnpaNytES2Y4b1JYYmgwam5sK21vUUgK"
     }

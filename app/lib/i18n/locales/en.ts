@@ -247,6 +247,8 @@ export const en: TranslationMap = {
   'updater.skipMessage': "Do you want to skip version v{version}?\n\nYou won't be reminded about this version again. You'll still be notified when a newer version is released.",
   'updater.skipVersion': 'Skip This Version',
   'updater.remindLater': 'Remind Me Later',
+  'updater.downloadFailed': 'Update Download Failed',
+  'updater.downloadFailedMessage': "Could not download or install the update.\n\nDetails: {detail}\n\nIf the problem persists, please download the latest version manually from the website.",
 
   // --- Crash Recovery ---
   'recovery.title': 'Recover Unsaved Draft?',
