@@ -109,24 +109,6 @@ describe('parseNumber — Chinese lower rejects non-canonical', () => {
   });
 });
 
-describe('parseNumber — Chinese upper', () => {
-  it('parses 壹 to 拾', () => {
-    expect(parseNumber('壹')?.value).toBe(1);
-    expect(parseNumber('玖')?.value).toBe(9);
-    expect(parseNumber('拾')?.value).toBe(10);
-  });
-  it('returns chinese-upper style', () => {
-    expect(parseNumber('壹')?.style).toEqual({ kind: 'chinese-upper' });
-  });
-});
-
-describe('formatNumber — Chinese upper', () => {
-  it('formats 1–10', () => {
-    expect(formatNumber(1, { kind: 'chinese-upper' })).toBe('壹');
-    expect(formatNumber(10, { kind: 'chinese-upper' })).toBe('拾');
-  });
-});
-
 describe('parseNumber — Roman', () => {
   it('parses I, V, X, L, C, D, M', () => {
     expect(parseNumber('I')?.value).toBe(1);

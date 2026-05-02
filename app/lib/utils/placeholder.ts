@@ -15,8 +15,7 @@ export interface Template {
    * Explicit style override extracted from the placeholder syntax:
    *   - `{N}`         → null (natural style — driven by template/folder context)
    *   - `{2N}`/`{3N}` → `{ kind: 'arabic', width: 2|3 }` (zero-padded)
-   *   - `{cN}`        → `{ kind: 'chinese-lower' }`
-   *   - `{CN}`        → `{ kind: 'chinese-upper' }`
+   *   - `{CN}`        → `{ kind: 'chinese-lower' }` (一, 二, 三, ...)
    *   - `{rN}`        → `{ kind: 'roman-upper' }`
    */
   forceStyle: NumberStyle | null;
@@ -26,19 +25,17 @@ export interface Template {
  * Recognized placeholder tokens for the number slot:
  *   {N}       — natural style
  *   {<d>N}    — Arabic padded to <d> digits (e.g. {3N} → 001, 002, ...)
- *   {cN}      — Chinese lower (一, 二, 三, ...)
- *   {CN}      — Chinese upper (壹, 贰, ...)
+ *   {CN}      — Chinese (一, 二, 三, ...)
  *   {rN}      — Roman (I, II, III, ...)
  */
-const PLACEHOLDER_TOKEN_RE = /\{(\d+|c|C|r)?N\}/g;
+const PLACEHOLDER_TOKEN_RE = /\{(\d+|C|r)?N\}/g;
 
 function tokenToStyle(token: string | undefined): NumberStyle | null {
   if (!token) return null;
   if (/^\d+$/.test(token)) {
     return { kind: 'arabic', width: parseInt(token, 10) };
   }
-  if (token === 'c') return { kind: 'chinese-lower' };
-  if (token === 'C') return { kind: 'chinese-upper' };
+  if (token === 'C') return { kind: 'chinese-lower' };
   if (token === 'r') return { kind: 'roman-upper' };
   return null;
 }
@@ -254,12 +251,9 @@ export function inferNextName(folderFiles: string[], userDefaultTemplate: Templa
 }
 
 function naturalStyleFor(template: Template): NumberStyle {
-  // Explicit override from the placeholder token (e.g. {3N}, {cN}) wins.
+  // Explicit override from the placeholder token (e.g. {3N}, {CN}) wins.
+  // Bare {N} is always Arabic — users opt into Chinese with {CN}.
   if (template.forceStyle) return template.forceStyle;
-  // 第{N}章 / 第{N}回 etc. defaults to chinese-lower; everything else arabic width 1
-  if (template.prefix === '第' && /^[章回节卷部]/.test(template.suffix)) {
-    return { kind: 'chinese-lower' };
-  }
   return { kind: 'arabic', width: 1 };
 }
 

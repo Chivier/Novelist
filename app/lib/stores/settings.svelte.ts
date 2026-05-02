@@ -21,7 +21,7 @@ import {
 const DEFAULT_EFFECTIVE: EffectiveSettings = {
   view: { sort_mode: 'numeric-asc', show_hidden_files: false },
   new_file: {
-    template: 'Untitled {N}',
+    template: '第{N}章-{title}',
     detect_from_folder: true,
     auto_rename_from_h1: true,
     default_dir: null,

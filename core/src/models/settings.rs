@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 // Defaults mirror the pre-migration frontend behavior.
 pub const DEFAULT_SORT_MODE: &str = "numeric-asc";
-pub const DEFAULT_TEMPLATE: &str = "Untitled {N}";
+pub const DEFAULT_TEMPLATE: &str = "第{N}章-{title}";
 pub const DEFAULT_SHOW_HIDDEN: bool = false;
 pub const DEFAULT_DETECT_FROM_FOLDER: bool = true;
 pub const DEFAULT_AUTO_RENAME_FROM_H1: bool = true;

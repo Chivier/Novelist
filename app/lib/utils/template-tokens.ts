@@ -98,7 +98,7 @@ export function extractCursorAnchor(raw: string): { body: string; anchor: number
  * Resolve a `defaultFilename` template for new-file mode.
  *
  * - Substitutes the variable tokens (`{date}` etc.) via `resolveBody`.
- * - `{N}/{2N}/{cN}/...` placeholders are NOT resolved here — callers that
+ * - `{N}/{2N}/{CN}/...` placeholders are NOT resolved here — callers that
  *   want numbering inference should run the result through `inferNextName`.
  *   v1 keeps this pure; the frontend store does the optional numbering pass.
  */

@@ -41,7 +41,7 @@ describe('parseTemplate', () => {
     expect(parseTemplate('')).toBeNull();
   });
 
-  // Extended placeholder tokens for forced style / padding ({3N}, {cN}, {CN}, {rN}).
+  // Extended placeholder tokens for forced style / padding ({3N}, {CN}, {rN}).
   it('parses {2N} as Arabic width 2', () => {
     const t = parseTemplate('{2N}-{title}');
     expect(t?.forceStyle).toEqual({ kind: 'arabic', width: 2 });
@@ -52,15 +52,15 @@ describe('parseTemplate', () => {
     expect(t?.prefix).toBe('Chapter ');
     expect(t?.suffix).toBe('');
   });
-  it('parses {cN} as Chinese-lower forced', () => {
-    const t = parseTemplate('{cN}. {title}');
+  it('parses {CN} as Chinese forced', () => {
+    const t = parseTemplate('{CN}. {title}');
     expect(t?.forceStyle).toEqual({ kind: 'chinese-lower' });
-  });
-  it('parses {CN} as Chinese-upper forced', () => {
-    expect(parseTemplate('{CN} 篇')?.forceStyle).toEqual({ kind: 'chinese-upper' });
   });
   it('parses {rN} as Roman forced', () => {
     expect(parseTemplate('Part {rN}')?.forceStyle).toEqual({ kind: 'roman-upper' });
+  });
+  it('rejects retired {cN} token', () => {
+    expect(parseTemplate('{cN}. {title}')).toBeNull();
   });
   it('bare {N} has forceStyle null (natural)', () => {
     expect(parseTemplate('第{N}章')?.forceStyle).toBeNull();
@@ -133,8 +133,13 @@ describe('inferNextName', () => {
     expect(inferNextName([], defaultTemplate)).toBe('Untitled 1.md');
   });
 
-  it('user template applied to empty folder', () => {
+  it('user template applied to empty folder uses Arabic for {N}', () => {
     const t = parseTemplate('第{N}章')!;
+    expect(inferNextName([], t)).toBe('第1章.md');
+  });
+
+  it('{CN} template on empty folder uses Chinese', () => {
+    const t = parseTemplate('第{CN}章')!;
     expect(inferNextName([], t)).toBe('第一章.md');
   });
 
@@ -181,8 +186,8 @@ describe('inferNextName', () => {
     expect(inferNextName(['08-foo.md', '09-bar.md'], t)).toBe('10-Untitled.md');
   });
 
-  it('{cN} template renders Chinese-lower regardless of folder style', () => {
-    const t = parseTemplate('{cN}. {title}')!;
+  it('{CN} template renders Chinese regardless of folder style', () => {
+    const t = parseTemplate('{CN}. {title}')!;
     expect(inferNextName([], t)).toBe('一. Untitled.md');
     // Even with an Arabic-style sibling the forceStyle wins for new names
     expect(inferNextName(['1. foo.md'], t)).toBe('二. Untitled.md');

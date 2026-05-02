@@ -1,7 +1,6 @@
 export type NumberStyle =
   | { kind: 'arabic'; width: number }
   | { kind: 'chinese-lower' }
-  | { kind: 'chinese-upper' }
   | { kind: 'roman-upper' };
 
 export interface ParsedNumber {
@@ -15,8 +14,6 @@ export function parseNumber(s: string): ParsedNumber | null {
   }
   const cnLower = parseChineseLower(s);
   if (cnLower !== null) return { value: cnLower, style: { kind: 'chinese-lower' } };
-  const cnUpper = parseChineseUpper(s);
-  if (cnUpper !== null) return { value: cnUpper, style: { kind: 'chinese-upper' } };
   const roman = parseRoman(s);
   if (roman !== null) return { value: roman, style: { kind: 'roman-upper' } };
   return null;
@@ -28,8 +25,6 @@ export function formatNumber(value: number, style: NumberStyle): string {
       return String(value).padStart(style.width, '0');
     case 'chinese-lower':
       return formatChineseLower(value);
-    case 'chinese-upper':
-      return formatChineseUpper(value);
     case 'roman-upper':
       return formatRoman(value);
     default: {
@@ -125,37 +120,6 @@ function formatChineseLower(n: number): string {
     return CN_LOWER_DIGITS[hundreds] + '百一十' + (ones === 0 ? '' : CN_LOWER_DIGITS[ones]);
   }
   return CN_LOWER_DIGITS[hundreds] + '百' + formatChineseLower(rest);
-}
-
-const CN_UPPER_DIGITS = ['零', '壹', '贰', '叁', '肆', '伍', '陆', '柒', '捌', '玖'] as const;
-const CN_UPPER_DIGIT_MAP = new Map<string, number>(
-  CN_UPPER_DIGITS.map((c, i) => [c, i])
-);
-
-function parseChineseUpper(s: string): number | null {
-  const v = parseChineseUpperLoose(s);
-  if (v === null) return null;
-  try {
-    if (formatChineseUpper(v) !== s) return null;
-  } catch {
-    return null;
-  }
-  return v;
-}
-
-function parseChineseUpperLoose(s: string): number | null {
-  if (s === '拾') return 10;
-  if (s.length === 1) {
-    const d = CN_UPPER_DIGIT_MAP.get(s);
-    return d === undefined || d === 0 ? null : d;
-  }
-  return null;
-}
-
-function formatChineseUpper(n: number): string {
-  if (n === 10) return '拾';
-  if (n >= 1 && n <= 9) return CN_UPPER_DIGITS[n];
-  throw new Error(`formatChineseUpper: out of range ${n} (only 1-10 supported)`);
 }
 
 const ROMAN_PAIRS: Array<[number, string]> = [
