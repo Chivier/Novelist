@@ -2,13 +2,14 @@
   import { aiTalkSettings } from './settings.svelte';
   import { AI_TALK_PRESETS, applyAiTalkPreset } from './presets';
   import PromptPresetManager from './PromptPresetManager.svelte';
+  import { t } from '$lib/i18n';
 
   let { compact = false }: { compact?: boolean } = $props();
 </script>
 
 <div class="ai-talk-settings" class:compact>
   <div class="presets full">
-    <span class="preset-label">Provider preset:</span>
+    <span class="preset-label">{t('settings.aiTalk.providerPreset')}</span>
     {#each AI_TALK_PRESETS as p}
       <button
         type="button"
@@ -20,7 +21,7 @@
     {/each}
   </div>
   <label>
-    <span>Provider profile</span>
+    <span>{t('settings.aiTalk.providerProfile')}</span>
     <select
       value={aiTalkSettings.value.activeProfileId}
       onchange={(e) => aiTalkSettings.update({ activeProfileId: e.currentTarget.value })}
@@ -31,7 +32,7 @@
     </select>
   </label>
   <label>
-    <span>Base URL</span>
+    <span>{t('settings.aiTalk.baseUrl')}</span>
     <input
       type="text"
       value={aiTalkSettings.value.baseUrl}
@@ -39,7 +40,7 @@
     />
   </label>
   <label>
-    <span>API Key</span>
+    <span>{t('settings.aiTalk.apiKey')}</span>
     <input
       type="password"
       value={aiTalkSettings.value.apiKey}
@@ -49,7 +50,7 @@
     />
   </label>
   <label>
-    <span>Model</span>
+    <span>{t('settings.aiTalk.model')}</span>
     <input
       type="text"
       value={aiTalkSettings.value.model}
@@ -57,7 +58,7 @@
     />
   </label>
   <label>
-    <span>Temperature</span>
+    <span>{t('settings.aiTalk.temperature')}</span>
     <input
       type="number"
       step="0.1"
@@ -68,7 +69,7 @@
     />
   </label>
   <label class="full">
-    <span>System prompt</span>
+    <span>{t('settings.aiTalk.systemPrompt')}</span>
     <textarea
       rows={compact ? 2 : 4}
       value={aiTalkSettings.value.systemPrompt}
@@ -81,7 +82,7 @@
       checked={aiTalkSettings.value.includeCurrentFile}
       onchange={(e) => aiTalkSettings.update({ includeCurrentFile: e.currentTarget.checked })}
     />
-    <span>Include current file in chat context</span>
+    <span>{t('settings.aiTalk.includeCurrentFile')}</span>
   </label>
   <label class="check">
     <input
@@ -89,12 +90,9 @@
       checked={aiTalkSettings.value.includeSelection}
       onchange={(e) => aiTalkSettings.update({ includeSelection: e.currentTarget.checked })}
     />
-    <span>Include current selection in chat context</span>
+    <span>{t('settings.aiTalk.includeSelection')}</span>
   </label>
-  <p class="hint">
-    API key is stored locally on this device. Requests go through the Novelist
-    Rust backend (URL allowlist enforced).
-  </p>
+  <p class="hint">{t('settings.aiTalk.hint')}</p>
 </div>
 
 <div class="prompt-presets-wrap">

@@ -16,6 +16,12 @@ export type PluginSettingsEntry = {
   pluginId: string;
   /** Human label, defaulting to the plugin's `name` if not set here. */
   label?: string;
+  /**
+   * Optional i18n key for the label. When set, Settings.svelte resolves it
+   * via `t()` so the sidebar entry follows the active locale. Falls back to
+   * `label` / `pluginId` when missing.
+   */
+  labelKey?: string;
   /** Async loader for the settings component. */
   load: () => Promise<{ default: Component }>;
   /**
@@ -30,12 +36,14 @@ const ENTRIES: Record<string, PluginSettingsEntry> = {
   'ai-talk': {
     pluginId: 'ai-talk',
     label: 'AI Talk',
+    labelKey: 'settings.plugins.aiTalk.name',
     panelId: 'ai-talk',
     load: () => import('$lib/components/ai-talk/AiTalkSettings.svelte'),
   },
   'ai-agent': {
     pluginId: 'ai-agent',
     label: 'AI Agent',
+    labelKey: 'settings.plugins.aiAgent.name',
     panelId: 'ai-agent',
     load: () => import('$lib/components/ai-agent/AiAgentSettings.svelte'),
   },

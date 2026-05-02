@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { aiAgentSettings } from './settings.svelte';
   import { detectClaudeCli, type DetectedCli } from './host';
+  import { t } from '$lib/i18n';
 
   let { compact = false }: { compact?: boolean } = $props();
 
@@ -21,42 +22,42 @@
   <div class="status">
     {#if detecting}
       <span class="dot pending"></span>
-      <span>Detecting <code>claude</code> CLI…</span>
+      <span>{t('settings.aiAgent.detecting')} <code>{t('settings.aiAgent.cliLabel')}</code> CLI…</span>
     {:else if detected}
       <span class="dot ok"></span>
-      <span>Found <code>{detected.path}</code>{detected.version ? ` (${detected.version})` : ''}</span>
+      <span>{t('settings.aiAgent.cliFound')} <code>{detected.path}</code>{detected.version ? ` (${detected.version})` : ''}</span>
     {:else}
       <span class="dot bad"></span>
       <span>
-        Claude Code CLI not found on <code>$PATH</code>. Install it from
+        {t('settings.aiAgent.cliNotFoundLead')} <code>$PATH</code>{t('settings.aiAgent.cliNotFoundTail')}
         <a href="https://docs.claude.com/en/docs/claude-code/overview" target="_blank" rel="noreferrer">
-          docs.claude.com
+          {t('settings.aiAgent.docsLink')}
         </a>
-        and reload, or set an absolute path below.
+        {t('settings.aiAgent.cliNotFoundEnd')}
       </span>
     {/if}
   </div>
 
   <label>
-    <span>CLI path override (optional)</span>
+    <span>{t('settings.aiAgent.cliPath')}</span>
     <input
       type="text"
-      placeholder="/usr/local/bin/claude"
+      placeholder={t('settings.aiAgent.cliPathPlaceholder')}
       value={aiAgentSettings.value.cliPath}
       oninput={(e) => aiAgentSettings.update({ cliPath: e.currentTarget.value })}
     />
   </label>
   <label>
-    <span>Model (optional)</span>
+    <span>{t('settings.aiAgent.model')}</span>
     <input
       type="text"
-      placeholder="sonnet / opus / haiku / model id"
+      placeholder={t('settings.aiAgent.modelPlaceholder')}
       value={aiAgentSettings.value.model}
       oninput={(e) => aiAgentSettings.update({ model: e.currentTarget.value })}
     />
   </label>
   <label>
-    <span>Permission mode</span>
+    <span>{t('settings.aiAgent.permissionMode')}</span>
     <select
       value={aiAgentSettings.value.permissionMode}
       onchange={(e) =>
@@ -68,17 +69,17 @@
             | 'plan',
         })}
     >
-      <option value="default">default — confirm each tool</option>
-      <option value="acceptEdits">acceptEdits (recommended)</option>
-      <option value="bypassPermissions">bypassPermissions ⚠</option>
-      <option value="plan">plan — read-only</option>
+      <option value="default">{t('settings.aiAgent.permission.default')}</option>
+      <option value="acceptEdits">{t('settings.aiAgent.permission.acceptEdits')}</option>
+      <option value="bypassPermissions">{t('settings.aiAgent.permission.bypass')}</option>
+      <option value="plan">{t('settings.aiAgent.permission.plan')}</option>
     </select>
   </label>
   <label class="full">
-    <span>System prompt addition (optional)</span>
+    <span>{t('settings.aiAgent.systemPrompt')}</span>
     <textarea
       rows={compact ? 2 : 4}
-      placeholder="Extra system prompt appended to Claude's default."
+      placeholder={t('settings.aiAgent.systemPromptPlaceholder')}
       value={aiAgentSettings.value.systemPrompt}
       oninput={(e) => aiAgentSettings.update({ systemPrompt: e.currentTarget.value })}
     ></textarea>
@@ -89,12 +90,16 @@
       checked={aiAgentSettings.value.attachProjectRoot}
       onchange={(e) => aiAgentSettings.update({ attachProjectRoot: e.currentTarget.checked })}
     />
-    <span>Attach current project root via <code>--add-dir</code></span>
+    <span>
+      {t('settings.aiAgent.attachProjectRootLead')}
+      <code>{t('settings.aiAgent.addDirFlag')}</code>
+      {t('settings.aiAgent.attachProjectRootTail')}
+    </span>
   </label>
   <p class="hint">
-    The agent runs the local <code>claude</code> binary as a subprocess and
-    inherits its tool-use capabilities (file edits, bash, etc.). Treat
-    <strong>bypassPermissions</strong> with care.
+    {t('settings.aiAgent.hintLead')} <code>{t('settings.aiAgent.cliLabel')}</code>
+    {t('settings.aiAgent.hintMid')}
+    <strong>{t('settings.aiAgent.hintBypass')}</strong>{t('settings.aiAgent.hintTail')}
   </p>
 </div>
 

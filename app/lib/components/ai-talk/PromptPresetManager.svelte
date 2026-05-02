@@ -5,6 +5,7 @@
    */
   import { promptPresets, BUILTIN_PRESETS, type PromptPreset } from './presets.svelte';
   import { IconPackage, IconDocument } from '../icons';
+  import { t } from '$lib/i18n';
 
   type EditorState = {
     id: string | null;   // null when creating
@@ -53,16 +54,16 @@
     if (!editor) return;
     const name = editor.name.trim();
     if (!name) {
-      validationError = 'Name is required.';
+      validationError = t('settings.aiTalk.presets.errNameRequired');
       return;
     }
     if (!editor.systemPrompt.trim()) {
-      validationError = 'System prompt is required.';
+      validationError = t('settings.aiTalk.presets.errSystemRequired');
       return;
     }
     const tempParsed = editor.temperature.trim() === '' ? undefined : Number(editor.temperature);
     if (tempParsed != null && (!Number.isFinite(tempParsed) || tempParsed < 0 || tempParsed > 2)) {
-      validationError = 'Temperature must be between 0 and 2.';
+      validationError = t('settings.aiTalk.presets.errTemperatureRange');
       return;
     }
     const data = {
@@ -82,8 +83,8 @@
 
   function remove(p: PromptPreset) {
     const msg = p.builtin
-      ? `Hide built-in preset "${p.name}"? You can restore it later from the hidden section below.`
-      : `Delete preset "${p.name}"? This can't be undone.`;
+      ? t('settings.aiTalk.presets.confirmHide', { name: p.name })
+      : t('settings.aiTalk.presets.confirmDelete', { name: p.name });
     if (!confirm(msg)) return;
     promptPresets.delete(p.id);
   }
@@ -95,17 +96,17 @@
 
 <div class="presets-mgr" data-testid="prompt-preset-manager">
   <div class="header">
-    <h4>Prompt presets</h4>
+    <h4>{t('settings.aiTalk.presets.title')}</h4>
     <button
       type="button"
       class="novelist-btn novelist-btn-ghost novelist-btn-sm"
       data-testid="prompt-preset-add"
       onclick={openNew}
-    >+ New preset</button>
+    >{t('settings.aiTalk.presets.add')}</button>
   </div>
 
   {#if promptPresets.all.length === 0}
-    <p class="empty">No presets. Click "+ New preset" to create one.</p>
+    <p class="empty">{t('settings.aiTalk.presets.empty')}</p>
   {:else}
     <ul class="list">
       {#each promptPresets.all as p (p.id)}
@@ -127,24 +128,24 @@
           <div class="meta">
             <div class="name">
               <span>{p.name}</span>
-              {#if p.builtin}<span class="tag">built-in</span>{/if}
-              {#if p.temperature != null}<span class="tag">temp {p.temperature}</span>{/if}
+              {#if p.builtin}<span class="tag">{t('settings.aiTalk.presets.builtinTag')}</span>{/if}
+              {#if p.temperature != null}<span class="tag">{t('settings.aiTalk.presets.tempTag', { value: p.temperature })}</span>{/if}
               {#if p.model}<span class="tag">{p.model}</span>{/if}
             </div>
             <div class="preview">{p.systemPrompt.slice(0, 140)}{p.systemPrompt.length > 140 ? '…' : ''}</div>
           </div>
           <div class="actions">
             {#if !p.builtin}
-              <button type="button" class="novelist-btn novelist-btn-ghost novelist-btn-sm" onclick={() => openEdit(p)}>Edit</button>
+              <button type="button" class="novelist-btn novelist-btn-ghost novelist-btn-sm" onclick={() => openEdit(p)}>{t('settings.aiTalk.presets.edit')}</button>
             {:else}
-              <button type="button" class="novelist-btn novelist-btn-ghost novelist-btn-sm" title="Built-ins aren't editable. Click to view." onclick={() => openEdit(p)}>View</button>
+              <button type="button" class="novelist-btn novelist-btn-ghost novelist-btn-sm" title={t('settings.aiTalk.presets.viewTooltip')} onclick={() => openEdit(p)}>{t('settings.aiTalk.presets.view')}</button>
             {/if}
             <button
               type="button"
               class="novelist-btn novelist-btn-ghost novelist-btn-sm"
               data-testid="prompt-preset-delete-{p.id}"
               onclick={() => remove(p)}
-            >{p.builtin ? 'Hide' : 'Delete'}</button>
+            >{p.builtin ? t('settings.aiTalk.presets.hide') : t('settings.aiTalk.presets.delete')}</button>
           </div>
         </li>
       {/each}
@@ -153,7 +154,7 @@
 
   {#if hiddenBuiltins.length > 0}
     <div class="hidden-section">
-      <h5>Hidden built-ins</h5>
+      <h5>{t('settings.aiTalk.presets.hiddenSection')}</h5>
       <ul class="list hidden-list">
         {#each hiddenBuiltins as p (p.id)}
           <li class="item faded">
@@ -174,7 +175,7 @@
               type="button"
               class="novelist-btn novelist-btn-ghost novelist-btn-sm"
               onclick={() => promptPresets.restoreBuiltin(p.id)}
-            >Restore</button>
+            >{t('settings.aiTalk.presets.restore')}</button>
           </li>
         {/each}
       </ul>
@@ -185,12 +186,12 @@
     {@const locked = editor.id !== null && promptPresets.get(editor.id)?.builtin === true}
     <div class="editor" data-testid="prompt-preset-editor">
       <div class="editor-head">
-        <strong>{editor.id ? (locked ? 'View preset' : 'Edit preset') : 'New preset'}</strong>
+        <strong>{editor.id ? (locked ? t('settings.aiTalk.presets.editorTitleView') : t('settings.aiTalk.presets.editorTitleEdit')) : t('settings.aiTalk.presets.editorTitleNew')}</strong>
       </div>
 
       <div class="grid">
         <label>
-          <span>Name</span>
+          <span>{t('settings.aiTalk.presets.name')}</span>
           <input
             type="text"
             data-testid="prompt-preset-name"
@@ -200,7 +201,7 @@
           />
         </label>
         <label>
-          <span>Icon (emoji, optional)</span>
+          <span>{t('settings.aiTalk.presets.icon')}</span>
           <input
             type="text"
             value={editor.icon}
@@ -210,7 +211,7 @@
           />
         </label>
         <label class="full">
-          <span>System prompt</span>
+          <span>{t('settings.aiTalk.presets.systemPrompt')}</span>
           <textarea
             rows="5"
             data-testid="prompt-preset-system"
@@ -220,7 +221,7 @@
           ></textarea>
         </label>
         <label>
-          <span>Temperature (0–2, blank = inherit)</span>
+          <span>{t('settings.aiTalk.presets.temperature')}</span>
           <input
             type="number"
             step="0.1"
@@ -232,7 +233,7 @@
           />
         </label>
         <label>
-          <span>Model (blank = inherit)</span>
+          <span>{t('settings.aiTalk.presets.model')}</span>
           <input
             type="text"
             value={editor.model}
@@ -251,14 +252,14 @@
           type="button"
           class="novelist-btn novelist-btn-ghost"
           onclick={cancelEdit}
-        >{locked ? 'Close' : 'Cancel'}</button>
+        >{locked ? t('settings.aiTalk.presets.close') : t('settings.aiTalk.presets.cancel')}</button>
         {#if !locked}
           <button
             type="button"
             class="novelist-btn novelist-btn-primary"
             data-testid="prompt-preset-save"
             onclick={save}
-          >Save preset</button>
+          >{t('settings.aiTalk.presets.save')}</button>
         {/if}
       </div>
     </div>

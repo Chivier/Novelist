@@ -222,36 +222,44 @@
   // Synthetic entries for first-party native panels — they don't live on
   // disk so listPlugins() doesn't see them, but Settings should still
   // surface them with the same row UI (toggle + Configure).
-  const NATIVE_PLUGINS: PluginInfo[] = [
-    {
-      id: 'ai-talk',
-      name: 'AI Talk',
-      version: '0.1.0',
-      description: 'Chat + inline rewrite via any OpenAI-compatible endpoint',
-      author: 'Novelist',
-      builtin: true,
-      enabled: true,
-      active: true,
-      icon: null,
-      ui: { type: 'panel', entry: 'native', label: 'AI Talk', file_extensions: null, width: null },
-      permissions: ['ai:http'],
-    },
-    {
-      id: 'ai-agent',
-      name: 'AI Agent',
-      version: '0.1.0',
-      description: 'Agentic chat backed by your local Claude Code CLI',
-      author: 'Novelist',
-      builtin: true,
-      enabled: true,
-      active: true,
-      icon: null,
-      ui: { type: 'panel', entry: 'native', label: 'AI Agent', file_extensions: null, width: null },
-      permissions: ['ai:claude-cli'],
-    },
-  ];
+  // i18n: re-derive on locale change so AI Talk / AI Agent name + description
+  // pick up the active language. Reading `i18n.locale` inside the $derived is
+  // what creates the dependency.
+  let nativePlugins = $derived<PluginInfo[]>(
+    (() => {
+      void i18n.locale; // track locale for reactivity
+      return [
+        {
+          id: 'ai-talk',
+          name: t('settings.plugins.aiTalk.name'),
+          version: '0.1.0',
+          description: t('settings.plugins.aiTalk.description'),
+          author: 'Novelist',
+          builtin: true,
+          enabled: true,
+          active: true,
+          icon: null,
+          ui: { type: 'panel', entry: 'native', label: t('settings.plugins.aiTalk.name'), file_extensions: null, width: null },
+          permissions: ['ai:http'],
+        },
+        {
+          id: 'ai-agent',
+          name: t('settings.plugins.aiAgent.name'),
+          version: '0.1.0',
+          description: t('settings.plugins.aiAgent.description'),
+          author: 'Novelist',
+          builtin: true,
+          enabled: true,
+          active: true,
+          icon: null,
+          ui: { type: 'panel', entry: 'native', label: t('settings.plugins.aiAgent.name'), file_extensions: null, width: null },
+          permissions: ['ai:claude-cli'],
+        },
+      ];
+    })()
+  );
 
-  let builtinPlugins = $derived([...NATIVE_PLUGINS, ...plugins.filter(p => p.builtin)]);
+  let builtinPlugins = $derived([...nativePlugins, ...plugins.filter(p => p.builtin)]);
   let communityPlugins = $derived(plugins.filter(p => !p.builtin));
 
   async function loadPlugins() {
@@ -519,7 +527,7 @@
           class="w-10 h-5 rounded-full relative transition-colors"
           class:cursor-pointer={plugin.id !== 'ai-talk' && plugin.id !== 'ai-agent'}
           style="background: {plugin.enabled ? 'var(--novelist-accent)' : 'var(--novelist-bg-tertiary, #555)'}; opacity: {plugin.id === 'ai-talk' || plugin.id === 'ai-agent' ? 0.6 : 1};"
-          title={plugin.id === 'ai-talk' || plugin.id === 'ai-agent' ? 'Built-in panel — always on' : ''}
+          title={plugin.id === 'ai-talk' || plugin.id === 'ai-agent' ? t('settings.plugins.section.builtinAlwaysOn') : ''}
           onclick={() => { if (plugin.id !== 'ai-talk' && plugin.id !== 'ai-agent') togglePluginEnabled(plugin); }}
         >
           <div
@@ -562,15 +570,16 @@
       {/each}
 
       {#if pluginSettings.list().length > 0}
-        <div class="mt-2 px-4 py-1 text-[10px] uppercase tracking-wide" style="color: var(--novelist-text-secondary); opacity: 0.7;">Plugin settings</div>
+        <div class="mt-2 px-4 py-1 text-[10px] uppercase tracking-wide" style="color: var(--novelist-text-secondary); opacity: 0.7;">{t('settings.plugins.section.pluginSettings')}</div>
         {#each pluginSettings.list() as entry}
           {@const sectionId = `plugin:${entry.pluginId}`}
+          {@const localizedLabel = entry.labelKey ? t(entry.labelKey) : (entry.label ?? entry.pluginId)}
           <button
             class="text-left px-4 py-2 text-sm cursor-pointer"
             data-testid="settings-section-{sectionId}"
             style="background: {activeSection === sectionId ? 'var(--novelist-sidebar-active)' : 'transparent'}; color: {activeSection === sectionId ? 'var(--novelist-accent)' : 'var(--novelist-text)'}; border: none; font-weight: {activeSection === sectionId ? '600' : '400'};"
             onclick={() => activeSection = sectionId}
-          >{entry.label ?? entry.pluginId}</button>
+          >{localizedLabel}</button>
         {/each}
       {/if}
 
@@ -1237,9 +1246,10 @@
       {:else if activeSection.startsWith('plugin:')}
         {@const pluginId = activeSection.slice('plugin:'.length)}
         {@const entry = pluginSettings.get(pluginId)}
+        {@const headerLabel = entry?.labelKey ? t(entry.labelKey) : (entry?.label ?? pluginId)}
         <div class="flex items-center gap-3 mb-4">
           <h3 class="text-xs font-semibold uppercase tracking-wide flex-1" style="color: var(--novelist-text-secondary);">
-            {entry?.label ?? pluginId}
+            {headerLabel}
           </h3>
           {#if entry?.panelId}
             <button
@@ -1248,15 +1258,15 @@
               style="border: 1px solid var(--novelist-border); background: var(--novelist-bg-secondary); color: var(--novelist-text);"
               data-testid="open-in-panel-{pluginId}"
               onclick={() => { if (entry?.panelId) { extensionStore.openPanel(entry.panelId); onClose(); } }}
-              title="Close this dialog and open the panel itself (settings are also embedded there)"
-            >Open in panel →</button>
+              title={t('settings.plugins.section.openInPanelTooltip')}
+            >{t('settings.plugins.section.openInPanel')}</button>
           {/if}
         </div>
         {#if pluginSettingsComponents[pluginId]}
           {@const Comp = pluginSettingsComponents[pluginId]}
           <Comp />
         {:else}
-          <div class="text-xs" style="color: var(--novelist-text-secondary);">Loading settings…</div>
+          <div class="text-xs" style="color: var(--novelist-text-secondary);">{t('settings.plugins.section.loading')}</div>
         {/if}
       {/if}
     </div>
