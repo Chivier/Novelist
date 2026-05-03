@@ -33,6 +33,10 @@
   const loadPluginFileEditor = () => import('$lib/components/PluginFileEditor.svelte');
   const loadCanvasFileEditor = () => import('$lib/components/CanvasFileEditor.svelte');
   const loadKanbanFileEditor = () => import('$lib/components/KanbanFileEditor.svelte');
+  const loadUpdateProgressModal = () => import('$lib/components/UpdateProgressModal.svelte');
+  const loadUpdateAvailableBanner = () => import('$lib/components/UpdateAvailableBanner.svelte');
+  import { updaterState } from '$lib/stores/updater-state.svelte';
+  import { consumeWindowSeed } from '$lib/services/cli-open';
   import type { TemplateFileSummary } from '$lib/ipc/commands';
   import { extensionStore } from '$lib/stores/extensions.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
@@ -83,13 +87,7 @@
   let headings = $derived(tabsStore.activePaneId === 'pane-2' ? pane2Headings : pane1Headings);
   let activeEditorRef = $derived(tabsStore.activePaneId === 'pane-2' ? pane2EditorRef : pane1EditorRef);
 
-  let projectChapters = $derived(
-    projectStore.files
-      .filter(f => /\.(md|txt|json|jsonl|csv)$/i.test(f.name))
-      .map(f => ({ fileName: f.name, filePath: f.path, wordCount: 0 }))
-  );
-
-  let paletteOpen = $state(false);
+let paletteOpen = $state(false);
   let movePaletteOpen = $state(false);
   let exportDialogOpen = $state(false);
   let mindmapOverlayOpen = $state(false);
@@ -379,6 +377,29 @@
           const ref = tabsStore.activePaneId === 'pane-2' ? pane2EditorRef : pane1EditorRef;
           ref?.jumpToAbsoluteLine(line);
         },
+        onOpenProjectInThisWindow: (dirPath) => openProjectFromPath(dirPath),
+      });
+
+      // Spawned-window seed: this window may have been launched by the
+      // cli-open routing helper with `#project=…` or `#file=…` in its hash.
+      void consumeWindowSeed({
+        openProject: (path) => openProjectFromPath(path),
+        openFile: async (filePath, line) => {
+          const result = await commands.readFile(filePath);
+          if (result.status !== 'ok') return false;
+          if (!projectStore.isOpen) {
+            projectStore.enterSingleFileMode();
+            uiStore.sidebarVisible = false;
+          }
+          tabsStore.openTab(filePath, result.data);
+          await commands.registerOpenFile(filePath);
+          if (line && line > 0) {
+            requestAnimationFrame(() => {
+              window.dispatchEvent(new CustomEvent('novelist-goto-line', { detail: { line } }));
+            });
+          }
+          return true;
+        },
       });
 
       // Native menu → commandRegistry dispatch bridge.
@@ -647,10 +668,7 @@
       {:else if uiStore.statsVisible && projectStore.dirPath}
         <div style="width: {uiStore.rightPanelWidth}px;">
           {#await loadStatsPanel() then { default: StatsPanel }}
-            <StatsPanel
-              projectDir={projectStore.dirPath}
-              chapters={projectChapters}
-            />
+            <StatsPanel projectDir={projectStore.dirPath} />
           {/await}
         </div>
       {:else if uiStore.templateVisible}
@@ -823,6 +841,18 @@
       onClose={() => { newProjectDialogOpen = false; }}
       onProjectCreated={(path) => openProjectFromPath(path)}
     />
+  {/await}
+{/if}
+
+{#if updaterState.phase === 'available'}
+  {#await loadUpdateAvailableBanner() then { default: UpdateAvailableBanner }}
+    <UpdateAvailableBanner />
+  {/await}
+{/if}
+
+{#if updaterState.phase === 'downloading' || updaterState.phase === 'installing' || updaterState.phase === 'ready' || updaterState.phase === 'error'}
+  {#await loadUpdateProgressModal() then { default: UpdateProgressModal }}
+    <UpdateProgressModal />
   {/await}
 {/if}
 

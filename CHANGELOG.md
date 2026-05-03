@@ -5,6 +5,94 @@ All notable changes to Novelist will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-05-03
+
+Patch release. Three quality-of-life improvements that finally make
+Novelist feel **at home in a terminal-driven workflow** while smoothing
+out two long-standing rough edges (auto-update and chapter naming).
+
+本次 patch 集中提升日常工作流的顺滑度：新增 `novelist` 命令行（仿 VS Code
+`code`），重写自动更新流程（带真实重启），并把章节自动命名梳理成统一规则
+（`{N}` 总是阿拉伯数字、`{CN}` 总是中文 一二三）。
+
+### Added
+- **`novelist` command-line entry point** — invoke files or folders from
+  any terminal:
+  - `novelist file.md` opens the file (in the existing single-file
+    window if one is already open, otherwise a fresh window)
+  - `novelist /path/to/project` always opens the folder in a **new
+    window** (matches VS Code's "new window for folder" convention)
+  - `novelist -n file.md` — force a new window even for files
+  - `novelist -g file.md:42:5` — open and jump to line:col
+  - `novelist --help` / `--version` — print and exit without launching
+    the GUI
+  - `tauri-plugin-single-instance` dedupes concurrent invocations so a
+    second `novelist …` forwards its argv to the running instance
+    instead of spawning a duplicate process
+  - **Install command in palette** — *"Install 'novelist' Command in
+    PATH"* symlinks the bundled shim to `/usr/local/bin/novelist` on
+    macOS/Linux; on Windows the shim copies to
+    `%LOCALAPPDATA%\Novelist\bin\novelist.cmd` and the dialog explains
+    how to add that directory to `PATH`
+- **Update banner + progress modal** — the silent startup-check no
+  longer disappears. When a new version is found you see a
+  bottom-right banner; clicking *Install* opens an in-app modal that
+  shows download progress (bytes + %) → installing → *"Update
+  installed. Restart now?"* with explicit *Restart Now* / *Restart
+  Later* choices. Restart goes through `tauri-plugin-process::relaunch`
+  (newly bundled).
+- **`{CN}` chapter token** — Chinese-numeral form (一、二、三) now
+  available as `{CN}` in the new-file template (e.g. `第{CN}章`)
+
+### Changed
+- **Default new-file template** is now `第{N}章-{title}` (was
+  `Untitled {N}`). Existing user/project settings are not touched.
+- **`{N}` is always Arabic** — the previous implicit "if template
+  starts with `第`, default to Chinese" magic was removed. Use `{CN}`
+  explicitly when you want Chinese numerals.
+- **Updater UX strings** no longer claim "the app will restart
+  automatically" — the new flow asks the user.
+
+### Removed
+- **Capital `{cN}` / financial Chinese (壹贰叁) numbering** — the
+  upper-case Chinese-numeral style was unused in practice and
+  removed. `{CN}` is now the single Chinese form (lowercase 一二三).
+  Templates using the old `{cN}` token must switch to `{CN}`.
+
+### Fixed
+- Updater no longer silently fails to relaunch after install — the
+  app actually exits and restarts on the new binary now.
+
+### Frontend
+- New `app/lib/services/cli-open.ts` — window-spawn routing for the
+  `cli-open` event (folders → new window with `#project=…` URL
+  fragment, files → reuse single-file window if available)
+- New `app/lib/services/cli-shim.ts` — shim installer dialog flow
+- New `app/lib/components/UpdateProgressModal.svelte` and
+  `UpdateAvailableBanner.svelte`
+- New `app/lib/stores/updater-state.svelte.ts` — rune state machine
+  (`idle | available | downloading | installing | ready | error`)
+
+### Backend
+- New `core/src/services/cli.rs` — argv parser with 14 unit tests
+  covering files, folders, `-h/-v/-n/-g`, relative paths, `--`, and
+  Windows-style drive letters
+- New `core/src/commands/cli_shim.rs` — `cli_shim_status` /
+  `install_cli_shim` IPC commands
+- `tauri-plugin-single-instance` registered first; callback parses
+  argv with the same parser as cold start and emits `cli-open`
+- `tauri-plugin-process` registered (used by updater for `relaunch()`)
+- `bundled-cli/` resource ships the `novelist` POSIX shim and
+  `novelist.cmd` Windows launcher
+
+### Known follow-ups
+- `--wait` / `$EDITOR` integration not yet implemented (would need
+  backend tracking of tab close + IPC back to the shell shim)
+- Windows shim install does not auto-edit `PATH` (manual step
+  documented in the install dialog)
+
+---
+
 ## [0.2.2] - 2026-04-27
 
 Patch release. Focuses on **rounding out the two AI panels** introduced

@@ -119,6 +119,7 @@ function defaultCtx(): AppEventContext {
     onConflict: vi.fn(),
     onRecentProjectsUpdated: vi.fn(),
     onGotoLine: vi.fn(),
+    onOpenProjectInThisWindow: vi.fn(async () => {}),
   };
 }
 
@@ -136,7 +137,7 @@ describe('[contract] wireAppEvents — listener setup', () => {
   it('subscribes to the expected events', async () => {
     await wire();
     const names = hoisted.listen.mock.calls.map((c: any) => c[0]).sort();
-    expect(names).toEqual(['file-changed', 'file-renamed', 'open-file', 'recent-projects-updated']);
+    expect(names).toEqual(['cli-open', 'file-changed', 'file-renamed', 'open-file', 'recent-projects-updated']);
   });
 
   it('registers a drag-drop handler on the current window', async () => {
@@ -152,7 +153,7 @@ describe('[contract] wireAppEvents — listener setup', () => {
     // Five listen()s succeeded (open-file, file-changed, file-renamed,
     // recent-projects-updated, onDragDropEvent) — unlisten was called for
     // each except the pending-files drain (which uses invoke).
-    expect(hoisted.unlisten).toHaveBeenCalledTimes(5);
+    expect(hoisted.unlisten).toHaveBeenCalledTimes(6);
     expect(removeSpy).toHaveBeenCalledWith('novelist-goto-line', expect.any(Function));
     removeSpy.mockRestore();
   });
@@ -160,7 +161,14 @@ describe('[contract] wireAppEvents — listener setup', () => {
 
 describe('[contract] pending-files drain', () => {
   it('opens each pending text file', async () => {
-    hoisted.invoke.mockResolvedValue(['/proj/a.md', '/tmp/x.txt']);
+    hoisted.invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_pending_open_projects') return Promise.resolve([]);
+      if (cmd === 'get_pending_open_files') return Promise.resolve([
+        { path: '/proj/a.md', line: null, col: null },
+        { path: '/tmp/x.txt', line: null, col: null },
+      ]);
+      return Promise.resolve(undefined);
+    });
     hoisted.readFile.mockResolvedValue({ status: 'ok', data: 'content' });
     wireAppEvents(defaultCtx());
     await new Promise((r) => setTimeout(r, 0));
@@ -169,7 +177,19 @@ describe('[contract] pending-files drain', () => {
     expect(hoisted.tabsState.openTab).toHaveBeenCalledWith('/tmp/x.txt', 'content');
   });
 
-  it('swallows errors from the get_pending_open_files command', async () => {
+  it('drains pending projects via the context callback', async () => {
+    hoisted.invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_pending_open_projects') return Promise.resolve(['/work/novel']);
+      if (cmd === 'get_pending_open_files') return Promise.resolve([]);
+      return Promise.resolve(undefined);
+    });
+    const ctx = defaultCtx();
+    wireAppEvents(ctx);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(ctx.onOpenProjectInThisWindow).toHaveBeenCalledWith('/work/novel');
+  });
+
+  it('swallows errors from the get_pending_* commands', async () => {
     hoisted.invoke.mockRejectedValue(new Error('unknown command'));
     // Must not throw.
     expect(() => wireAppEvents(defaultCtx())).not.toThrow();

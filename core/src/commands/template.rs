@@ -4,7 +4,16 @@ use crate::services::template_scaffold::{self, ScaffoldLocale};
 use std::path::{Path, PathBuf};
 
 /// Returns the base directory for user templates: ~/.novelist/templates/
+///
+/// Tests can redirect this via the `NOVELIST_TEMPLATES_DIR` env var so they
+/// never touch the real user dir (which is racy with parallel `cargo test`
+/// runs and can be perturbed by a running Novelist app).
 fn templates_dir() -> Result<PathBuf, AppError> {
+    if let Ok(p) = std::env::var("NOVELIST_TEMPLATES_DIR") {
+        if !p.is_empty() {
+            return Ok(PathBuf::from(p));
+        }
+    }
     let home = dirs::home_dir()
         .ok_or_else(|| AppError::Custom("Cannot determine home directory".into()))?;
     Ok(home.join(".novelist").join("templates"))
@@ -468,7 +477,9 @@ mod tests {
     use tempfile::TempDir;
 
     #[tokio::test]
+    #[serial_test::serial(templates_dir)]
     async fn test_list_templates_includes_builtins() {
+        let _guard = IsolatedTemplatesDir::new();
         let templates = list_templates().await.unwrap();
         assert!(templates.iter().any(|t| t.id == "blank"));
         assert!(templates.iter().any(|t| t.id == "novel"));
@@ -480,7 +491,9 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::serial(templates_dir)]
     async fn test_list_templates_fallback_strings_are_english() {
+        let _guard = IsolatedTemplatesDir::new();
         // After the i18n refactor the Rust-side name/description are
         // rendered by the frontend only when an i18n key is missing; they
         // must all be English so a missing-key fallback never produces a
@@ -737,8 +750,29 @@ mod tests {
         assert!(result.is_err());
     }
 
+    /// RAII guard: redirect `templates_dir()` to a fresh TempDir for the
+    /// duration of the test. Combined with `#[serial_test::serial]` this
+    /// keeps the env mutation safe across parallel cargo-test threads.
+    struct IsolatedTemplatesDir {
+        _dir: TempDir,
+    }
+    impl IsolatedTemplatesDir {
+        fn new() -> Self {
+            let dir = TempDir::new().unwrap();
+            std::env::set_var("NOVELIST_TEMPLATES_DIR", dir.path());
+            Self { _dir: dir }
+        }
+    }
+    impl Drop for IsolatedTemplatesDir {
+        fn drop(&mut self) {
+            std::env::remove_var("NOVELIST_TEMPLATES_DIR");
+        }
+    }
+
     #[tokio::test]
+    #[serial_test::serial(templates_dir)]
     async fn test_save_and_delete_template() {
+        let _guard = IsolatedTemplatesDir::new();
         let dir = TempDir::new().unwrap();
         let project = dir.path().join("myproject");
         std::fs::create_dir_all(project.join(".novelist")).unwrap();

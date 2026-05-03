@@ -1,6 +1,8 @@
 import { check, type Update, type DownloadEvent } from '@tauri-apps/plugin-updater';
 import { ask, message } from '@tauri-apps/plugin-dialog';
+import { relaunch } from '@tauri-apps/plugin-process';
 import { t } from '$lib/i18n';
+import { updaterState } from '$lib/stores/updater-state.svelte';
 
 const SKIPPED_VERSION_KEY = 'novelist-skipped-update-version';
 
@@ -16,39 +18,15 @@ export function clearSkippedVersion() {
   localStorage.removeItem(SKIPPED_VERSION_KEY);
 }
 
-export interface UpdateStatus {
-  available: boolean;
-  version?: string;
-  notes?: string;
-  downloading?: boolean;
-  progress?: number;
-}
-
-let _status: UpdateStatus = { available: false };
 let _cachedUpdate: Update | null = null;
-const listeners: Array<(s: UpdateStatus) => void> = [];
-
-export function getUpdateStatus(): UpdateStatus {
-  return _status;
-}
-
-export function onUpdateStatusChange(fn: (s: UpdateStatus) => void): () => void {
-  listeners.push(fn);
-  return () => {
-    const idx = listeners.indexOf(fn);
-    if (idx >= 0) listeners.splice(idx, 1);
-  };
-}
-
-function setStatus(s: UpdateStatus) {
-  _status = s;
-  for (const fn of listeners) fn(s);
-}
 
 /**
- * Check for updates silently. Called once on app startup after a short delay.
- * If an update is found but the user previously skipped this exact version,
- * it is suppressed. A newer version will still prompt.
+ * Check for updates.
+ *
+ * - `silent=true` (startup): if a non-skipped update is found, surface it via
+ *   the in-app "Update Available" banner. Errors swallowed.
+ * - `silent=false` (manual command): always show a result — either the
+ *   confirm dialog, an "already latest" message, or the failure message.
  */
 export async function checkForUpdates(silent = true): Promise<void> {
   try {
@@ -62,11 +40,7 @@ export async function checkForUpdates(silent = true): Promise<void> {
         return;
       }
 
-      setStatus({
-        available: true,
-        version: update.version,
-        notes: update.body ?? undefined,
-      });
+      updaterState.setAvailable(update.version, update.body ?? null);
 
       if (!silent) {
         await promptAndInstall();
@@ -78,7 +52,7 @@ export async function checkForUpdates(silent = true): Promise<void> {
           kind: 'info',
         });
       }
-      setStatus({ available: false });
+      updaterState.reset();
     }
   } catch (e) {
     console.warn('[updater] Check failed:', e);
@@ -92,9 +66,10 @@ export async function checkForUpdates(silent = true): Promise<void> {
 }
 
 /**
- * Download and install the update, then relaunch.
+ * Entry point used by the in-app banner / "Update available" affordance.
+ * Also used by the command palette `installUpdate` after a manual check.
  */
-export async function installUpdate(): Promise<void> {
+export async function startUpdateFlow(): Promise<void> {
   if (!_cachedUpdate) {
     await checkForUpdates(false);
     return;
@@ -102,12 +77,26 @@ export async function installUpdate(): Promise<void> {
   await promptAndInstall();
 }
 
+/** Legacy alias kept for `app-commands.ts` callers. */
+export const installUpdate = startUpdateFlow;
+
 /**
- * Three-button dialog: Update Now / Skip This Version / Later
- *
- * Tauri's `ask()` only supports two buttons, so we use two sequential dialogs:
- * 1. "Update Now" vs "Not Now"
- * 2. If "Not Now" → "Skip This Version?" vs "Remind Me Later"
+ * Skip the currently-pending version. Called from the banner.
+ */
+export function skipPendingVersion(): void {
+  const v = updaterState.version;
+  if (v) setSkippedVersion(v);
+  updaterState.reset();
+  _cachedUpdate = null;
+}
+
+/** Dismiss the banner without skipping (next startup will re-prompt). */
+export function dismissPendingVersion(): void {
+  updaterState.reset();
+}
+
+/**
+ * Native two-step prompt → progress modal → restart prompt.
  */
 async function promptAndInstall(): Promise<void> {
   const update = _cachedUpdate;
@@ -124,43 +113,65 @@ async function promptAndInstall(): Promise<void> {
       { title: t('updater.skipTitle'), kind: 'info', okLabel: t('updater.skipVersion'), cancelLabel: t('updater.remindLater') }
     );
     if (skip) {
-      setSkippedVersion(update.version);
-      setStatus({ available: false });
+      skipPendingVersion();
     }
     return;
   }
 
-  setStatus({ ..._status, downloading: true, progress: 0 });
+  await downloadAndInstall(update);
+}
 
-  let downloaded = 0;
-  let contentLength = 0;
+async function downloadAndInstall(update: Update): Promise<void> {
+  updaterState.startDownload(0);
 
   try {
     await update.downloadAndInstall((event: DownloadEvent) => {
       switch (event.event) {
         case 'Started':
-          contentLength = event.data.contentLength ?? 0;
+          updaterState.startDownload(event.data.contentLength ?? 0);
           break;
         case 'Progress':
-          downloaded += event.data.chunkLength;
-          setStatus({
-            ..._status,
-            downloading: true,
-            progress: contentLength > 0 ? Math.round((downloaded / contentLength) * 100) : 0,
-          });
+          updaterState.recordChunk(event.data.chunkLength);
           break;
         case 'Finished':
-          setStatus({ ..._status, downloading: false, progress: 100 });
+          updaterState.setInstalling();
           break;
       }
     });
   } catch (e) {
     console.warn('[updater] Download/install failed:', e);
-    setStatus({ ..._status, downloading: false, progress: 0 });
     const detail = e instanceof Error ? e.message : String(e);
-    await message(t('updater.downloadFailedMessage', { detail }), {
-      title: t('updater.downloadFailed'),
+    updaterState.setError(detail);
+    return;
+  }
+
+  // Install succeeded; ask the user whether to relaunch now.
+  updaterState.setReady();
+}
+
+/**
+ * Called from the modal's "Restart now" button.
+ *
+ * `relaunch()` exits the current process and starts the freshly installed
+ * binary. We try to flush via the lifecycle handler first so unsaved state
+ * isn't lost, but the user has already been asked to restart so we don't
+ * second-guess them.
+ */
+export async function restartForUpdate(): Promise<void> {
+  try {
+    await relaunch();
+  } catch (e) {
+    console.error('[updater] relaunch failed:', e);
+    const detail = e instanceof Error ? e.message : String(e);
+    await message(t('updater.relaunchFailedMessage', { detail }), {
+      title: t('updater.relaunchFailed'),
       kind: 'error',
     });
   }
+}
+
+/** Called from the modal "Later" button — keeps the new version pending. */
+export function deferRestart(): void {
+  updaterState.reset();
+  _cachedUpdate = null;
 }

@@ -227,4 +227,8 @@ export function registerAppCommands(ctx: AppCommandContext) {
     const { checkForUpdates } = await import('$lib/updater');
     checkForUpdates(false);
   }});
+  commandRegistry.register({ id: 'install-cli-shim', label: t('command.installCliShim'), handler: async () => {
+    const { runInstallCliShim } = await import('$lib/services/cli-shim');
+    await runInstallCliShim(t);
+  }});
 }

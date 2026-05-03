@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Novelist CLI shim — installed to /usr/local/bin/novelist by the in-app
+# "Install 'novelist' command in PATH" action.
+#
+# Resolves the bundled binary inside the platform's app package and forwards
+# all arguments. The Rust side uses tauri-plugin-single-instance to dedupe,
+# so a second invocation here is forwarded to the running instance and this
+# process exits immediately.
+#
+# This script is shipped via tauri.conf.json `bundle.resources` and discovered
+# at runtime through tauri's resource directory; it MUST stay POSIX-friendly.
+
+set -e
+
+# Resolve the symlink (if any) so we can locate the bundled binary relative
+# to the original install location.
+SCRIPT_PATH="$0"
+if [ -L "$SCRIPT_PATH" ]; then
+    SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+fi
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+
+# Walk up from the resource path to find the bundled binary. The shim lives
+# at:
+#   macOS:  Novelist.app/Contents/Resources/bundled-cli/novelist
+#           → binary: ../../MacOS/novelist
+#   Linux:  /usr/lib/novelist/resources/bundled-cli/novelist
+#           → binary: /usr/bin/novelist  (system PATH; fallback below)
+#   AppImage / portable: shim sits next to the binary in resources, with the
+#           binary one or two dirs up.
+case "$(uname -s)" in
+    Darwin)
+        BIN="$SCRIPT_DIR/../../MacOS/novelist"
+        ;;
+    Linux)
+        # Try several conventional layouts.
+        for candidate in \
+            "$SCRIPT_DIR/../../bin/novelist" \
+            "$SCRIPT_DIR/../novelist" \
+            "/usr/bin/novelist" \
+            "/usr/local/bin/novelist.real"; do
+            if [ -x "$candidate" ]; then
+                BIN="$candidate"
+                break
+            fi
+        done
+        ;;
+    *)
+        echo "novelist: unsupported platform $(uname -s)" >&2
+        exit 1
+        ;;
+esac
+
+if [ -z "${BIN:-}" ] || [ ! -x "$BIN" ]; then
+    echo "novelist: cannot locate the Novelist binary (looked near $SCRIPT_DIR)" >&2
+    echo "         re-run \"Install 'novelist' command in PATH\" from inside the app." >&2
+    exit 1
+fi
+
+# Detached background launch keeps the shell prompt responsive. The
+# single-instance plugin in the running app receives our argv and routes
+# files/folders to windows; this process exits as soon as the plugin pipe
+# has accepted the message.
+"$BIN" "$@" >/dev/null 2>&1 &
+exit 0

@@ -17,6 +17,7 @@ use commands::bench::log_startup_phase;
 use commands::claude_bridge::{
     claude_cli_detect, claude_cli_kill, claude_cli_send, claude_cli_spawn, ClaudeBridgeState,
 };
+use commands::cli_shim::{cli_shim_status, install_cli_shim};
 use commands::draft::{delete_draft_note, has_draft_note, read_draft_note, write_draft_note};
 use commands::export::{check_pandoc, export_project};
 use commands::file::{
@@ -51,6 +52,7 @@ use commands::template_files::{
     read_template_file, rename_template_file, write_template_file,
 };
 use commands::window::set_window_appearance;
+use serde::{Deserialize, Serialize};
 use services::file_watcher::{
     register_open_file, register_write_ignore, start_file_watcher, stop_file_watcher,
     unregister_open_file, FileWatcherState,
@@ -60,13 +62,40 @@ use services::rope_document::{
     rope_apply_edit, rope_close, rope_get_lines, rope_line_to_char, rope_open, rope_save,
     RopeDocumentState,
 };
+use specta::Type;
 use tauri::{Emitter, Manager};
 use tauri_specta::{collect_commands, Builder};
+
+use services::cli::{help_text, parse_argv, CliRequest, FileTarget};
 
 /// Files queued for opening before the frontend listener is ready.
 /// Populated by CLI args and macOS `RunEvent::Opened`; drained by the
 /// frontend via `get_pending_open_files` on mount.
-pub struct PendingOpenFiles(Mutex<Vec<String>>);
+pub struct PendingOpenFiles(Mutex<Vec<PendingFile>>);
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct PendingFile {
+    pub path: String,
+    pub line: Option<u32>,
+    pub col: Option<u32>,
+}
+
+impl PendingFile {
+    fn from_target(t: &FileTarget) -> Self {
+        Self {
+            path: t.path.to_string_lossy().to_string(),
+            line: t.line,
+            col: t.col,
+        }
+    }
+    fn from_path(path: String) -> Self {
+        Self {
+            path,
+            line: None,
+            col: None,
+        }
+    }
+}
 
 impl Default for PendingOpenFiles {
     fn default() -> Self {
@@ -75,6 +104,28 @@ impl Default for PendingOpenFiles {
 }
 
 impl PendingOpenFiles {
+    pub fn new() -> Self {
+        Self(Mutex::new(Vec::new()))
+    }
+    pub fn push(&self, file: PendingFile) {
+        self.0.lock().unwrap_or_else(|e| e.into_inner()).push(file);
+    }
+    pub fn drain(&self) -> Vec<PendingFile> {
+        std::mem::take(&mut *self.0.lock().unwrap_or_else(|e| e.into_inner()))
+    }
+}
+
+/// Project folders queued for opening before the frontend is ready.
+/// Mirrors `PendingOpenFiles`; on cold start, the main window drains both.
+pub struct PendingOpenProjects(Mutex<Vec<String>>);
+
+impl Default for PendingOpenProjects {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PendingOpenProjects {
     pub fn new() -> Self {
         Self(Mutex::new(Vec::new()))
     }
@@ -88,8 +139,38 @@ impl PendingOpenFiles {
 
 #[tauri::command]
 #[specta::specta]
-fn get_pending_open_files(state: tauri::State<'_, PendingOpenFiles>) -> Vec<String> {
+fn get_pending_open_files(state: tauri::State<'_, PendingOpenFiles>) -> Vec<PendingFile> {
     state.drain()
+}
+
+#[tauri::command]
+#[specta::specta]
+fn get_pending_open_projects(state: tauri::State<'_, PendingOpenProjects>) -> Vec<String> {
+    state.drain()
+}
+
+/// Payload emitted as the `cli-open` event on hot path (existing instance
+/// receives a second invocation). The frontend routes folders to new windows
+/// and files to either the focused single-file window or a new window.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct CliOpenPayload {
+    pub files: Vec<PendingFile>,
+    pub folders: Vec<String>,
+    pub force_new_window: bool,
+}
+
+impl CliOpenPayload {
+    fn from_request(req: &CliRequest) -> Self {
+        Self {
+            files: req.files.iter().map(PendingFile::from_target).collect(),
+            folders: req
+                .folders
+                .iter()
+                .map(|p| p.to_string_lossy().to_string())
+                .collect(),
+            force_new_window: req.force_new_window,
+        }
+    }
 }
 
 /// macOS 11+ draws a 1px hairline under the titlebar even when the titlebar
@@ -116,8 +197,35 @@ fn remove_titlebar_separator(window: &tauri::WebviewWindow) {
     }
 }
 
+/// Parse argv early and short-circuit `--help` / `--version` so a CLI
+/// invocation prints to stdout and exits without spinning up the GUI.
+/// On macOS GUI launches argv has only the program name, so this is a no-op.
+fn handle_early_exit_flags() {
+    let argv: Vec<String> = std::env::args().collect();
+    if argv.len() <= 1 {
+        return;
+    }
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let req = parse_argv(&argv, &cwd);
+    let program = std::path::Path::new(&argv[0])
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("novelist")
+        .to_string();
+    if req.want_version {
+        println!("novelist {}", env!("CARGO_PKG_VERSION"));
+        std::process::exit(0);
+    }
+    if req.want_help {
+        print!("{}", help_text(&program, env!("CARGO_PKG_VERSION")));
+        std::process::exit(0);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    handle_early_exit_flags();
+
     let t0 = std::time::Instant::now();
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -203,6 +311,9 @@ pub fn run() {
         duplicate_bundled_template,
         create_file_with_body,
         get_pending_open_files,
+        get_pending_open_projects,
+        cli_shim_status,
+        install_cli_shim,
         read_image_data_uri,
         write_binary_file,
         reveal_in_file_manager,
@@ -298,6 +409,9 @@ pub fn run() {
         duplicate_bundled_template,
         create_file_with_body,
         get_pending_open_files,
+        get_pending_open_projects,
+        cli_shim_status,
+        install_cli_shim,
         read_image_data_uri,
         write_binary_file,
         reveal_in_file_manager,
@@ -330,6 +444,34 @@ pub fn run() {
 
     #[allow(unused_mut)]
     let mut app_builder = tauri::Builder::default()
+        // Single-instance MUST be the first plugin registered (per the plugin's
+        // README) so its IPC pipe is alive before any other setup work runs.
+        // The callback is invoked in the *original* instance with the second
+        // process's argv + cwd; we parse and emit `cli-open` for the frontend.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+            tracing::info!(
+                target: "novelist::cli",
+                argv = ?argv,
+                cwd = %cwd,
+                "single-instance: forwarded args from second invocation"
+            );
+            let cwd_path = std::path::PathBuf::from(&cwd);
+            let req = parse_argv(&argv, &cwd_path);
+            let payload = CliOpenPayload::from_request(&req);
+            // Bring some window to the front so the user sees the result.
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.show();
+                let _ = win.unminimize();
+                let _ = win.set_focus();
+            }
+            if let Err(e) = app.emit("cli-open", payload) {
+                tracing::warn!(
+                    target: "novelist::cli",
+                    error = %e,
+                    "failed to emit cli-open event to frontend"
+                );
+            }
+        }))
         .menu(|handle| menu::build_menu(handle, &menu::MenuLabels::fallback(), &[]))
         .on_menu_event(|app, event| {
             // Menu item IDs match command IDs registered in
@@ -340,7 +482,8 @@ pub fn run() {
         })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_updater::Builder::new().build());
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init());
 
     #[cfg(feature = "e2e-testing")]
     {
@@ -359,6 +502,7 @@ pub fn run() {
         .manage(RopeDocumentState::new())
         .manage(EncodingState::new())
         .manage(PendingOpenFiles::new())
+        .manage(PendingOpenProjects::new())
         .manage(AiBridgeState::new())
         .manage(ClaudeBridgeState::new())
         .invoke_handler(builder.invoke_handler())
@@ -390,26 +534,18 @@ pub fn run() {
                 }
             }
 
-            // Check CLI args for a file path to open in single-file mode.
-            // Push to PendingOpenFiles so the frontend can pick them up on mount.
-            let pending = app.state::<PendingOpenFiles>();
-            let args: Vec<String> = std::env::args().skip(1).collect();
-            let text_extensions = [".md", ".markdown", ".txt", ".json", ".jsonl", ".csv"];
-            for arg in &args {
-                let path = std::path::Path::new(arg);
-                if path.exists()
-                    && text_extensions
-                        .iter()
-                        .any(|ext| arg.to_lowercase().ends_with(ext))
-                {
-                    let file_path = path
-                        .canonicalize()
-                        .unwrap_or_else(|_| path.to_path_buf())
-                        .to_string_lossy()
-                        .to_string();
-                    pending.push(file_path);
-                    break;
-                }
+            // Cold-start CLI args: parse files + folders into the pending
+            // queues so the main window drains them on first mount.
+            let argv: Vec<String> = std::env::args().collect();
+            let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let req = parse_argv(&argv, &cwd);
+            let pending_files = app.state::<PendingOpenFiles>();
+            for f in &req.files {
+                pending_files.push(PendingFile::from_target(f));
+            }
+            let pending_projects = app.state::<PendingOpenProjects>();
+            for d in &req.folders {
+                pending_projects.push(d.to_string_lossy().to_string());
             }
 
             tracing::info!(
@@ -435,7 +571,7 @@ pub fn run() {
                                 // Push to pending queue (for cold start when frontend
                                 // hasn't registered its listener yet)
                                 let pending = app.state::<PendingOpenFiles>();
-                                pending.push(file_path.clone());
+                                pending.push(PendingFile::from_path(file_path.clone()));
                                 // Also emit for the hot path (app already running,
                                 // listener active)
                                 let _ = app.emit("open-file", file_path);

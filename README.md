@@ -29,15 +29,15 @@
 
 ## Download / 下载
 
-Latest release: **[v0.2.2](https://github.com/Saber-AI-Research/Novelist/releases/tag/v0.2.2)** · 最新版本
+Latest release: **[v0.2.3](https://github.com/Saber-AI-Research/Novelist/releases/tag/v0.2.3)** · 最新版本
 
 | Platform / 平台 | File / 文件 |
 |---|---|
-| macOS (Apple Silicon) | [`Novelist_0.2.2_aarch64.dmg`](https://github.com/Saber-AI-Research/Novelist/releases/download/v0.2.2/Novelist_0.2.2_aarch64.dmg) |
-| Windows | [`Novelist_0.2.2_x64_en-US.msi`](https://github.com/Saber-AI-Research/Novelist/releases/download/v0.2.2/Novelist_0.2.2_x64_en-US.msi) · [`x64-setup.exe`](https://github.com/Saber-AI-Research/Novelist/releases/download/v0.2.2/Novelist_0.2.2_x64-setup.exe) |
-| Linux (deb) | [`Novelist_0.2.2_amd64.deb`](https://github.com/Saber-AI-Research/Novelist/releases/download/v0.2.2/Novelist_0.2.2_amd64.deb) |
-| Linux (rpm) | [`Novelist-0.2.2-1.x86_64.rpm`](https://github.com/Saber-AI-Research/Novelist/releases/download/v0.2.2/Novelist-0.2.2-1.x86_64.rpm) |
-| Linux (AppImage) | [`Novelist_0.2.2_amd64.AppImage`](https://github.com/Saber-AI-Research/Novelist/releases/download/v0.2.2/Novelist_0.2.2_amd64.AppImage) |
+| macOS (Apple Silicon) | [`Novelist_0.2.3_aarch64.dmg`](https://github.com/Saber-AI-Research/Novelist/releases/download/v0.2.3/Novelist_0.2.3_aarch64.dmg) |
+| Windows | [`Novelist_0.2.3_x64_en-US.msi`](https://github.com/Saber-AI-Research/Novelist/releases/download/v0.2.3/Novelist_0.2.3_x64_en-US.msi) · [`x64-setup.exe`](https://github.com/Saber-AI-Research/Novelist/releases/download/v0.2.3/Novelist_0.2.3_x64-setup.exe) |
+| Linux (deb) | [`Novelist_0.2.3_amd64.deb`](https://github.com/Saber-AI-Research/Novelist/releases/download/v0.2.3/Novelist_0.2.3_amd64.deb) |
+| Linux (rpm) | [`Novelist-0.2.3-1.x86_64.rpm`](https://github.com/Saber-AI-Research/Novelist/releases/download/v0.2.3/Novelist-0.2.3-1.x86_64.rpm) |
+| Linux (AppImage) | [`Novelist_0.2.3_amd64.AppImage`](https://github.com/Saber-AI-Research/Novelist/releases/download/v0.2.3/Novelist_0.2.3_amd64.AppImage) |
 
 System requirements / 系统要求 — macOS 11+ · Windows 10+ (64-bit) · Linux glibc 2.31+
 
@@ -116,6 +116,29 @@ pnpm tauri build    # production build
 ```
 
 See [Development Guide / 开发指南](docs/development.md) for prerequisites and details.
+
+## Command-Line Usage / 命令行用法
+
+Once installed, run *Install 'novelist' Command in PATH* from the
+command palette (`⌘P` / `Ctrl+P`). Then from any terminal:
+
+```bash
+novelist file.md             # open a file (reuses an existing single-file
+                             # window when one is already open)
+novelist /path/to/project    # open a folder as a project — always in a
+                             # new window (matches VS Code's `code .`)
+novelist -n file.md          # force a new window even for a file
+novelist -g file.md:42:5     # open and jump to line 42, column 5
+novelist --help              # full flag reference
+```
+
+Concurrent invocations are deduped via `tauri-plugin-single-instance`,
+so a second `novelist …` forwards its argv to the running instance
+instead of spawning a duplicate process.
+
+安装后，在命令面板（`⌘P` / `Ctrl+P`）执行 *安装 novelist 命令到 PATH*，
+之后即可在任意终端使用 `novelist` 命令打开文件或文件夹。文件夹始终在新
+窗口打开；文件优先复用已有的独立文件窗口。
 
 ## Documentation / 文档
 

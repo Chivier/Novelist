@@ -125,13 +125,16 @@ export const commands = {
 	restoreSnapshot: (projectDir: string, snapshotId: string) => typedError<null, string>(__TAURI_INVOKE("restore_snapshot", { projectDir, snapshotId })),
 	deleteSnapshot: (projectDir: string, snapshotId: string) => typedError<null, string>(__TAURI_INVOKE("delete_snapshot", { projectDir, snapshotId })),
 	recordWritingStats: (projectDir: string, wordDelta: number, minutes: number) => typedError<null, string>(__TAURI_INVOKE("record_writing_stats", { projectDir, wordDelta, minutes })),
-	getWritingStats: (projectDir: string, chapters: ChapterStatsInput[]) => typedError<WritingStatsOverview, string>(__TAURI_INVOKE("get_writing_stats", { projectDir, chapters })),
+	getWritingStats: (projectDir: string) => typedError<WritingStatsOverview, string>(__TAURI_INVOKE("get_writing_stats", { projectDir })),
 	listTemplates: () => typedError<TemplateInfo[], string>(__TAURI_INVOKE("list_templates")),
 	createProjectFromTemplate: (templateId: string, projectName: string, parentDir: string, locale: string) => typedError<string, string>(__TAURI_INVOKE("create_project_from_template", { templateId, projectName, parentDir, locale })),
 	saveProjectAsTemplate: (projectDir: string, templateName: string) => typedError<TemplateInfo, string>(__TAURI_INVOKE("save_project_as_template", { projectDir, templateName })),
 	deleteTemplate: (templateId: string) => typedError<null, string>(__TAURI_INVOKE("delete_template", { templateId })),
 	importTemplateZip: (zipPath: string) => typedError<TemplateInfo, string>(__TAURI_INVOKE("import_template_zip", { zipPath })),
-	getPendingOpenFiles: () => __TAURI_INVOKE<string[]>("get_pending_open_files"),
+	getPendingOpenFiles: () => __TAURI_INVOKE<PendingFile[]>("get_pending_open_files"),
+	getPendingOpenProjects: () => __TAURI_INVOKE<string[]>("get_pending_open_projects"),
+	cliShimStatus: () => typedError<CliShimStatus, string>(__TAURI_INVOKE("cli_shim_status")),
+	installCliShim: () => typedError<CliShimStatus, string>(__TAURI_INVOKE("install_cli_shim")),
 	/**
 	 *  Read an image file and return it as a data URI (e.g. `data:image/png;base64,...`).
 	 *  Used by the WYSIWYG editor to render local images without the asset protocol.
@@ -171,6 +174,25 @@ export const commands = {
 };
 
 /* Types */
+export type PendingFile = {
+	path: string,
+	line: number | null,
+	col: number | null,
+};
+
+export type CliOpenPayload = {
+	files: PendingFile[],
+	folders: string[],
+	force_new_window: boolean,
+};
+
+export type CliShimStatus = {
+	install_path: string,
+	installed: boolean,
+	up_to_date: boolean,
+	source_path: string,
+};
+
 export type AiFetchRequest = {
 	/**
 	 *  Full URL. Must be https:// (http:// allowed only for localhost for
@@ -188,12 +210,6 @@ export type AiFetchRequest = {
 };
 
 export type ChapterStats = {
-	file_name: string,
-	file_path: string,
-	word_count: number,
-};
-
-export type ChapterStatsInput = {
 	file_name: string,
 	file_path: string,
 	word_count: number,

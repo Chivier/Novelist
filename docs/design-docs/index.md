@@ -1,6 +1,6 @@
 # Design Docs Index
 
-Last updated: 2026-04-25
+Last updated: 2026-05-03
 
 This directory holds the durable design record for Novelist. Historical
 implementation plans live in `docs/exec-plans/`; this directory is for the
@@ -16,6 +16,7 @@ decisions that still guide future work.
 | File lifecycle, watcher, self-write suppression | [file-lifecycle.md](file-lifecycle.md) |
 | Plugin system and bundled plugin constraints | [plugin-system.md](plugin-system.md) |
 | Settings overlay model | [settings.md](settings.md) |
+| CLI entry point and window routing | [cli-and-windows.md](cli-and-windows.md) |
 | Feature boundaries | [feature-boundaries.md](feature-boundaries.md) |
 
 ## Quality And Operations
