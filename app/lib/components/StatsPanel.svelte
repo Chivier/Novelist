@@ -5,10 +5,9 @@
 
   interface Props {
     projectDir: string;
-    chapters: { fileName: string; filePath: string; wordCount: number }[];
   }
 
-  let { projectDir, chapters }: Props = $props();
+  let { projectDir }: Props = $props();
 
   interface DailyStats {
     date: string;
@@ -37,14 +36,8 @@
 
   async function loadStats() {
     try {
-      const chaptersInput = chapters.map(c => ({
-        file_name: c.fileName,
-        file_path: c.filePath,
-        word_count: c.wordCount,
-      }));
       const result = await invoke<StatsOverview>('get_writing_stats', {
         projectDir,
-        chapters: chaptersInput,
       });
       stats = result;
     } catch (e) {
@@ -54,11 +47,11 @@
     }
   }
 
-  // Reload when project or chapters change
+  // Reload when project changes. Backend walks the project dir itself, so
+  // we don't need to pass the chapter list (and don't need to react to
+  // sidebar tree-expansion state).
   $effect(() => {
     if (projectDir) {
-      // Access chapters to create dependency
-      const _len = chapters.length;
       loadStats();
     }
   });

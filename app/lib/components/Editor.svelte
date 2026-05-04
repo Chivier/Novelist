@@ -60,10 +60,23 @@
   let recoveryFilePath = $state<string | null>(null);
   let recoveryFileName = $state('');
 
-  // Session tracking for writing stats
-  let sessionStartWordCount: number | null = null;
+  // Session tracking for writing stats. We only count *gross additions* across
+  // a session: each time the debounced word-count sample increases vs. the
+  // previous sample, the positive diff is added to `sessionWordsAdded`.
+  // Deletions are ignored, so typing 100 then deleting 50 records 100 (typing
+  // effort), not 50 (net), and never produces a negative day total.
   let sessionStartTime: number | null = null;
+  let sessionWordsAdded = 0;
+  let sessionLastSampled = 0;
   let lastKnownWordCount = 0;
+
+  /** Fold a fresh wordCount sample into the active session, if one is open. */
+  function sampleSessionWords(currentCount: number) {
+    if (sessionStartTime === null) return;
+    const incremental = currentCount - sessionLastSampled;
+    if (incremental > 0) sessionWordsAdded += incremental;
+    sessionLastSampled = currentCount;
+  }
 
   // Crash recovery: use a `.~recovery` suffix to separate from sidebar draft notes
   const RECOVERY_SUFFIX = '.~recovery';
@@ -200,6 +213,7 @@
         headings = extractHeadings(currentState);
       }
       lastKnownWordCount = wordCount;
+      sampleSessionWords(wordCount);
     };
 
     if (statsTimer) clearTimeout(statsTimer);
@@ -214,23 +228,30 @@
   }
 
   function flushWritingStats() {
-    if (sessionStartWordCount === null || sessionStartTime === null) return;
-    if (!projectStore.dirPath) return;
-    const delta = lastKnownWordCount - sessionStartWordCount;
-    const minutes = Math.max(1, Math.round((Date.now() - sessionStartTime) / 60000));
-    if (delta === 0 && minutes < 2) {
-      // Don't record trivial sessions
-      sessionStartWordCount = null;
-      sessionStartTime = null;
-      return;
+    if (sessionStartTime === null) return;
+    // Take one final sample so additions made since the last debounced update
+    // (e.g. typing then immediately Cmd+S within 500ms) aren't lost.
+    if (view) {
+      const st = view.state;
+      const currentCount = st.doc.lines > LARGE_DOC_LINES
+        ? Math.round(st.doc.length / 4)
+        : countWords(st.doc.toString());
+      lastKnownWordCount = currentCount;
+      sampleSessionWords(currentCount);
     }
+    const minutes = Math.max(1, Math.round((Date.now() - sessionStartTime) / 60000));
+    const wordsAdded = sessionWordsAdded;
+    // Reset session state before the async send so a re-entrant call doesn't
+    // double-record.
+    sessionStartTime = null;
+    sessionWordsAdded = 0;
+    if (!projectStore.dirPath) return;
+    if (wordsAdded === 0 && minutes < 2) return;
     invoke('record_writing_stats', {
       projectDir: projectStore.dirPath,
-      wordDelta: delta,
+      wordDelta: wordsAdded,
       minutes,
     }).catch(e => console.warn('[Stats] Failed to record:', e));
-    sessionStartWordCount = null;
-    sessionStartTime = null;
   }
 
   function buildExtensions(fileSize: number, lineCount: number): Extension[] {
@@ -277,10 +298,12 @@
           }
         }
         scheduleStatsUpdate(update.state);
-        // Start session tracking on first keystroke
-        if (sessionStartWordCount === null) {
-          sessionStartWordCount = lastKnownWordCount;
+        // Start session tracking on first keystroke. Pre-edit word count is
+        // the baseline for the additions accumulator.
+        if (sessionStartTime === null) {
           sessionStartTime = Date.now();
+          sessionLastSampled = lastKnownWordCount;
+          sessionWordsAdded = 0;
         }
       }
       if (update.selectionSet || update.docChanged || update.geometryChanged) {

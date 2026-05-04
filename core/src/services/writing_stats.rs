@@ -2,7 +2,60 @@ use crate::error::AppError;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+/// Extensions counted as narrative content for project-level word stats.
+const COUNTED_EXTS: &[&str] = &["md", "txt", "json", "jsonl", "csv"];
+
+/// CJK-aware word count. Mirrors `app/lib/utils/wordcount.ts`:
+/// - each CJK scalar counts as 1 word
+/// - runs of non-whitespace, non-CJK chars count as 1 Latin word
+///
+/// Rust `chars()` yields Unicode scalars, so supplementary-plane CJK works
+/// without surrogate-pair handling.
+pub fn count_words_cjk(text: &str) -> usize {
+    if text.trim().is_empty() {
+        return 0;
+    }
+    let mut count: usize = 0;
+    let mut in_latin_word = false;
+    for ch in text.chars() {
+        if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
+            if in_latin_word {
+                count += 1;
+                in_latin_word = false;
+            }
+            continue;
+        }
+        if is_cjk(ch as u32) {
+            if in_latin_word {
+                count += 1;
+                in_latin_word = false;
+            }
+            count += 1;
+            continue;
+        }
+        in_latin_word = true;
+    }
+    if in_latin_word {
+        count += 1;
+    }
+    count
+}
+
+fn is_cjk(code: u32) -> bool {
+    (0x4E00..=0x9FFF).contains(&code)        // CJK Unified Ideographs
+        || (0x3400..=0x4DBF).contains(&code) // Extension A
+        || (0xF900..=0xFAFF).contains(&code) // Compatibility Ideographs
+        || (0x3000..=0x303F).contains(&code) // CJK Symbols and Punctuation
+        || (0xFF00..=0xFFEF).contains(&code) // Fullwidth Forms
+        || (0x20000..=0x2A6DF).contains(&code) // Extension B
+        || (0x2A700..=0x2B73F).contains(&code) // Extension C
+        || (0x2B740..=0x2B81F).contains(&code) // Extension D
+        || (0x2B820..=0x2CEAF).contains(&code) // Extension E
+        || (0x2CEB0..=0x2EBEF).contains(&code) // Extension F
+        || (0x30000..=0x3134F).contains(&code) // Extension G
+}
 
 #[derive(Serialize, Deserialize, Clone, Type)]
 pub struct DailyStats {
@@ -117,10 +170,44 @@ pub async fn record_words(
     write_stats(project_dir, &map).await
 }
 
-pub async fn get_stats_overview(
-    project_dir: &str,
-    chapter_files: Vec<(String, String, usize)>,
-) -> Result<WritingStatsOverview, AppError> {
+/// Recursively collect narrative files under `root`. Skips dot-prefixed entries
+/// (hidden dirs like `.novelist`, recovery drafts like `*.~recovery`) and
+/// returns (file_name, full_path) pairs.
+fn collect_chapter_files(root: &Path) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut stack: Vec<PathBuf> = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name_s = name.to_string_lossy().to_string();
+            if name_s.starts_with('.') {
+                continue;
+            }
+            let path = entry.path();
+            let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+            if is_dir {
+                stack.push(path);
+                continue;
+            }
+            let ext_ok = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| COUNTED_EXTS.iter().any(|c| c.eq_ignore_ascii_case(e)))
+                .unwrap_or(false);
+            if !ext_ok {
+                continue;
+            }
+            out.push((name_s, path.to_string_lossy().to_string()));
+        }
+    }
+    out
+}
+
+pub async fn get_stats_overview(project_dir: &str) -> Result<WritingStatsOverview, AppError> {
     let map = read_stats(project_dir).await?;
     let today = today_str();
 
@@ -181,17 +268,24 @@ pub async fn get_stats_overview(
         streak
     };
 
-    // Total words from chapters
-    let total_words: usize = chapter_files.iter().map(|(_, _, wc)| *wc).sum();
-
-    let chapters: Vec<ChapterStats> = chapter_files
-        .into_iter()
-        .map(|(name, path, wc)| ChapterStats {
+    // Walk the project directory ourselves so subfolder chapters are included
+    // and word counts reflect on-disk content. Sequential file reads — fine for
+    // typical novel projects (~100 files); revisit with caching if it bites.
+    let files = collect_chapter_files(Path::new(project_dir));
+    let mut chapters: Vec<ChapterStats> = Vec::with_capacity(files.len());
+    let mut total_words: usize = 0;
+    for (name, path) in files {
+        let wc = match tokio::fs::read_to_string(&path).await {
+            Ok(content) => count_words_cjk(&content),
+            Err(_) => 0,
+        };
+        total_words += wc;
+        chapters.push(ChapterStats {
             file_name: name,
             file_path: path,
             word_count: wc,
-        })
-        .collect();
+        });
+    }
 
     Ok(WritingStatsOverview {
         daily,
@@ -238,23 +332,60 @@ mod tests {
         record_words(&project, 100, 5).await.unwrap();
         record_words(&project, 50, 3).await.unwrap();
 
-        let overview = get_stats_overview(&project, vec![]).await.unwrap();
+        let overview = get_stats_overview(&project).await.unwrap();
         assert_eq!(overview.today_words, 150);
         assert_eq!(overview.today_minutes, 8);
     }
 
     #[tokio::test]
-    async fn test_chapter_stats() {
+    async fn test_chapter_stats_reads_files() {
         let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join("ch1.md"), "hello world foo").unwrap();
+        std::fs::write(dir.path().join("ch2.md"), "你好世界").unwrap();
+        // Subfolder content should also count.
+        std::fs::create_dir(dir.path().join("part2")).unwrap();
+        std::fs::write(dir.path().join("part2/ch3.md"), "abc def").unwrap();
+        // Hidden dir + recovery drafts must be skipped.
+        std::fs::create_dir(dir.path().join(".novelist")).unwrap();
+        std::fs::write(dir.path().join(".novelist/notes.md"), "ignored").unwrap();
+        std::fs::write(dir.path().join(".~recovery"), "ignored").unwrap();
+
         let project = dir.path().to_string_lossy().to_string();
+        let overview = get_stats_overview(&project).await.unwrap();
 
-        let chapters = vec![
-            ("ch1.md".to_string(), "/p/ch1.md".to_string(), 1000),
-            ("ch2.md".to_string(), "/p/ch2.md".to_string(), 500),
-        ];
+        // 3 (ch1) + 4 (ch2 CJK) + 2 (ch3) = 9
+        assert_eq!(overview.total_words, 9);
+        assert_eq!(overview.chapters.len(), 3);
+    }
 
-        let overview = get_stats_overview(&project, chapters).await.unwrap();
-        assert_eq!(overview.total_words, 1500);
-        assert_eq!(overview.chapters.len(), 2);
+    #[test]
+    fn test_count_words_cjk_empty() {
+        assert_eq!(count_words_cjk(""), 0);
+        assert_eq!(count_words_cjk("   \n\t"), 0);
+    }
+
+    #[test]
+    fn test_count_words_cjk_latin() {
+        assert_eq!(count_words_cjk("hello"), 1);
+        assert_eq!(count_words_cjk("hello world foo bar"), 4);
+        assert_eq!(count_words_cjk("  hello   world  "), 2);
+    }
+
+    #[test]
+    fn test_count_words_cjk_chinese() {
+        assert_eq!(count_words_cjk("你好世界"), 4);
+        assert_eq!(count_words_cjk("第一章"), 3);
+    }
+
+    #[test]
+    fn test_count_words_cjk_mixed() {
+        // 4 CJK + 2 latin
+        assert_eq!(count_words_cjk("你好世界 hello world"), 6);
+    }
+
+    #[test]
+    fn test_count_words_cjk_supplementary_plane() {
+        // U+20000 is Extension B — Rust `chars()` yields it as one scalar.
+        assert_eq!(count_words_cjk("\u{20000}\u{20001}"), 2);
     }
 }
