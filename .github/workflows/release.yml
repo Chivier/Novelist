@@ -13,7 +13,7 @@ jobs:
   build-macos-arm:
     runs-on: [self-hosted, macOS, ARM64]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Install frontend dependencies
         run: pnpm install
@@ -38,7 +38,7 @@ jobs:
           fi
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: novelist-macos-aarch64
           path: |
@@ -60,7 +60,7 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -68,12 +68,12 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Install Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: 22
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@v6
         with:
           version: 9
 
@@ -117,7 +117,7 @@ jobs:
     if: ${{ needs.build-macos-arm.result == 'success' || needs.build-other.result == 'success' }}
     steps:
       - name: Download macOS ARM artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: novelist-macos-aarch64
           path: artifacts/
