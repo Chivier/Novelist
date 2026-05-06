@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { commandRegistry } from '$lib/stores/commands.svelte';
+  import { commandRegistry, getSecondaryLabel } from '$lib/stores/commands.svelte';
   import { formatShortcut } from '$lib/stores/shortcuts.svelte';
   import { t } from '$lib/i18n';
 
@@ -47,6 +47,7 @@
     />
     <ul class="palette-list">
       {#each results as cmd, i}
+        {@const sec = getSecondaryLabel(cmd)}
         <li>
           <button
             class="palette-item"
@@ -55,7 +56,12 @@
             onclick={() => { cmd.handler(); onClose(); }}
             onmouseenter={() => { selectedIndex = i; }}
           >
-            <span>{cmd.label}</span>
+            <span class="palette-labels">
+              <span class="palette-primary">{cmd.label}</span>
+              {#if sec}
+                <span class="palette-secondary">{sec}</span>
+              {/if}
+            </span>
             {#if cmd.shortcut}
               <span class="shortcut">{formatShortcut(cmd.shortcut)}</span>
             {/if}
@@ -129,6 +135,25 @@
     font-size: 13px;
     cursor: pointer;
     text-align: left;
+  }
+
+  .palette-labels {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+  .palette-primary {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .palette-secondary {
+    font-size: 10.5px;
+    color: var(--novelist-text-secondary, #888);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .palette-item:hover,

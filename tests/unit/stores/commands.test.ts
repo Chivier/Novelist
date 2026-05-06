@@ -75,6 +75,33 @@ describe('[contract] commandRegistry', () => {
     expect(miss).toEqual([]);
   });
 
+  it('search() also matches the secondaryLabel for bilingual lookup', () => {
+    commandRegistry.register({
+      id: 'a', label: '切换侧边栏', secondaryLabel: 'Toggle Sidebar', handler: () => {},
+    });
+    commandRegistry.register({
+      id: 'b', label: '新建文件', secondaryLabel: 'New File', handler: () => {},
+    });
+    // Chinese-locale label search
+    expect(commandRegistry.search('侧边').map(c => c.id)).toEqual(['a']);
+    // English-keyword search hits the secondary
+    expect(commandRegistry.search('sidebar').map(c => c.id)).toEqual(['a']);
+    // Case-insensitive secondary match
+    expect(commandRegistry.search('NEW').map(c => c.id)).toEqual(['b']);
+  });
+
+  it('search() resolves secondaryLabelFn lazily for matching', () => {
+    let resolved = '';
+    commandRegistry.register({
+      id: 'a',
+      label: '切换大纲',
+      secondaryLabelFn: () => { resolved = 'Toggle Outline'; return 'Toggle Outline'; },
+      handler: () => {},
+    });
+    expect(commandRegistry.search('outline').map(c => c.id)).toEqual(['a']);
+    expect(resolved).toBe('Toggle Outline');
+  });
+
   it('preserves registration order (palette rendering depends on it)', () => {
     commandRegistry.register({ id: 'z', label: 'Zebra', handler: () => {} });
     commandRegistry.register({ id: 'a', label: 'Apple', handler: () => {} });

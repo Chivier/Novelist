@@ -52,6 +52,11 @@ void (async () => {
     logPhase("frontend.main.before-i18n");
     await i18n.init();
     logPhase("frontend.main.i18n-ready");
+    // Preload the alternate locale chunk so the command palette can
+    // render bilingual labels (active locale + alternate as subscript).
+    // Fire-and-forget — palette renders are reactive, so labels appear
+    // as soon as the chunk lands.
+    void i18n.preloadAll();
 
     const target = document.getElementById("app");
     logPhase("frontend.main.before-mount", { hasTarget: !!target });

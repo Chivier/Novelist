@@ -346,6 +346,7 @@ export const zhCN: TranslationMap = {
   'command.generatePinyin': '复制拼音到剪贴板',
   'command.runBenchmark': '运行性能基准测试 (150K 行)',
   'command.runScrollTest': '运行滚动+编辑稳定性测试',
+  'command.imageHostUploadAll': '上传当前文档中的所有本地图片',
 
   // --- Slash Commands ---
   'slash.heading1': '一级标题',

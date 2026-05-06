@@ -346,6 +346,7 @@ export const en: TranslationMap = {
   'command.generatePinyin': 'Copy Pinyin to Clipboard',
   'command.runBenchmark': 'Run Performance Benchmark (150K lines)',
   'command.runScrollTest': 'Run Scroll+Edit Stability Test',
+  'command.imageHostUploadAll': 'Upload all local images in this document',
 
   // --- Slash Commands ---
   'slash.heading1': 'Heading 1',
