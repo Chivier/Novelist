@@ -6,6 +6,7 @@
 //! global values field-by-field during resolve.
 
 use crate::models::image_host::ImageHostSettings;
+use crate::models::publish::PublishSettings;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::HashMap;
@@ -68,6 +69,10 @@ pub struct GlobalSettings {
     /// here only — never in per-project settings.
     #[serde(default)]
     pub image_hosts: ImageHostSettings,
+    /// Publish channels (Ghost / WordPress / Medium). Credentials live
+    /// here only — same convention as image_hosts.
+    #[serde(default)]
+    pub publish: PublishSettings,
 }
 
 /// Fully resolved settings handed to the frontend — no `Option`s.
@@ -195,6 +200,7 @@ mod tests {
             },
             plugins: PluginsConfig::default(),
             image_hosts: Default::default(),
+            publish: Default::default(),
         };
         let eff = resolve(&global, None, None, None);
         assert_eq!(eff.view.sort_mode, "name-asc");
@@ -295,6 +301,7 @@ mod tests {
             },
             plugins: PluginsConfig { enabled: plugins },
             image_hosts: Default::default(),
+            publish: Default::default(),
         };
         let json = serde_json::to_string(&original).unwrap();
         let back: GlobalSettings = serde_json::from_str(&json).unwrap();
