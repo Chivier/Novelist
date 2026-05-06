@@ -220,11 +220,6 @@ export function registerAppCommands(ctx: AppCommandContext) {
     const result = await runBenchmark(150000);
     alert(result);
   }});
-  commandRegistry.register({ id: 'run-release-benchmark', label: t('command.runReleaseBenchmark'), handler: async () => {
-    const { runReleaseBenchmark } = await import('$lib/utils/benchmark');
-    const result = await runReleaseBenchmark();
-    alert(result);
-  }});
   commandRegistry.register({ id: 'run-scroll-test', label: t('command.runScrollTest'), handler: async () => {
     const { runScrollEditTest } = await import('$lib/utils/scroll-edit-test');
     const result = await runScrollEditTest();

@@ -767,6 +767,7 @@
             depth={0}
             onContextMenu={handleContextMenu}
             onFileOpen={openFile}
+            onRenameRequest={startRename}
             onDragStart={handleDragStart}
             onDragOver={handleDragOverFolder}
             onDragLeave={handleDragLeaveFolder}

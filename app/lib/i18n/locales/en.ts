@@ -345,7 +345,6 @@ export const en: TranslationMap = {
   'command.traditionalToSimplified': 'Convert to Simplified Chinese',
   'command.generatePinyin': 'Copy Pinyin to Clipboard',
   'command.runBenchmark': 'Run Performance Benchmark (150K lines)',
-  'command.runReleaseBenchmark': 'Run Release Benchmark (Small vs Large)',
   'command.runScrollTest': 'Run Scroll+Edit Stability Test',
 
   // --- Slash Commands ---

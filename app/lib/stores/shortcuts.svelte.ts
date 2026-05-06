@@ -49,15 +49,18 @@ const commandI18nKeys: Record<string, string> = {
  * Why not `Cmd+Shift+<digit>`: on macOS, `Cmd+Shift+3/4/5` are reserved by the
  * OS for screenshots, which would silently eat the shortcut.
  *
- * `Cmd+Alt+1..5` is free on macOS and Windows/Linux, scales (new panels get
- * 6, 7, …), and groups cleanly in Settings > Shortcuts.
+ * Per user request (v0.2.4): switched right-side panel toggles to
+ * `Cmd+Shift+1..4`. macOS users may need to disable the system
+ * screenshot shortcuts (System Settings → Keyboard → Shortcuts →
+ * Screenshots) or those keystrokes will be eaten by the OS. The
+ * trade-off is an easier-to-press chord than `Cmd+Alt`.
  */
 const defaultShortcuts: Record<string, string> = {
   'toggle-sidebar': 'Cmd+Shift+B',
-  'toggle-outline': 'Cmd+Alt+1',
-  'toggle-draft': 'Cmd+Alt+2',
-  'toggle-snapshot': 'Cmd+Alt+3',
-  'toggle-stats': 'Cmd+Alt+4',
+  'toggle-outline': 'Cmd+Shift+1',
+  'toggle-draft': 'Cmd+Shift+2',
+  'toggle-snapshot': 'Cmd+Shift+3',
+  'toggle-stats': 'Cmd+Shift+4',
   'toggle-template': 'Cmd+Alt+5',
   'save-current-as-template': '',
   'toggle-zen': 'Cmd+Alt+Z',

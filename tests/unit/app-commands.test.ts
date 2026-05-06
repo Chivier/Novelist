@@ -455,13 +455,6 @@ describe('[contract] diagnostics', () => {
     expect((globalThis as any).alert).toHaveBeenCalledWith('bench-ok');
   });
 
-  it('run-release-benchmark alerts the release result', async () => {
-    registerAppCommands(ctx());
-    await (handlerFor('run-release-benchmark')() as unknown as Promise<void>);
-    expect(runReleaseBenchmark).toHaveBeenCalled();
-    expect((globalThis as any).alert).toHaveBeenCalledWith('release-ok');
-  });
-
   it('run-scroll-test alerts the scroll-edit result', async () => {
     registerAppCommands(ctx());
     await (handlerFor('run-scroll-test')() as unknown as Promise<void>);

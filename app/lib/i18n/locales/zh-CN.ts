@@ -345,7 +345,6 @@ export const zhCN: TranslationMap = {
   'command.traditionalToSimplified': '繁体转简体',
   'command.generatePinyin': '复制拼音到剪贴板',
   'command.runBenchmark': '运行性能基准测试 (150K 行)',
-  'command.runReleaseBenchmark': '运行发布基准测试（小文件 vs 大文件）',
   'command.runScrollTest': '运行滚动+编辑稳定性测试',
 
   // --- Slash Commands ---

@@ -10,6 +10,7 @@
     depth: number;
     onContextMenu: (e: MouseEvent, node: FileNode) => void;
     onFileOpen: (node: FileNode) => void | Promise<void>;
+    onRenameRequest: (node: FileNode) => void;
     onDragStart: (e: DragEvent, node: FileNode) => void;
     onDragOver: (e: DragEvent, node: FileNode) => void;
     onDragLeave: (e: DragEvent, node: FileNode) => void;
@@ -22,6 +23,7 @@
     depth,
     onContextMenu,
     onFileOpen,
+    onRenameRequest,
     onDragStart,
     onDragOver,
     onDragLeave,
@@ -86,6 +88,7 @@
         depth={depth + 1}
         {onContextMenu}
         {onFileOpen}
+        {onRenameRequest}
         {onDragStart}
         {onDragOver}
         {onDragLeave}
@@ -103,6 +106,7 @@
     draggable="true"
     ondragstart={(e) => onDragStart(e, node)}
     onclick={() => onFileOpen(node)}
+    ondblclick={(e) => { e.preventDefault(); onRenameRequest(node); }}
     oncontextmenu={(e) => onContextMenu(e, node)}
   >
     <svg class="tree-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">

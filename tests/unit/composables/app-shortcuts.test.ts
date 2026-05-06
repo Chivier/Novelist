@@ -92,7 +92,7 @@ describe('createKeydownHandler — customizable shortcuts via command registry',
     outlineHandler = vi.fn() as unknown as () => void;
     boldHandler = vi.fn() as unknown as () => void;
     commandRegistry.register({ id: 'command-palette', label: 'Palette', shortcut: 'Cmd+Shift+P', handler: paletteHandler });
-    commandRegistry.register({ id: 'toggle-outline', label: 'Outline', shortcut: 'Cmd+Alt+1', handler: outlineHandler });
+    commandRegistry.register({ id: 'toggle-outline', label: 'Outline', shortcut: 'Cmd+Shift+1', handler: outlineHandler });
     commandRegistry.register({ id: 'editor-bold', label: 'Bold', shortcut: 'Cmd+B', handler: boldHandler });
     shortcutsStore.resetAll();
   });
@@ -103,18 +103,17 @@ describe('createKeydownHandler — customizable shortcuts via command registry',
     expect(paletteHandler).toHaveBeenCalledOnce();
   });
 
-  it('Cmd+Alt+1 dispatches toggle-outline (literal digit)', () => {
+  it('Cmd+Shift+1 dispatches toggle-outline (literal digit)', () => {
     const { handler } = makeHandler();
-    handler(keyEvent({ key: '1', code: 'Digit1', metaKey: true, altKey: true }));
+    handler(keyEvent({ key: '1', code: 'Digit1', metaKey: true, shiftKey: true }));
     expect(outlineHandler).toHaveBeenCalledOnce();
   });
 
-  it('macOS ⌥⌘1 (e.key="¡", code=Digit1) dispatches toggle-outline', () => {
-    // This is the bug we're guarding against: Option+digit on macOS produces
-    // special glyphs in e.key. Without the e.code fallback, right-rail panel
-    // shortcuts silently stop firing.
+  it('Cmd+Shift+1 with e.key="!" still dispatches via e.code fallback', () => {
+    // On many keyboard layouts, Shift+1 produces "!". Without the e.code
+    // fallback, right-rail panel shortcuts silently stop firing.
     const { handler } = makeHandler();
-    handler(keyEvent({ key: '¡', code: 'Digit1', metaKey: true, altKey: true }));
+    handler(keyEvent({ key: '!', code: 'Digit1', metaKey: true, shiftKey: true }));
     expect(outlineHandler).toHaveBeenCalledOnce();
   });
 
