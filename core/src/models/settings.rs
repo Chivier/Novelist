@@ -5,6 +5,7 @@
 //! "unset" apart from "explicitly false/empty". Project values override
 //! global values field-by-field during resolve.
 
+use crate::models::image_host::ImageHostSettings;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::HashMap;
@@ -63,6 +64,10 @@ pub struct GlobalSettings {
     pub new_file: NewFileConfig,
     #[serde(default)]
     pub plugins: PluginsConfig,
+    /// Image-host providers and active-host pointer. Credentials live
+    /// here only — never in per-project settings.
+    #[serde(default)]
+    pub image_hosts: ImageHostSettings,
 }
 
 /// Fully resolved settings handed to the frontend — no `Option`s.
@@ -189,6 +194,7 @@ mod tests {
                 last_used_dir: None,
             },
             plugins: PluginsConfig::default(),
+            image_hosts: Default::default(),
         };
         let eff = resolve(&global, None, None, None);
         assert_eq!(eff.view.sort_mode, "name-asc");
@@ -288,6 +294,7 @@ mod tests {
                 last_used_dir: Some("/tmp/last".into()),
             },
             plugins: PluginsConfig { enabled: plugins },
+            image_hosts: Default::default(),
         };
         let json = serde_json::to_string(&original).unwrap();
         let back: GlobalSettings = serde_json::from_str(&json).unwrap();

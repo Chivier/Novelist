@@ -22,6 +22,11 @@ pub struct ProjectConfig {
     /// Per-plugin enable flags (deltas from the global default map).
     #[serde(default, skip_serializing_if = "is_default_plugins")]
     pub plugins: PluginsConfig,
+    /// Per-project override for which image host is active. Credentials
+    /// stay in global settings — only the pointer to a configured host
+    /// can be overridden here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_image_host_id: Option<String>,
 }
 
 fn is_default_view(v: &ViewConfig) -> bool {
@@ -140,6 +145,7 @@ name = "Minimal"
             view: Default::default(),
             new_file: Default::default(),
             plugins: Default::default(),
+            active_image_host_id: None,
         };
 
         let serialized = toml::to_string(&config).unwrap();
@@ -237,6 +243,7 @@ enabled = { mindmap = false }
             view: Default::default(),
             new_file: Default::default(),
             plugins: Default::default(),
+            active_image_host_id: None,
         };
         let serialized = toml::to_string(&config).unwrap();
         assert!(
