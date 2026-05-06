@@ -56,6 +56,13 @@ export function registerAppCommands(ctx: AppCommandContext) {
     if (tabsStore.activeTab && projectStore.dirPath) ctx.openMovePalette();
   }});
   commandRegistry.register({ id: 'project-search', label: t('command.projectSearch'), shortcut: 'Cmd+Shift+F', handler: ctx.toggleProjectSearch });
+  commandRegistry.register({
+    id: 'image-host.upload-all',
+    label: 'Upload all local images in this document',
+    handler: () => {
+      void uploadAllLocalImagesCommand(getActiveEditorView());
+    },
+  });
   commandRegistry.register({ id: 'toggle-split', label: t('command.toggleSplit'), shortcut: shortcutsStore.get('toggle-split'), handler: () => tabsStore.toggleSplit() });
   commandRegistry.register({ id: 'new-file', label: t('command.newFile'), shortcut: shortcutsStore.get('new-file'), handler: () => {
     projectStore.dirPath ? ctx.handleNewFile() : ctx.handleNewScratchFile();
@@ -231,4 +238,65 @@ export function registerAppCommands(ctx: AppCommandContext) {
     const { runInstallCliShim } = await import('$lib/services/cli-shim');
     await runInstallCliShim(t);
   }});
+}
+
+/**
+ * Find every local image reference in the active document, upload each
+ * to the active host, and apply URL replacements in a single CodeMirror
+ * transaction. Surfaces a summary toast via the `image-host-toast`
+ * window event (consumed by `App.svelte` to render).
+ */
+async function uploadAllLocalImagesCommand(view: EditorView | null): Promise<void> {
+  if (!view) return;
+  const docText = view.state.doc.toString();
+  const docPath = tabsStore.activeTab?.filePath ?? null;
+  const docDir = docPath ? docPath.split('/').slice(0, -1).join('/') : (projectStore.dirPath ?? '');
+  if (!docDir) {
+    window.dispatchEvent(new CustomEvent('image-host-toast', {
+      detail: { kind: 'error', message: 'Open a saved file before running upload-all.' },
+    }));
+    return;
+  }
+  try {
+    const { uploadAllInDocument } = await import('$lib/services/image-host');
+    const report = await uploadAllInDocument(docText, docDir);
+    if (report.successes.length === 0 && report.failures.length === 0) {
+      window.dispatchEvent(new CustomEvent('image-host-toast', {
+        detail: { kind: 'info', message: 'No local images to upload.' },
+      }));
+      return;
+    }
+    // Build one transaction with every replacement.
+    const changes: Array<{ from: number; to: number; insert: string }> = [];
+    for (const { original, url } of report.successes) {
+      // Find every occurrence of the original ref in the doc text and
+      // replace just the URL portion of each `![alt](original)` match.
+      const re = new RegExp(`!\\[([^\\]]*)\\]\\(${escapeRegExp(original)}(\\s+"[^"]*")?\\)`, 'g');
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(docText)) !== null) {
+        const matchStart = m.index;
+        const oldSrcStart = matchStart + 2 + m[1].length + 2;
+        const oldSrcEnd = oldSrcStart + original.length;
+        changes.push({ from: oldSrcStart, to: oldSrcEnd, insert: url });
+      }
+    }
+    if (changes.length > 0) {
+      view.dispatch({ changes });
+    }
+    const total = report.successes.length + report.failures.length;
+    const msg = report.failures.length === 0
+      ? `Uploaded ${report.successes.length} image(s).`
+      : `${report.successes.length}/${total} uploaded; ${report.failures.length} failed.`;
+    window.dispatchEvent(new CustomEvent('image-host-toast', {
+      detail: { kind: report.failures.length === 0 ? 'success' : 'warn', message: msg },
+    }));
+  } catch (e) {
+    window.dispatchEvent(new CustomEvent('image-host-toast', {
+      detail: { kind: 'error', message: e instanceof Error ? e.message : String(e) },
+    }));
+  }
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

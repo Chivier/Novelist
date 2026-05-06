@@ -174,6 +174,17 @@ class ImageContextMenu {
           this.destroy();
         },
       });
+      items.push({
+        label: 'Upload to host',
+        action: () => {
+          this.uploadAndReplace().catch((e: unknown) => {
+            console.error('image upload failed', e);
+            const msg = e instanceof Error ? e.message : String(e);
+            window.dispatchEvent(new CustomEvent('image-host-toast', { detail: { kind: 'error', message: msg } }));
+          });
+          this.destroy();
+        },
+      });
     }
 
     if (this.imgSrc.startsWith('http://') || this.imgSrc.startsWith('https://')) {
@@ -270,6 +281,40 @@ class ImageContextMenu {
     this.cleanup?.();
     this.cleanup = null;
     if (this.dom) { this.dom.remove(); this.dom = null; }
+  }
+
+  /**
+   * Upload the local image referenced by `this.imgSrc` to the active
+   * host and rewrite the Markdown link in place. Caller catches errors.
+   */
+  private async uploadAndReplace(): Promise<void> {
+    const { uploadImage } = await import('$lib/services/image-host');
+    const fullPath = this.imgSrc.startsWith('/')
+      ? this.imgSrc
+      : `${this.projectDir}/${this.imgSrc.replace(/^\.\//, '')}`;
+    const { url } = await uploadImage(fullPath);
+
+    // Replace the URL portion of `![alt](src)` on the line. Match the
+    // current src inside parens; preserve alt and surrounding text.
+    const lineText = this.view.state.doc.sliceString(this.lineFrom, this.lineTo);
+    const re = /!\[([^\]]*)\]\(([^)\s]+)(\s+"[^"]*")?\)/;
+    const m = re.exec(lineText);
+    if (!m) return;
+    const matchStart = m.index;
+    const oldSrcStart = matchStart + 2 + m[1].length + 2; // past `![alt](`
+    const oldSrcEnd = oldSrcStart + m[2].length;
+    this.view.dispatch({
+      changes: {
+        from: this.lineFrom + oldSrcStart,
+        to: this.lineFrom + oldSrcEnd,
+        insert: url,
+      },
+    });
+    window.dispatchEvent(
+      new CustomEvent('image-host-toast', {
+        detail: { kind: 'success', message: `Uploaded to ${url}` },
+      }),
+    );
   }
 }
 
@@ -1020,6 +1065,59 @@ export const linkClickPlugin = EditorView.domEventHandlers({
 });
 
 /**
+ * If auto-on-paste is enabled in settings AND an active host is configured,
+ * upload the just-inserted local image and rewrite the Markdown link to
+ * the remote URL. The local file under `.novelist/images/` is retained.
+ *
+ * `linkText` is the literal `![alt](path)` string that was inserted at
+ * `insertPos`, of length `linkText.length`. We re-derive the URL portion
+ * from a regex over that span and replace just it.
+ */
+async function maybeAutoUpload(
+  view: EditorView,
+  insertPos: number,
+  linkText: string,
+  absLocalPath: string,
+  filename: string,
+  mime: string,
+  bytes: Uint8Array,
+): Promise<void> {
+  try {
+    const { commands } = await import('$lib/ipc/commands');
+    const r = await commands.getImageHostSettings();
+    if (r.status !== 'ok') return;
+    if (!r.data.auto_on_paste) return;
+    if (!r.data.active_host_id) return;
+    const { uploadInlineBytes } = await import('$lib/services/image-host');
+    const { url } = await uploadInlineBytes(bytes, filename, mime);
+    // Replace the URL portion of the just-inserted markdown link.
+    const re = /!\[([^\]]*)\]\(([^)\s]+)(\s+"[^"]*")?\)/;
+    const m = re.exec(linkText);
+    if (!m) return;
+    const matchStart = m.index;
+    const oldSrcStart = insertPos + matchStart + 2 + m[1].length + 2;
+    const oldSrcEnd = oldSrcStart + m[2].length;
+    view.dispatch({
+      changes: { from: oldSrcStart, to: oldSrcEnd, insert: url },
+    });
+    window.dispatchEvent(
+      new CustomEvent('image-host-toast', {
+        detail: { kind: 'success', message: `Uploaded to ${url}` },
+      }),
+    );
+  } catch (e) {
+    console.warn('[ImagePaste] auto-upload failed; keeping local link', e);
+    window.dispatchEvent(
+      new CustomEvent('image-host-toast', {
+        detail: { kind: 'error', message: e instanceof Error ? e.message : String(e) },
+      }),
+    );
+  }
+  // Suppress unused-arg lint when localPath isn't needed in current impl
+  void absLocalPath;
+}
+
+/**
  * Image paste handler — when user pastes an image from clipboard,
  * save it to .novelist/images/ and insert markdown reference.
  */
@@ -1065,6 +1163,7 @@ export const imagePastePlugin = EditorView.domEventHandlers({
             changes: { from: pos, insert: mdText },
             selection: { anchor: pos + mdText.length },
           });
+          await maybeAutoUpload(view, pos, mdText, imgPath, filename, file.type, new Uint8Array(arrayBuffer));
         } catch (err) {
           console.error('[ImagePaste] Failed:', err);
           const reader = new FileReader();
@@ -1099,6 +1198,8 @@ export const imagePastePlugin = EditorView.domEventHandlers({
 
     (async () => {
       let insertText = '';
+      type DropQueued = { mdText: string; filename: string; mime: string; bytes: Uint8Array; imgPath: string };
+      const queued: DropQueued[] = [];
       for (const file of imageFiles) {
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
         const timestamp = Date.now();
@@ -1120,7 +1221,9 @@ export const imagePastePlugin = EditorView.domEventHandlers({
             base64Data: base64,
           });
 
-          insertText += `![${file.name}](.novelist/images/${filename})\n`;
+          const md = `![${file.name}](.novelist/images/${filename})\n`;
+          insertText += md;
+          queued.push({ mdText: md, filename, mime: file.type, bytes: new Uint8Array(arrayBuffer), imgPath });
         } catch (err) {
           console.error('[ImageDrop] Failed:', err);
         }
@@ -1131,6 +1234,12 @@ export const imagePastePlugin = EditorView.domEventHandlers({
           changes: { from: pos, insert: insertText },
           selection: { anchor: pos + insertText.length },
         });
+        // Auto-upload each dropped image (sequentially, after the bulk insert).
+        let runningPos = pos;
+        for (const q of queued) {
+          await maybeAutoUpload(view, runningPos, q.mdText, q.imgPath, q.filename, q.mime, q.bytes);
+          runningPos += q.mdText.length;
+        }
       }
     })();
 
