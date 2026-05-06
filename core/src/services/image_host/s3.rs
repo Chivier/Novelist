@@ -23,7 +23,10 @@ use sha2::{Digest, Sha256};
 
 const SERVICE: &str = "s3";
 
-pub async fn upload(config: &ProviderConfig, input: UploadInput) -> Result<UploadResult, HostError> {
+pub async fn upload(
+    config: &ProviderConfig,
+    input: UploadInput,
+) -> Result<UploadResult, HostError> {
     let (ak, sk, bucket, region, endpoint, path_prefix, custom_domain) = match config {
         ProviderConfig::S3 {
             access_key_id,
@@ -89,8 +92,8 @@ async fn upload_to_url(
     custom_domain: Option<&str>,
     now: chrono::DateTime<chrono::Utc>,
 ) -> Result<UploadResult, HostError> {
-    let parsed = url::Url::parse(put_url)
-        .map_err(|e| HostError::BadConfig(format!("bad endpoint: {e}")))?;
+    let parsed =
+        url::Url::parse(put_url).map_err(|e| HostError::BadConfig(format!("bad endpoint: {e}")))?;
     let host = parsed
         .host_str()
         .ok_or_else(|| HostError::BadConfig("endpoint has no host".into()))?
@@ -150,7 +153,12 @@ async fn upload_to_url(
     if status.is_success() {
         let url = match custom_domain {
             Some(d) => format!("{}/{}", d.trim_end_matches('/'), final_key),
-            None => format!("{}/{}/{}", parsed.origin().ascii_serialization(), bucket, final_key),
+            None => format!(
+                "{}/{}/{}",
+                parsed.origin().ascii_serialization(),
+                bucket,
+                final_key
+            ),
         };
         Ok(UploadResult {
             url,
@@ -159,9 +167,11 @@ async fn upload_to_url(
     } else if matches!(status.as_u16(), 401 | 403) {
         Err(HostError::Auth(resp.text().await.unwrap_or_default()))
     } else if status.as_u16() == 429 {
-        Err(HostError::QuotaExceeded(resp.text().await.unwrap_or_default()))
+        Err(HostError::QuotaExceeded(
+            resp.text().await.unwrap_or_default(),
+        ))
     } else {
-        Err(HostError::HostError {
+        Err(HostError::Server {
             status: status.as_u16(),
             message: resp.text().await.unwrap_or_default(),
         })
@@ -216,13 +226,7 @@ fn hex_encode(bytes: &[u8]) -> String {
 fn canonicalize_uri_path(path: &str) -> String {
     let mut out = String::with_capacity(path.len());
     for c in path.chars() {
-        if c.is_ascii_alphanumeric()
-            || c == '-'
-            || c == '_'
-            || c == '.'
-            || c == '~'
-            || c == '/'
-        {
+        if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '~' || c == '/' {
             out.push(c);
         } else {
             // ASCII non-special → simple percent-encode of UTF-8 bytes
@@ -318,7 +322,11 @@ mod tests {
         )
         .await
         .unwrap();
-        assert!(result.url.ends_with("/mybucket/2026/05/06/x.png"), "got {}", result.url);
+        assert!(
+            result.url.ends_with("/mybucket/2026/05/06/x.png"),
+            "got {}",
+            result.url
+        );
     }
 
     #[tokio::test]
@@ -424,7 +432,11 @@ mod tests {
             custom_domain: None,
         };
         let result = upload(&cfg, input("foo.png")).await.unwrap();
-        assert!(result.url.contains("/blog/uploads/foo.png"), "got {}", result.url);
+        assert!(
+            result.url.contains("/blog/uploads/foo.png"),
+            "got {}",
+            result.url
+        );
         assert_eq!(result.remote_key.as_deref(), Some("uploads/foo.png"));
     }
 }

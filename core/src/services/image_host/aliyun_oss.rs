@@ -30,7 +30,10 @@ use base64::Engine;
 use hmac::{Hmac, Mac};
 use sha1::Sha1;
 
-pub async fn upload(config: &ProviderConfig, input: UploadInput) -> Result<UploadResult, HostError> {
+pub async fn upload(
+    config: &ProviderConfig,
+    input: UploadInput,
+) -> Result<UploadResult, HostError> {
     let (ak, sk, bucket, endpoint, custom_domain) = match config {
         ProviderConfig::AliyunOss {
             access_key_id,
@@ -38,7 +41,13 @@ pub async fn upload(config: &ProviderConfig, input: UploadInput) -> Result<Uploa
             bucket,
             endpoint,
             custom_domain,
-        } => (access_key_id, access_key_secret, bucket, endpoint, custom_domain.clone()),
+        } => (
+            access_key_id,
+            access_key_secret,
+            bucket,
+            endpoint,
+            custom_domain.clone(),
+        ),
         _ => return Err(HostError::BadConfig("not an Aliyun OSS config".into())),
     };
     if ak.is_empty() || sk.is_empty() || bucket.is_empty() || endpoint.is_empty() {
@@ -63,11 +72,21 @@ async fn upload_to_url(
     input: &UploadInput,
     custom_domain: Option<&str>,
 ) -> Result<UploadResult, HostError> {
-    let date = chrono::Utc::now().format("%a, %d %b %Y %H:%M:%S GMT").to_string();
+    let date = chrono::Utc::now()
+        .format("%a, %d %b %Y %H:%M:%S GMT")
+        .to_string();
     let content_type = input.mime.clone();
     let canonicalized_resource = format!("/{bucket}/{}", input.key);
 
-    let signature = sign(sk, "PUT", "", &content_type, &date, "", &canonicalized_resource)?;
+    let signature = sign(
+        sk,
+        "PUT",
+        "",
+        &content_type,
+        &date,
+        "",
+        &canonicalized_resource,
+    )?;
     let auth = format!("OSS {ak}:{signature}");
 
     let client = reqwest::Client::builder()
@@ -98,9 +117,11 @@ async fn upload_to_url(
     } else if matches!(status.as_u16(), 401 | 403) {
         Err(HostError::Auth(resp.text().await.unwrap_or_default()))
     } else if status.as_u16() == 429 {
-        Err(HostError::QuotaExceeded(resp.text().await.unwrap_or_default()))
+        Err(HostError::QuotaExceeded(
+            resp.text().await.unwrap_or_default(),
+        ))
     } else {
-        Err(HostError::HostError {
+        Err(HostError::Server {
             status: status.as_u16(),
             message: resp.text().await.unwrap_or_default(),
         })

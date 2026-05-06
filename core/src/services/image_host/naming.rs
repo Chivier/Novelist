@@ -41,7 +41,9 @@ pub fn generate_key(filename: &str, bytes: &[u8], now: DateTime<Utc>) -> String 
 
 fn split_ext(filename: &str) -> (&str, &str) {
     match filename.rfind('.') {
-        Some(idx) if idx > 0 && idx < filename.len() - 1 => (&filename[..idx], &filename[idx + 1..]),
+        Some(idx) if idx > 0 && idx < filename.len() - 1 => {
+            (&filename[..idx], &filename[idx + 1..])
+        }
         _ => (filename, ""),
     }
 }

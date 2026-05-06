@@ -11,7 +11,10 @@
 use crate::models::image_host::ProviderConfig;
 use crate::services::image_host::types::{HostError, UploadInput, UploadResult};
 
-pub async fn upload(config: &ProviderConfig, input: UploadInput) -> Result<UploadResult, HostError> {
+pub async fn upload(
+    config: &ProviderConfig,
+    input: UploadInput,
+) -> Result<UploadResult, HostError> {
     let (post_url, bearer) = match config {
         ProviderConfig::Custom { post_url, bearer } => (post_url.clone(), bearer.clone()),
         _ => return Err(HostError::BadConfig("not a Custom config".into())),
@@ -47,7 +50,7 @@ pub async fn upload(config: &ProviderConfig, input: UploadInput) -> Result<Uploa
         return Err(match status.as_u16() {
             401 | 403 => HostError::Auth(resp.text().await.unwrap_or_default()),
             429 => HostError::QuotaExceeded(resp.text().await.unwrap_or_default()),
-            s => HostError::HostError {
+            s => HostError::Server {
                 status: s,
                 message: resp.text().await.unwrap_or_default(),
             },
@@ -62,7 +65,9 @@ pub async fn upload(config: &ProviderConfig, input: UploadInput) -> Result<Uploa
         .get("url")
         .and_then(|v| v.as_str())
         .or_else(|| body.pointer("/data/url").and_then(|v| v.as_str()))
-        .ok_or_else(|| HostError::UnexpectedResponse("no `url` or `data.url` in response".into()))?;
+        .ok_or_else(|| {
+            HostError::UnexpectedResponse("no `url` or `data.url` in response".into())
+        })?;
     Ok(UploadResult {
         url: url.to_string(),
         remote_key: None,
@@ -96,11 +101,9 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/upload"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "url": "https://cdn.example.com/x.png"
-                })),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "url": "https://cdn.example.com/x.png"
+            })))
             .mount(&server)
             .await;
         let url = format!("{}/upload", server.uri());
@@ -112,11 +115,9 @@ mod tests {
     async fn upload_falls_back_to_data_url() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "data": { "url": "https://cdn.example.com/y.png" }
-                })),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": { "url": "https://cdn.example.com/y.png" }
+            })))
             .mount(&server)
             .await;
         let url = format!("{}/upload", server.uri());
@@ -150,7 +151,10 @@ mod tests {
             .await;
         let url = format!("{}/upload", server.uri());
         let err = upload(&cfg(&url, None), input()).await.unwrap_err();
-        assert!(matches!(err, HostError::UnexpectedResponse(_)), "got {err:?}");
+        assert!(
+            matches!(err, HostError::UnexpectedResponse(_)),
+            "got {err:?}"
+        );
     }
 
     #[tokio::test]
@@ -168,6 +172,9 @@ mod tests {
             .await;
         let url = format!("{}/upload", server.uri());
         let err = upload(&cfg(&url, None), input()).await.unwrap_err();
-        assert!(matches!(err, HostError::HostError { status: 503, .. }), "got {err:?}");
+        assert!(
+            matches!(err, HostError::Server { status: 503, .. }),
+            "got {err:?}"
+        );
     }
 }

@@ -18,7 +18,10 @@ use crate::services::image_host::types::{HostError, UploadInput, UploadResult};
 const ENDPOINT: &str = "https://sm.ms/api/v2/upload";
 const MAX_BYTES: u64 = 5 * 1024 * 1024;
 
-pub async fn upload(config: &ProviderConfig, input: UploadInput) -> Result<UploadResult, HostError> {
+pub async fn upload(
+    config: &ProviderConfig,
+    input: UploadInput,
+) -> Result<UploadResult, HostError> {
     upload_with_endpoint(config, input, ENDPOINT.to_string()).await
 }
 
@@ -67,7 +70,7 @@ pub async fn upload_with_endpoint(
         return Err(match status.as_u16() {
             401 | 403 => HostError::Auth(resp.text().await.unwrap_or_default()),
             429 => HostError::QuotaExceeded(resp.text().await.unwrap_or_default()),
-            s => HostError::HostError {
+            s => HostError::Server {
                 status: s,
                 message: resp.text().await.unwrap_or_default(),
             },
@@ -79,7 +82,10 @@ pub async fn upload_with_endpoint(
         .await
         .map_err(|e| HostError::UnexpectedResponse(format!("json: {e}")))?;
 
-    let success = body.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+    let success = body
+        .get("success")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     if !success {
         let code = body
             .get("code")
@@ -99,7 +105,7 @@ pub async fn upload_with_endpoint(
                 });
             }
         }
-        return Err(HostError::HostError {
+        return Err(HostError::Server {
             status: 200,
             message: format!("{code}: {message}"),
         });
@@ -166,9 +172,11 @@ mod tests {
             .mount(&server)
             .await;
         let url = format!("{}/api/v2/upload", server.uri());
-        let err = upload_with_endpoint(&cfg(None), input(), url).await.unwrap_err();
+        let err = upload_with_endpoint(&cfg(None), input(), url)
+            .await
+            .unwrap_err();
         match err {
-            HostError::HostError { status, message } => {
+            HostError::Server { status, message } => {
                 assert_eq!(status, 200);
                 assert!(message.contains("exception"), "got: {message}");
             }
@@ -215,7 +223,9 @@ mod tests {
             .mount(&server)
             .await;
         let url = format!("{}/api/v2/upload", server.uri());
-        let err = upload_with_endpoint(&cfg(None), input(), url).await.unwrap_err();
+        let err = upload_with_endpoint(&cfg(None), input(), url)
+            .await
+            .unwrap_err();
         assert!(matches!(err, HostError::QuotaExceeded(_)), "got {err:?}");
     }
 
@@ -223,12 +233,10 @@ mod tests {
     async fn no_token_works() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "success": true,
-                    "data": { "url": "https://s2.loli.net/anon.png" }
-                })),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "success": true,
+                "data": { "url": "https://s2.loli.net/anon.png" }
+            })))
             .mount(&server)
             .await;
         let url = format!("{}/api/v2/upload", server.uri());

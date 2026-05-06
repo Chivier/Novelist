@@ -19,7 +19,10 @@ use sha1::Sha1;
 
 const DEFAULT_ENDPOINT: &str = "https://upload.qiniup.com";
 
-pub async fn upload(config: &ProviderConfig, input: UploadInput) -> Result<UploadResult, HostError> {
+pub async fn upload(
+    config: &ProviderConfig,
+    input: UploadInput,
+) -> Result<UploadResult, HostError> {
     upload_with_endpoint(config, input, DEFAULT_ENDPOINT.to_string()).await
 }
 
@@ -88,19 +91,14 @@ pub async fn upload_with_endpoint(
             resp.text().await.unwrap_or_default(),
         ))
     } else {
-        Err(HostError::HostError {
+        Err(HostError::Server {
             status: status.as_u16(),
             message: resp.text().await.unwrap_or_default(),
         })
     }
 }
 
-fn build_upload_token(
-    ak: &str,
-    sk: &str,
-    bucket: &str,
-    key: &str,
-) -> Result<String, HostError> {
+fn build_upload_token(ak: &str, sk: &str, bucket: &str, key: &str) -> Result<String, HostError> {
     let scope = format!("{bucket}:{key}");
     let deadline = (chrono::Utc::now().timestamp() as u64) + 3600;
     let policy = serde_json::json!({ "scope": scope, "deadline": deadline });
@@ -185,9 +183,13 @@ mod tests {
             )
             .mount(&server)
             .await;
-        let result = upload_with_endpoint(&cfg("https://cdn.example.com/"), input("x.png"), server.uri())
-            .await
-            .unwrap();
+        let result = upload_with_endpoint(
+            &cfg("https://cdn.example.com/"),
+            input("x.png"),
+            server.uri(),
+        )
+        .await
+        .unwrap();
         assert_eq!(result.url, "https://cdn.example.com/x.png");
     }
 
@@ -228,6 +230,9 @@ mod tests {
         let err = upload_with_endpoint(&cfg("https://cdn"), input("x"), server.uri())
             .await
             .unwrap_err();
-        assert!(matches!(err, HostError::UnexpectedResponse(_)), "got {err:?}");
+        assert!(
+            matches!(err, HostError::UnexpectedResponse(_)),
+            "got {err:?}"
+        );
     }
 }

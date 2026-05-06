@@ -39,7 +39,7 @@ pub enum HostError {
     #[error("Bad config: {0}")]
     BadConfig(String),
     #[error("Host returned {status}: {message}")]
-    HostError { status: u16, message: String },
+    Server { status: u16, message: String },
     #[error("Unexpected response: {0}")]
     UnexpectedResponse(String),
     #[error("File too large: {actual} bytes (limit: {limit} bytes)")]

@@ -13,7 +13,10 @@ use crate::services::image_host::types::{HostError, UploadInput, UploadResult};
 const ENDPOINT: &str = "https://api.imgur.com/3/image";
 const MAX_BYTES: u64 = 10 * 1024 * 1024;
 
-pub async fn upload(config: &ProviderConfig, input: UploadInput) -> Result<UploadResult, HostError> {
+pub async fn upload(
+    config: &ProviderConfig,
+    input: UploadInput,
+) -> Result<UploadResult, HostError> {
     upload_with_endpoint(config, input, ENDPOINT.to_string()).await
 }
 
@@ -78,7 +81,7 @@ pub async fn upload_with_endpoint(
             resp.text().await.unwrap_or_default(),
         ))
     } else {
-        Err(HostError::HostError {
+        Err(HostError::Server {
             status: status.as_u16(),
             message: resp.text().await.unwrap_or_default(),
         })
@@ -132,7 +135,9 @@ mod tests {
             .mount(&server)
             .await;
         let url = format!("{}/3/image", server.uri());
-        let err = upload_with_endpoint(&cfg(), input(), url).await.unwrap_err();
+        let err = upload_with_endpoint(&cfg(), input(), url)
+            .await
+            .unwrap_err();
         assert!(matches!(err, HostError::Auth(_)), "got {err:?}");
     }
 
@@ -144,7 +149,9 @@ mod tests {
             .mount(&server)
             .await;
         let url = format!("{}/3/image", server.uri());
-        let err = upload_with_endpoint(&cfg(), input(), url).await.unwrap_err();
+        let err = upload_with_endpoint(&cfg(), input(), url)
+            .await
+            .unwrap_err();
         assert!(matches!(err, HostError::QuotaExceeded(_)), "got {err:?}");
     }
 
@@ -181,8 +188,13 @@ mod tests {
             .mount(&server)
             .await;
         let url = format!("{}/3/image", server.uri());
-        let err = upload_with_endpoint(&cfg(), input(), url).await.unwrap_err();
-        assert!(matches!(err, HostError::UnexpectedResponse(_)), "got {err:?}");
+        let err = upload_with_endpoint(&cfg(), input(), url)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, HostError::UnexpectedResponse(_)),
+            "got {err:?}"
+        );
     }
 
     #[tokio::test]
