@@ -561,8 +561,8 @@
         { id: 'shortcuts', label: t('settings.shortcuts') },
         { id: 'templates', label: t('settings.templates') },
         { id: 'plugins', label: t('settings.plugins') },
-        { id: 'image-hosts', label: 'Image Hosts' },
-        { id: 'publish', label: 'Publish' },
+        { id: 'image-hosts', label: t('settings.imageHosts') },
+        { id: 'publish', label: t('settings.publish') },
         { id: 'sync', label: t('settings.sync') },
       ] as section}
         <button

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ChannelConfig, PlatformConfig } from '$lib/ipc/commands';
   import { dispatchPublish, type DialogPayload } from '$lib/services/publish';
+  import { t } from '$lib/i18n';
 
   interface Props {
     channel: ChannelConfig;
@@ -123,7 +124,7 @@
 
   async function doPublish() {
     if (!title.trim()) {
-      errorMessage = 'Title is required.';
+      errorMessage = t('publish.titleRequired');
       return;
     }
     publishing = true;
@@ -175,18 +176,18 @@
 
     {#if successUrl}
       <div class="success-banner">
-        <span>Published successfully.</span>
-        <button class="link-btn" onclick={openInBrowser}>Open in browser</button>
-        <button class="close-btn" onclick={onClose}>Close</button>
+        <span>{t('publish.success')}</span>
+        <button class="link-btn" onclick={openInBrowser}>{t('publish.openInBrowser')}</button>
+        <button class="close-btn" onclick={onClose}>{t('publish.close')}</button>
       </div>
     {:else}
       <div class="form">
-        <label for="pub-title" class="lbl">Title <span class="req">*</span></label>
-        <input id="pub-title" type="text" class="inp" bind:value={title} placeholder="Required" />
+        <label for="pub-title" class="lbl">{t('publish.title')} <span class="req">*</span></label>
+        <input id="pub-title" type="text" class="inp" bind:value={title} />
 
         <div class="row">
           <div class="col">
-            <span class="lbl">Cover image (drag-drop or pick)</span>
+            <span class="lbl">{t('publish.coverImage')}</span>
             <div
               class="cover-drop"
               role="button"
@@ -199,20 +200,20 @@
               {#if coverPreviewUrl}
                 <img src={coverPreviewUrl} alt="cover preview" />
               {:else}
-                <div class="cover-placeholder">Drag image here or click to pick</div>
+                <div class="cover-placeholder">{t('publish.coverPlaceholder')}</div>
               {/if}
             </div>
             <div class="cover-actions">
-              <button class="small-btn" onclick={pickCover}>Choose…</button>
-              {#if coverFile}<button class="small-btn" onclick={clearCover}>Remove</button>{/if}
+              <button class="small-btn" onclick={pickCover}>{t('publish.choose')}</button>
+              {#if coverFile}<button class="small-btn" onclick={clearCover}>{t('publish.remove')}</button>{/if}
             </div>
           </div>
 
           <div class="col">
-            <label for="pub-tags" class="lbl">Tags</label>
+            <label for="pub-tags" class="lbl">{t('publish.tags')}</label>
             <div class="tag-row">
-              {#each tags as t}
-                <span class="tag-chip">{t} <button class="chip-x" onclick={() => removeTag(t)}>×</button></span>
+              {#each tags as tag}
+                <span class="tag-chip">{tag} <button class="chip-x" onclick={() => removeTag(tag)}>×</button></span>
               {/each}
               <input
                 id="pub-tags"
@@ -221,20 +222,20 @@
                 bind:value={tagInput}
                 onkeydown={onTagKeydown}
                 onblur={addTagFromInput}
-                placeholder={tags.length === 0 ? 'Press Enter to add' : ''}
+                placeholder={tags.length === 0 ? t('publish.tagsPlaceholder') : ''}
               />
             </div>
 
-            <label for="pub-excerpt" class="lbl">Excerpt</label>
+            <label for="pub-excerpt" class="lbl">{t('publish.excerpt')}</label>
             <textarea id="pub-excerpt" class="inp" rows="3" bind:value={excerpt}></textarea>
 
-            <label for="pub-slug" class="lbl">Slug</label>
+            <label for="pub-slug" class="lbl">{t('publish.slug')}</label>
             <input id="pub-slug" type="text" class="inp" bind:value={slug} />
           </div>
         </div>
 
         <div class="row">
-          <label for="pub-status" class="lbl status-lbl">Status</label>
+          <label for="pub-status" class="lbl status-lbl">{t('publish.status')}</label>
           <select id="pub-status" class="inp inp-select" bind:value={status}>
             {#each statusOptionsFor(channel.platform) as opt}
               <option value={opt.value}>{opt.label}</option>
@@ -247,9 +248,9 @@
         {/if}
 
         <div class="footer">
-          <button class="ghost-btn" onclick={onClose} disabled={publishing}>Cancel</button>
+          <button class="ghost-btn" onclick={onClose} disabled={publishing}>{t('publish.cancel')}</button>
           <button class="primary-btn" onclick={doPublish} disabled={publishing}>
-            {publishing ? 'Publishing…' : 'Publish'}
+            {publishing ? t('publish.publishing') : t('publish.publish')}
           </button>
         </div>
       </div>

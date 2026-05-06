@@ -3,6 +3,7 @@
   import { commands, type ChannelConfig } from '$lib/ipc/commands';
   import { tabsStore } from '$lib/stores/tabs.svelte';
   import { commandRegistry } from '$lib/stores/commands.svelte';
+  import { t } from '$lib/i18n';
   import PublishDialog from './PublishDialog.svelte';
 
   let menuOpen = $state(false);
@@ -67,8 +68,8 @@
   bind:this={buttonEl}
   class="share-btn"
   onclick={toggleMenu}
-  title="Share / Export / Publish"
-  aria-label="Share menu"
+  title={t('share.button')}
+  aria-label={t('share.button')}
 >
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
     <path d="M4 8L8 4L12 8" />
@@ -80,19 +81,19 @@
 {#if menuOpen}
   <div class="share-menu" role="menu">
     <button class="share-item" role="menuitem" onclick={() => runCommand('image-host.upload-all')}>
-      Upload Local Images to…
+      {t('share.uploadImages')}
     </button>
     {#if channels.length > 0}
       <div class="share-divider"></div>
       {#each channels as c (c.id)}
         <button class="share-item" role="menuitem" onclick={() => openPublishDialog(c)}>
-          <span class="share-channel-name">Publish to {c.name}</span>
+          <span class="share-channel-name">{t('share.publishTo')} {c.name}</span>
           <span class="share-channel-platform">{c.platform}</span>
         </button>
       {/each}
     {:else}
       <div class="share-divider"></div>
-      <div class="share-empty">No publish channels configured. Add one in Settings → Publish.</div>
+      <div class="share-empty">{t('share.noChannels')}</div>
     {/if}
   </div>
 {/if}

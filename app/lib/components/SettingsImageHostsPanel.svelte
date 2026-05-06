@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { commands, type HostConfig, type ImageHostSettings, type ProviderConfig } from '$lib/ipc/commands';
   import { dispatchUpload, toProviderConfig } from '$lib/services/image-host';
+  import { t } from '$lib/i18n';
 
   type ProviderId = ProviderConfig['provider'];
 
@@ -143,13 +144,13 @@
 </script>
 
 <div class="image-hosts-panel">
-  <h3 class="text-xs font-semibold uppercase tracking-wide mb-4" style="color: var(--novelist-text-secondary);">Image Hosts</h3>
+  <h3 class="text-xs font-semibold uppercase tracking-wide mb-4" style="color: var(--novelist-text-secondary);">{t('settings.imageHosts.title')}</h3>
 
   {#if loading}
-    <div class="text-sm" style="color: var(--novelist-text-secondary);">Loading…</div>
+    <div class="text-sm" style="color: var(--novelist-text-secondary);">…</div>
   {:else}
     <div class="flex items-center justify-between mb-4">
-      <label class="text-sm" for="auto-on-paste">Upload images automatically when pasted or dropped</label>
+      <label class="text-sm" for="auto-on-paste">{t('settings.imageHosts.autoOnPaste')}</label>
       <input
         id="auto-on-paste"
         type="checkbox"
@@ -158,9 +159,9 @@
       />
     </div>
 
-    <div class="text-xs uppercase tracking-wide mb-2" style="color: var(--novelist-text-secondary);">Configured hosts</div>
+    <div class="text-xs uppercase tracking-wide mb-2" style="color: var(--novelist-text-secondary);">{t('settings.imageHosts.configured')}</div>
     {#if settings.hosts.length === 0}
-      <div class="text-sm mb-3" style="color: var(--novelist-text-secondary);">No image host configured yet. Add one below.</div>
+      <div class="text-sm mb-3" style="color: var(--novelist-text-secondary);">{t('settings.imageHosts.empty')}</div>
     {:else}
       <ul class="space-y-2 mb-4">
         {#each settings.hosts as host (host.id)}
@@ -178,22 +179,22 @@
                 <span class="text-xs" style="color: var(--novelist-text-secondary);">{providerLabel(host.provider)}</span>
               </div>
               {#if testStatus[host.id]?.kind === 'pending'}
-                <span class="text-xs ml-2" style="color: var(--novelist-text-secondary);">Testing…</span>
+                <span class="text-xs ml-2" style="color: var(--novelist-text-secondary);">{t('settings.imageHosts.testing')}</span>
               {:else if testStatus[host.id]?.kind === 'ok'}
-                <span class="text-xs ml-2" style="color: #2da84a;" title={testStatus[host.id].message}>✓ test ok</span>
+                <span class="text-xs ml-2" style="color: #2da84a;" title={testStatus[host.id].message}>{t('settings.imageHosts.testOk')}</span>
               {:else if testStatus[host.id]?.kind === 'err'}
-                <span class="text-xs ml-2" style="color: #d24a4a;" title={testStatus[host.id].message}>✗ test failed</span>
+                <span class="text-xs ml-2" style="color: #d24a4a;" title={testStatus[host.id].message}>{t('settings.imageHosts.testFailed')}</span>
               {/if}
             </div>
-            <button class="text-xs px-2 py-1 cursor-pointer" onclick={() => testHost(host)} style="border: 1px solid var(--novelist-border); background: transparent;">Test</button>
-            <button class="text-xs px-2 py-1 cursor-pointer" onclick={() => startEdit(host)} style="border: 1px solid var(--novelist-border); background: transparent;">Edit</button>
-            <button class="text-xs px-2 py-1 cursor-pointer" onclick={() => removeHost(host.id)} style="border: 1px solid var(--novelist-border); background: transparent; color: #d24a4a;">Delete</button>
+            <button class="text-xs px-2 py-1 cursor-pointer" onclick={() => testHost(host)} style="border: 1px solid var(--novelist-border); background: transparent;">{t('settings.imageHosts.test')}</button>
+            <button class="text-xs px-2 py-1 cursor-pointer" onclick={() => startEdit(host)} style="border: 1px solid var(--novelist-border); background: transparent;">{t('settings.imageHosts.edit')}</button>
+            <button class="text-xs px-2 py-1 cursor-pointer" onclick={() => removeHost(host.id)} style="border: 1px solid var(--novelist-border); background: transparent; color: #d24a4a;">{t('settings.imageHosts.delete')}</button>
           </li>
         {/each}
       </ul>
     {/if}
 
-    <div class="text-xs uppercase tracking-wide mb-2" style="color: var(--novelist-text-secondary);">Add a host</div>
+    <div class="text-xs uppercase tracking-wide mb-2" style="color: var(--novelist-text-secondary);">{t('settings.imageHosts.addHost')}</div>
     <div class="flex flex-wrap gap-2 mb-4">
       {#each ['qiniu','aliyun_oss','s3','imgur','smms','custom'] as ProviderId[] as p}
         <button
@@ -205,7 +206,7 @@
     </div>
 
     {#if saveError}
-      <div class="text-xs mb-3" style="color: #d24a4a;">Failed to save: {saveError}</div>
+      <div class="text-xs mb-3" style="color: #d24a4a;">{t('settings.imageHosts.failedToSave')}: {saveError}</div>
     {/if}
   {/if}
 
@@ -250,9 +251,9 @@
 
         <div class="flex justify-end gap-2 mt-4">
           <button class="text-xs px-3 py-1.5 cursor-pointer rounded" onclick={cancelEdit}
-                  style="border: 1px solid var(--novelist-border); background: transparent;">Cancel</button>
+                  style="border: 1px solid var(--novelist-border); background: transparent;">{t('settings.imageHosts.cancel')}</button>
           <button class="text-xs px-3 py-1.5 cursor-pointer rounded" onclick={saveEdit}
-                  style="border: none; background: var(--novelist-accent); color: white;">{editing.isNew ? 'Add' : 'Save'}</button>
+                  style="border: none; background: var(--novelist-accent); color: white;">{editing.isNew ? t('settings.imageHosts.add') : t('settings.imageHosts.save')}</button>
         </div>
       </div>
     </div>

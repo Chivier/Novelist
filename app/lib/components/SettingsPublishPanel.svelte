@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { commands, type ChannelConfig, type PlatformConfig, type PublishSettings } from '$lib/ipc/commands';
+  import { t } from '$lib/i18n';
 
   type PlatformId = PlatformConfig['platform'];
 
@@ -28,12 +29,7 @@
   }
 
   function platformLabel(p: PlatformId): string {
-    switch (p) {
-      case 'ghost':                 return 'Ghost';
-      case 'wordpress_self_hosted': return 'WordPress (self-hosted)';
-      case 'wordpress_com':         return 'WordPress.com';
-      case 'medium':                return 'Medium';
-    }
+    return t(`settings.publish.platform.${p}`);
   }
 
   function newChannel(platform: PlatformId): ChannelConfig {
@@ -136,15 +132,15 @@
 </script>
 
 <div class="publish-panel">
-  <h3 class="text-xs font-semibold uppercase tracking-wide mb-4" style="color: var(--novelist-text-secondary);">Publish</h3>
+  <h3 class="text-xs font-semibold uppercase tracking-wide mb-4" style="color: var(--novelist-text-secondary);">{t('settings.publish.title')}</h3>
 
   {#if loading}
-    <div class="text-sm" style="color: var(--novelist-text-secondary);">Loading…</div>
+    <div class="text-sm" style="color: var(--novelist-text-secondary);">…</div>
   {:else}
-    <div class="text-xs uppercase tracking-wide mb-2" style="color: var(--novelist-text-secondary);">Configured channels</div>
+    <div class="text-xs uppercase tracking-wide mb-2" style="color: var(--novelist-text-secondary);">{t('settings.publish.configured')}</div>
 
     {#if settings.channels.length === 0}
-      <div class="text-sm mb-3" style="color: var(--novelist-text-secondary);">No publish channel configured yet. Add one below.</div>
+      <div class="text-sm mb-3" style="color: var(--novelist-text-secondary);">{t('settings.publish.empty')}</div>
     {:else}
       <ul class="space-y-2 mb-4">
         {#each settings.channels as ch (ch.id)}
@@ -154,21 +150,21 @@
               <span class="text-xs" style="color: var(--novelist-text-secondary);">{platformLabel(ch.platform)}</span>
             </div>
             {#if testStatus[ch.id]?.kind === 'pending'}
-              <span class="text-xs" style="color: var(--novelist-text-secondary);">Testing…</span>
+              <span class="text-xs" style="color: var(--novelist-text-secondary);">{t('settings.publish.testing')}</span>
             {:else if testStatus[ch.id]?.kind === 'ok'}
-              <span class="text-xs" style="color: #2da84a;" title={testStatus[ch.id].message}>✓ test ok</span>
+              <span class="text-xs" style="color: #2da84a;" title={testStatus[ch.id].message}>{t('settings.publish.testOk')}</span>
             {:else if testStatus[ch.id]?.kind === 'err'}
-              <span class="text-xs" style="color: #d24a4a;" title={testStatus[ch.id].message}>✗ test failed</span>
+              <span class="text-xs" style="color: #d24a4a;" title={testStatus[ch.id].message}>{t('settings.publish.testFailed')}</span>
             {/if}
-            <button class="text-xs px-2 py-1 cursor-pointer" onclick={() => testChannel(ch)} style="border: 1px solid var(--novelist-border); background: transparent;">Test</button>
-            <button class="text-xs px-2 py-1 cursor-pointer" onclick={() => startEdit(ch)} style="border: 1px solid var(--novelist-border); background: transparent;">Edit</button>
-            <button class="text-xs px-2 py-1 cursor-pointer" onclick={() => removeChannel(ch.id)} style="border: 1px solid var(--novelist-border); background: transparent; color: #d24a4a;">Delete</button>
+            <button class="text-xs px-2 py-1 cursor-pointer" onclick={() => testChannel(ch)} style="border: 1px solid var(--novelist-border); background: transparent;">{t('settings.publish.test')}</button>
+            <button class="text-xs px-2 py-1 cursor-pointer" onclick={() => startEdit(ch)} style="border: 1px solid var(--novelist-border); background: transparent;">{t('settings.publish.edit')}</button>
+            <button class="text-xs px-2 py-1 cursor-pointer" onclick={() => removeChannel(ch.id)} style="border: 1px solid var(--novelist-border); background: transparent; color: #d24a4a;">{t('settings.publish.delete')}</button>
           </li>
         {/each}
       </ul>
     {/if}
 
-    <div class="text-xs uppercase tracking-wide mb-2" style="color: var(--novelist-text-secondary);">Add a channel</div>
+    <div class="text-xs uppercase tracking-wide mb-2" style="color: var(--novelist-text-secondary);">{t('settings.publish.addChannel')}</div>
     <div class="flex flex-wrap gap-2 mb-4">
       {#each ['ghost','wordpress_self_hosted','wordpress_com','medium'] as PlatformId[] as p}
         <button class="text-xs px-3 py-1.5 cursor-pointer rounded"
@@ -178,7 +174,7 @@
     </div>
 
     {#if saveError}
-      <div class="text-xs mb-3" style="color: #d24a4a;">Failed to save: {saveError}</div>
+      <div class="text-xs mb-3" style="color: #d24a4a;">{t('settings.publish.failedToSave')}: {saveError}</div>
     {/if}
   {/if}
 
@@ -215,9 +211,9 @@
 
         <div class="flex justify-end gap-2 mt-4">
           <button class="text-xs px-3 py-1.5 cursor-pointer rounded" onclick={cancelEdit}
-                  style="border: 1px solid var(--novelist-border); background: transparent;">Cancel</button>
+                  style="border: 1px solid var(--novelist-border); background: transparent;">{t('settings.publish.cancel')}</button>
           <button class="text-xs px-3 py-1.5 cursor-pointer rounded" onclick={saveEdit}
-                  style="border: none; background: var(--novelist-accent); color: white;">{editing.isNew ? 'Add' : 'Save'}</button>
+                  style="border: none; background: var(--novelist-accent); color: white;">{editing.isNew ? t('settings.publish.add') : t('settings.publish.save')}</button>
         </div>
       </div>
     </div>
