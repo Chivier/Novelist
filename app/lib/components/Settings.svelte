@@ -12,6 +12,7 @@
   import type { Locale } from '$lib/i18n';
   import { newFileSettings } from '$lib/stores/new-file-settings.svelte';
   import { parseTemplate, inferNextName } from '$lib/utils/placeholder';
+  import SettingsImageHostsPanel from './SettingsImageHostsPanel.svelte';
 
   interface Props {
     onClose: () => void;
@@ -559,6 +560,7 @@
         { id: 'shortcuts', label: t('settings.shortcuts') },
         { id: 'templates', label: t('settings.templates') },
         { id: 'plugins', label: t('settings.plugins') },
+        { id: 'image-hosts', label: 'Image Hosts' },
         { id: 'sync', label: t('settings.sync') },
       ] as section}
         <button
@@ -1131,6 +1133,8 @@
             <p class="text-xs mt-1" style="color: var(--novelist-text-secondary);">{t('settings.plugins.aiSuggestion')}</p>
           </div>
         {/if}
+      {:else if activeSection === 'image-hosts'}
+        <SettingsImageHostsPanel />
       {:else if activeSection === 'sync'}
         <h3 class="text-xs font-semibold uppercase tracking-wide mb-4" style="color: var(--novelist-text-secondary);">{t('settings.sync.webdav')}</h3>
 
