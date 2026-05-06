@@ -155,6 +155,18 @@ export const commands = {
 	uploadImageCustom: (bytes: number[], filename: string, mime: string, config: ProviderConfig) => typedError<UploadResult, string>(__TAURI_INVOKE("upload_image_custom", { bytes, filename, mime, config })),
 	getImageHostSettings: () => typedError<ImageHostSettings, string>(__TAURI_INVOKE("get_image_host_settings")),
 	setImageHostSettings: (settings: ImageHostSettings) => typedError<null, string>(__TAURI_INVOKE("set_image_host_settings", { settings })),
+	// Publishing (v0.2.4) — manually maintained.
+	publishToGhost: (input: PublishInput, config: PlatformConfig) => typedError<PublishResult, string>(__TAURI_INVOKE("publish_to_ghost", { input, config })),
+	publishToWordpressSelfHosted: (input: PublishInput, config: PlatformConfig) => typedError<PublishResult, string>(__TAURI_INVOKE("publish_to_wordpress_self_hosted", { input, config })),
+	publishToWordpressCom: (input: PublishInput, config: PlatformConfig) => typedError<PublishResult, string>(__TAURI_INVOKE("publish_to_wordpress_com", { input, config })),
+	publishToMedium: (input: PublishInput, config: PlatformConfig) => typedError<PublishResult, string>(__TAURI_INVOKE("publish_to_medium", { input, config })),
+	uploadPostImageGhost: (bytes: number[], filename: string, mime: string, config: PlatformConfig) => typedError<PostImageUploadResult, string>(__TAURI_INVOKE("upload_post_image_ghost", { bytes, filename, mime, config })),
+	uploadPostImageWordpressSelfHosted: (bytes: number[], filename: string, mime: string, config: PlatformConfig) => typedError<PostImageUploadResult, string>(__TAURI_INVOKE("upload_post_image_wordpress_self_hosted", { bytes, filename, mime, config })),
+	uploadPostImageWordpressCom: (bytes: number[], filename: string, mime: string, config: PlatformConfig) => typedError<PostImageUploadResult, string>(__TAURI_INVOKE("upload_post_image_wordpress_com", { bytes, filename, mime, config })),
+	uploadPostImageMedium: (bytes: number[], filename: string, mime: string, config: PlatformConfig) => typedError<PostImageUploadResult, string>(__TAURI_INVOKE("upload_post_image_medium", { bytes, filename, mime, config })),
+	convertMarkdownToHtml: (markdown: string) => typedError<string, string>(__TAURI_INVOKE("convert_markdown_to_html", { markdown })),
+	getPublishSettings: () => typedError<PublishSettings, string>(__TAURI_INVOKE("get_publish_settings")),
+	setPublishSettings: (settings: PublishSettings) => typedError<null, string>(__TAURI_INVOKE("set_publish_settings", { settings })),
 	// Reveal a file or folder in the platform's file manager (Finder on macOS).
 	revealInFileManager: (path: string) => typedError<null, string>(__TAURI_INVOKE("reveal_in_file_manager", { path })),
 	// Duplicate a file. Returns the path of the new copy.
@@ -570,6 +582,47 @@ export type ProviderConfig =
 	| { provider: "imgur", client_id: string }
 	| { provider: "smms", api_token?: string }
 	| { provider: "custom", post_url: string, bearer?: string };
+
+/* Publishing (v0.2.4) — manually maintained types matching core/src/models/publish.rs */
+export type PublishSettings = {
+	channels: ChannelConfig[],
+};
+
+export type ChannelConfig = {
+	id: string,
+	name: string,
+} & PlatformConfig;
+
+export type PlatformConfig =
+	| { platform: "ghost", admin_url: string, api_key: string }
+	| { platform: "wordpress_self_hosted", site_url: string, username: string, app_password: string }
+	| { platform: "wordpress_com", site_id_or_domain: string, access_token: string }
+	| { platform: "medium", token: string };
+
+export type BodyFormat = "html" | "markdown";
+
+export type PublishInput = {
+	title: string,
+	body: string,
+	body_format: BodyFormat,
+	tags: string[],
+	slug?: string,
+	excerpt?: string,
+	status: string,
+	feature_image_url?: string,
+	featured_media_id?: number,
+	publication_id?: string,
+};
+
+export type PublishResult = {
+	url: string,
+	remote_id: string,
+};
+
+export type PostImageUploadResult = {
+	url: string,
+	attachment_id: number,
+};
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

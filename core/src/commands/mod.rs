@@ -10,6 +10,7 @@ pub mod image_host;
 pub mod menu;
 pub mod plugin;
 pub mod project;
+pub mod publish;
 pub mod recent;
 pub mod settings;
 pub mod snapshot;
