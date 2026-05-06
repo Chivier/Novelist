@@ -40,9 +40,14 @@ chardetng = "1"
 encoding_rs = "0.8"
 base64 = "0.22"
 once_cell = "1"
-reqwest = { version = "0.12", features = ["rustls-tls", "stream"] }
+reqwest = { version = "0.12", features = ["rustls-tls", "stream", "multipart"] }
 futures-util = "0.3"
 url = "2"
+hmac = "0.12"
+sha1 = "0.10"
+sha2 = "0.10"
+urlencoding = "2"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 specta-typescript = { version = "0.0.11", optional = true }
 
 # macOS-only: needed to poke the NSWindow at setup time to disable the
@@ -76,3 +81,4 @@ panic = "unwind"
 [dev-dependencies]
 tempfile = "3"
 serial_test = "3"
+wiremock = "0.6"
