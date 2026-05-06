@@ -8,9 +8,9 @@ pub mod naming;
 pub mod types;
 
 // Provider modules are added one at a time as each is implemented.
-// pub mod aliyun_oss;
-// pub mod custom;
-// pub mod imgur;
-// pub mod qiniu;
-// pub mod s3;
-// pub mod smms;
+pub mod aliyun_oss;
+pub mod custom;
+pub mod imgur;
+pub mod qiniu;
+pub mod s3;
+pub mod smms;
