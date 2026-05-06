@@ -14,10 +14,7 @@ pub async fn markdown_to_html(md: &str) -> Result<String, PublishError> {
     markdown_to_html_with_binary(md, "pandoc").await
 }
 
-pub async fn markdown_to_html_with_binary(
-    md: &str,
-    binary: &str,
-) -> Result<String, PublishError> {
+pub async fn markdown_to_html_with_binary(md: &str, binary: &str) -> Result<String, PublishError> {
     let mut child = Command::new(binary)
         .args(["-f", "markdown", "-t", "html"])
         .stdin(std::process::Stdio::piped())
@@ -77,7 +74,10 @@ mod tests {
             return;
         }
         let html = markdown_to_html("# Title\n\nbody").await.unwrap();
-        assert!(html.contains("<h1") && html.contains("Title"), "got: {html}");
+        assert!(
+            html.contains("<h1") && html.contains("Title"),
+            "got: {html}"
+        );
     }
 
     #[tokio::test]

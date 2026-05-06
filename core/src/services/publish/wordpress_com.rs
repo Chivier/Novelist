@@ -86,11 +86,7 @@ pub async fn publish_with_base(
             site_id_or_domain,
             access_token,
         } => (site_id_or_domain, access_token),
-        _ => {
-            return Err(PublishError::BadConfig(
-                "not a WordPress.com config".into(),
-            ))
-        }
+        _ => return Err(PublishError::BadConfig("not a WordPress.com config".into())),
     };
     if site.is_empty() || token.is_empty() {
         return Err(PublishError::BadConfig(
@@ -269,10 +265,9 @@ mod tests {
             })))
             .mount(&server)
             .await;
-        let result =
-            publish_with_base(&cfg("myblog.example.com"), &input(), &server.uri())
-                .await
-                .unwrap();
+        let result = publish_with_base(&cfg("myblog.example.com"), &input(), &server.uri())
+            .await
+            .unwrap();
         assert_eq!(result.remote_id, "7");
         assert!(result.url.contains("?p=7"), "got {}", result.url);
     }

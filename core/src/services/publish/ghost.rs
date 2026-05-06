@@ -75,7 +75,7 @@ fn b64url(bytes: &[u8]) -> String {
 }
 
 fn hex_decode(s: &str) -> Result<Vec<u8>, String> {
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return Err(format!("odd length: {}", s.len()));
     }
     let mut out = Vec::with_capacity(s.len() / 2);
@@ -145,10 +145,7 @@ pub async fn publish(
     input: &PublishInput,
 ) -> Result<PublishResult, PublishError> {
     let (admin_url, api_key) = match config {
-        PlatformConfig::Ghost {
-            admin_url,
-            api_key,
-        } => (admin_url, api_key),
+        PlatformConfig::Ghost { admin_url, api_key } => (admin_url, api_key),
         _ => return Err(PublishError::BadConfig("not a Ghost config".into())),
     };
     if admin_url.is_empty() || api_key.is_empty() {
@@ -243,8 +240,7 @@ mod tests {
         PlatformConfig::Ghost {
             admin_url: admin_url.into(),
             // 32-byte secret as 64 hex chars
-            api_key: "abc:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd"
-                .into(),
+            api_key: "abc:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd".into(),
         }
     }
 
@@ -273,18 +269,18 @@ mod tests {
         let parts: Vec<&str> = token.split('.').collect();
         assert_eq!(parts.len(), 3);
         // Decode header and verify kid
-        let header_bytes =
-            base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(parts[0]).unwrap();
-        let header: serde_json::Value =
-            serde_json::from_slice(&header_bytes).unwrap();
+        let header_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(parts[0])
+            .unwrap();
+        let header: serde_json::Value = serde_json::from_slice(&header_bytes).unwrap();
         assert_eq!(header["kid"], "abc");
         assert_eq!(header["alg"], "HS256");
         assert_eq!(header["typ"], "JWT");
         // Decode payload and verify exp = iat + 300
-        let payload_bytes =
-            base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(parts[1]).unwrap();
-        let payload: serde_json::Value =
-            serde_json::from_slice(&payload_bytes).unwrap();
+        let payload_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(parts[1])
+            .unwrap();
+        let payload: serde_json::Value = serde_json::from_slice(&payload_bytes).unwrap();
         assert_eq!(payload["iat"], 1_700_000_000);
         assert_eq!(payload["exp"], 1_700_000_000 + 300);
         assert_eq!(payload["aud"], "/admin/");
@@ -374,7 +370,10 @@ mod tests {
             .mount(&server)
             .await;
         let err = publish(&cfg(&server.uri()), &input()).await.unwrap_err();
-        assert!(matches!(err, PublishError::Server { status: 503, .. }), "got {err:?}");
+        assert!(
+            matches!(err, PublishError::Server { status: 503, .. }),
+            "got {err:?}"
+        );
     }
 
     #[tokio::test]

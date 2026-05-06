@@ -28,6 +28,7 @@ const MAX_BYTES: u64 = 25 * 1024 * 1024;
 
 /// `GET /v1/me`. Used by `publish` to resolve the author id and as a
 /// connectivity smoke-check from the Test button in Settings.
+#[allow(dead_code)]
 pub async fn get_user_id(token: &str) -> Result<String, PublishError> {
     get_user_id_with_base(token, DEFAULT_BASE).await
 }
@@ -189,10 +190,7 @@ pub async fn publish_with_base(
         .and_then(|v| v.as_str())
         .ok_or_else(|| PublishError::UnexpectedResponse("no data.id".into()))?
         .to_string();
-    Ok(PublishResult {
-        url,
-        remote_id: id,
-    })
+    Ok(PublishResult { url, remote_id: id })
 }
 
 /// Map a non-success status into the right `PublishError` variant.

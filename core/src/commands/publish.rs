@@ -69,10 +69,7 @@ pub async fn upload_post_image_ghost(
     config: PlatformConfig,
 ) -> Result<PostImageUploadResult, AppError> {
     let (admin_url, api_key) = match &config {
-        PlatformConfig::Ghost {
-            admin_url,
-            api_key,
-        } => (admin_url, api_key),
+        PlatformConfig::Ghost { admin_url, api_key } => (admin_url, api_key),
         _ => return Err(AppError::Custom("not a Ghost config".into())),
     };
     let url = ghost::upload_image(admin_url, api_key, bytes, filename, mime).await?;

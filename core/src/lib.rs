@@ -31,18 +31,18 @@ use commands::image_host::{
     upload_image_custom, upload_image_imgur, upload_image_qiniu, upload_image_s3,
     upload_image_smms,
 };
-use commands::publish::{
-    convert_markdown_to_html, get_publish_settings, publish_to_ghost, publish_to_medium,
-    publish_to_wordpress_com, publish_to_wordpress_self_hosted, set_publish_settings,
-    upload_post_image_ghost, upload_post_image_medium, upload_post_image_wordpress_com,
-    upload_post_image_wordpress_self_hosted,
-};
 use commands::menu::refresh_menu;
 use commands::plugin::{
     get_plugin_commands, get_plugins_dir, invoke_plugin_command, list_plugins, load_plugin,
     reload_plugin, scaffold_plugin, set_plugin_document_state, set_plugin_enabled, unload_plugin,
 };
 use commands::project::{detect_project, read_project_config};
+use commands::publish::{
+    convert_markdown_to_html, get_publish_settings, publish_to_ghost, publish_to_medium,
+    publish_to_wordpress_com, publish_to_wordpress_self_hosted, set_publish_settings,
+    upload_post_image_ghost, upload_post_image_medium, upload_post_image_wordpress_com,
+    upload_post_image_wordpress_self_hosted,
+};
 use commands::recent::{
     add_recent_project, get_recent_projects, remove_recent_project, reorder_recent_projects,
     set_project_pinned,

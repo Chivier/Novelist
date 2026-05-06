@@ -36,10 +36,7 @@ pub async fn upload_image(
     filename: String,
     mime: String,
 ) -> Result<(String, u64), PublishError> {
-    let endpoint = format!(
-        "{}/wp-json/wp/v2/media",
-        site_url.trim_end_matches('/')
-    );
+    let endpoint = format!("{}/wp-json/wp/v2/media", site_url.trim_end_matches('/'));
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(60))
         .build()
@@ -308,7 +305,8 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/wp-json/wp/v2/tags"))
             .respond_with(
-                ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 20, "name": "tauri"})),
+                ResponseTemplate::new(201)
+                    .set_body_json(serde_json::json!({"id": 20, "name": "tauri"})),
             )
             .mount(&server)
             .await;
@@ -331,7 +329,10 @@ mod tests {
             .await;
         Mock::given(method("POST"))
             .and(path("/wp-json/wp/v2/posts"))
-            .and(header("Authorization", "Basic YWxpY2U6YWJjZEVGR0gxMjM0aWprbE1OT1A2Nzg5"))
+            .and(header(
+                "Authorization",
+                "Basic YWxpY2U6YWJjZEVGR0gxMjM0aWprbE1OT1A2Nzg5",
+            ))
             .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({
                 "id": 99,
                 "link": "https://example.com/?p=99",
