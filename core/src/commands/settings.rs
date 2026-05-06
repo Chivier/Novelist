@@ -23,7 +23,7 @@ fn global_settings_path() -> PathBuf {
         .join("settings.json")
 }
 
-async fn read_global_settings() -> GlobalSettings {
+pub(crate) async fn read_global_settings() -> GlobalSettings {
     let path = global_settings_path();
     if !path.exists() {
         return GlobalSettings::default();
@@ -34,7 +34,7 @@ async fn read_global_settings() -> GlobalSettings {
     }
 }
 
-async fn write_global_settings_to_disk(settings: &GlobalSettings) -> Result<(), AppError> {
+pub(crate) async fn write_global_settings_to_disk(settings: &GlobalSettings) -> Result<(), AppError> {
     let path = global_settings_path();
     if let Some(parent) = path.parent() {
         if !parent.exists() {

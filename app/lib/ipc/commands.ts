@@ -145,6 +145,16 @@ export const commands = {
 	 *  pasted/dropped images without UTF-8 encoding corruption.
 	 */
 	writeBinaryFile: (path: string, base64Data: string) => typedError<null, string>(__TAURI_INVOKE("write_binary_file", { path, base64Data })),
+	// Image hosting (v0.2.4) — manually maintained until codegen pipeline is fixed.
+	readImageBytes: (path: string) => typedError<number[], string>(__TAURI_INVOKE("read_image_bytes", { path })),
+	uploadImageQiniu: (bytes: number[], filename: string, mime: string, config: ProviderConfig) => typedError<UploadResult, string>(__TAURI_INVOKE("upload_image_qiniu", { bytes, filename, mime, config })),
+	uploadImageAliyunOss: (bytes: number[], filename: string, mime: string, config: ProviderConfig) => typedError<UploadResult, string>(__TAURI_INVOKE("upload_image_aliyun_oss", { bytes, filename, mime, config })),
+	uploadImageS3: (bytes: number[], filename: string, mime: string, config: ProviderConfig) => typedError<UploadResult, string>(__TAURI_INVOKE("upload_image_s3", { bytes, filename, mime, config })),
+	uploadImageImgur: (bytes: number[], filename: string, mime: string, config: ProviderConfig) => typedError<UploadResult, string>(__TAURI_INVOKE("upload_image_imgur", { bytes, filename, mime, config })),
+	uploadImageSmms: (bytes: number[], filename: string, mime: string, config: ProviderConfig) => typedError<UploadResult, string>(__TAURI_INVOKE("upload_image_smms", { bytes, filename, mime, config })),
+	uploadImageCustom: (bytes: number[], filename: string, mime: string, config: ProviderConfig) => typedError<UploadResult, string>(__TAURI_INVOKE("upload_image_custom", { bytes, filename, mime, config })),
+	getImageHostSettings: () => typedError<ImageHostSettings, string>(__TAURI_INVOKE("get_image_host_settings")),
+	setImageHostSettings: (settings: ImageHostSettings) => typedError<null, string>(__TAURI_INVOKE("set_image_host_settings", { settings })),
 	// Reveal a file or folder in the platform's file manager (Finder on macOS).
 	revealInFileManager: (path: string) => typedError<null, string>(__TAURI_INVOKE("reveal_in_file_manager", { path })),
 	// Duplicate a file. Returns the path of the new copy.
@@ -535,6 +545,31 @@ export type WritingStatsOverview = {
 	today_words: number,
 	today_minutes: number,
 };
+
+/* Image hosting (v0.2.4) — manually maintained types matching core/src/models/image_host.rs */
+export type UploadResult = {
+	url: string,
+	remote_key: string | null,
+};
+
+export type ImageHostSettings = {
+	hosts: HostConfig[],
+	active_host_id?: string,
+	auto_on_paste: boolean,
+};
+
+export type HostConfig = {
+	id: string,
+	name: string,
+} & ProviderConfig;
+
+export type ProviderConfig =
+	| { provider: "qiniu", access_key: string, secret_key: string, bucket: string, domain: string }
+	| { provider: "aliyun_oss", access_key_id: string, access_key_secret: string, bucket: string, endpoint: string, custom_domain?: string }
+	| { provider: "s3", access_key_id: string, secret_access_key: string, bucket: string, region: string, endpoint?: string, path_prefix?: string, custom_domain?: string }
+	| { provider: "imgur", client_id: string }
+	| { provider: "smms", api_token?: string }
+	| { provider: "custom", post_url: string, bearer?: string };
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

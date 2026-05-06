@@ -26,6 +26,11 @@ use commands::file::{
     rename_item, reveal_in_file_manager, search_in_project, write_binary_file, write_file,
     EncodingState,
 };
+use commands::image_host::{
+    get_image_host_settings, read_image_bytes, set_image_host_settings, upload_image_aliyun_oss,
+    upload_image_custom, upload_image_imgur, upload_image_qiniu, upload_image_s3,
+    upload_image_smms,
+};
 use commands::menu::refresh_menu;
 use commands::plugin::{
     get_plugin_commands, get_plugins_dir, invoke_plugin_command, list_plugins, load_plugin,
@@ -315,6 +320,15 @@ pub fn run() {
         cli_shim_status,
         install_cli_shim,
         read_image_data_uri,
+        read_image_bytes,
+        upload_image_qiniu,
+        upload_image_aliyun_oss,
+        upload_image_s3,
+        upload_image_imgur,
+        upload_image_smms,
+        upload_image_custom,
+        get_image_host_settings,
+        set_image_host_settings,
         write_binary_file,
         reveal_in_file_manager,
         duplicate_file,
@@ -413,6 +427,15 @@ pub fn run() {
         cli_shim_status,
         install_cli_shim,
         read_image_data_uri,
+        read_image_bytes,
+        upload_image_qiniu,
+        upload_image_aliyun_oss,
+        upload_image_s3,
+        upload_image_imgur,
+        upload_image_smms,
+        upload_image_custom,
+        get_image_host_settings,
+        set_image_host_settings,
         write_binary_file,
         reveal_in_file_manager,
         duplicate_file,

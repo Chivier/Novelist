@@ -6,6 +6,7 @@ pub mod cli_shim;
 pub mod draft;
 pub mod export;
 pub mod file;
+pub mod image_host;
 pub mod menu;
 pub mod plugin;
 pub mod project;
