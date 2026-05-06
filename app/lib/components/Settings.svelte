@@ -13,6 +13,7 @@
   import { newFileSettings } from '$lib/stores/new-file-settings.svelte';
   import { parseTemplate, inferNextName } from '$lib/utils/placeholder';
   import SettingsImageHostsPanel from './SettingsImageHostsPanel.svelte';
+  import SettingsPublishPanel from './SettingsPublishPanel.svelte';
 
   interface Props {
     onClose: () => void;
@@ -561,6 +562,7 @@
         { id: 'templates', label: t('settings.templates') },
         { id: 'plugins', label: t('settings.plugins') },
         { id: 'image-hosts', label: 'Image Hosts' },
+        { id: 'publish', label: 'Publish' },
         { id: 'sync', label: t('settings.sync') },
       ] as section}
         <button
@@ -1135,6 +1137,8 @@
         {/if}
       {:else if activeSection === 'image-hosts'}
         <SettingsImageHostsPanel />
+      {:else if activeSection === 'publish'}
+        <SettingsPublishPanel />
       {:else if activeSection === 'sync'}
         <h3 class="text-xs font-semibold uppercase tracking-wide mb-4" style="color: var(--novelist-text-secondary);">{t('settings.sync.webdav')}</h3>
 

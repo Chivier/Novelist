@@ -5,6 +5,7 @@
   // First-paint critical shell: keep these static.
   import Sidebar from '$lib/components/Sidebar.svelte';
   import TabBar from '$lib/components/TabBar.svelte';
+  import EditorShareMenu from '$lib/components/EditorShareMenu.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
   import Welcome from '$lib/components/Welcome.svelte';
   import ErrorBoundary from '$lib/components/ErrorBoundary.svelte';
@@ -525,7 +526,12 @@ let paletteOpen = $state(false);
     {/if}
 
     <!-- Main editor column (contains split panes + status bar) -->
-    <div data-testid="editor-region" class="flex flex-col flex-1 min-w-0">
+    <div data-testid="editor-region" class="flex flex-col flex-1 min-w-0 relative">
+      {#if tabsStore.activeTab}
+        <div class="editor-share-corner">
+          <EditorShareMenu />
+        </div>
+      {/if}
       <!-- Panes row -->
       <div class="flex flex-1 min-h-0" bind:this={splitContainerRef} style="{isDraggingSplit ? 'cursor: col-resize; user-select: none;' : ''}">
 
@@ -877,5 +883,14 @@ let paletteOpen = $state(false);
   }
   .panel-resize-handle:hover {
     background: var(--novelist-accent);
+  }
+
+  /* Editor share button — top-right of the editor region. Floats above
+     the tab bar so it's always reachable while writing. */
+  .editor-share-corner {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    z-index: 100;
   }
 </style>
