@@ -10,7 +10,7 @@ pub mod types;
 pub mod pandoc_html;
 
 // Provider modules added one at a time as each is implemented.
-// pub mod ghost;
-// pub mod medium;
-// pub mod wordpress;
-// pub mod wordpress_com;
+pub mod ghost;
+pub mod medium;
+pub mod wordpress;
+pub mod wordpress_com;
