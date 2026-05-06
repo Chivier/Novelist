@@ -17,9 +17,11 @@ ships.
 | Visual thinking | Implemented | Mindmap overlay, `.canvas`, `.kanban`. |
 | Export | Implemented | Pandoc-backed HTML, PDF, DOCX, EPUB. |
 | Sync and snapshots | Partial/active | Snapshot and WebDAV plumbing exist; reliability and UX need release-grade validation. |
+| Image hosting | Draft (v0.2.4) | See [2026-05-06-image-host.md](2026-05-06-image-host.md). Qiniu / Aliyun OSS / S3 / R2 / imgur / sm.ms / Custom. |
 | New-user onboarding | Draft | See [new-user-onboarding.md](new-user-onboarding.md). |
 
 ## Specs
 
 - [New-user onboarding](new-user-onboarding.md)
 - [Competitive analysis](competitive-analysis.md)
+- [Image hosting (v0.2.4)](2026-05-06-image-host.md)

@@ -9,6 +9,7 @@ been captured in design docs.
 ## Active
 
 - [2026-04-12 memory optimization](active/2026-04-12-memory-optimization.md)
+- [2026-05-06 image hosting (v0.2.4)](active/2026-05-06-image-host.md)
 
 ## Completed Archive
 
