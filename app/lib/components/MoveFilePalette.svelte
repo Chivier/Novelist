@@ -178,7 +178,7 @@
   }
 
   .palette-subject {
-    font-size: 13px;
+    font-size: 14px;
     color: var(--novelist-text, #e0e0e0);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -222,7 +222,7 @@
     border: none;
     background: transparent;
     color: var(--novelist-text, #e0e0e0);
-    font-size: 13px;
+    font-size: 14px;
     cursor: pointer;
     text-align: left;
   }
@@ -235,7 +235,7 @@
   .palette-empty {
     padding: 20px 16px;
     color: var(--novelist-text-secondary, #888);
-    font-size: 13px;
+    font-size: 14px;
     text-align: center;
   }
 </style>

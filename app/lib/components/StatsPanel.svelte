@@ -96,7 +96,7 @@
       <span style="font-size: 12px; color: var(--novelist-text-secondary);">{t('stats.loading')}</span>
     </div>
   {:else if stats}
-    <div class="flex-1 overflow-y-auto px-3 py-3" style="font-size: 13px;">
+    <div class="flex-1 overflow-y-auto px-3 py-3" style="font-size: 14px;">
 
       <!-- Today's Progress -->
       <div class="mb-4">

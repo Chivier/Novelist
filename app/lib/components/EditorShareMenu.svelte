@@ -141,7 +141,7 @@
     border: none;
     background: transparent;
     color: var(--novelist-text);
-    font-size: 13px;
+    font-size: 14px;
     cursor: pointer;
   }
   .share-item:hover {

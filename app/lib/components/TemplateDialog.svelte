@@ -187,7 +187,7 @@
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid var(--novelist-border-subtle, var(--novelist-border));
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--novelist-text);
   }
@@ -217,7 +217,7 @@
   }
   .tmpl-label input[type="text"],
   .tmpl-label textarea {
-    font-size: 13px;
+    font-size: 14px;
     color: var(--novelist-text);
     background: var(--novelist-editor-bg, var(--novelist-bg));
     border: 1px solid var(--novelist-border);

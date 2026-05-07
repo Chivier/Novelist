@@ -188,7 +188,7 @@
     background: transparent;
     color: var(--novelist-text-secondary);
     cursor: pointer;
-    font-size: 13px;
+    font-size: 14px;
     line-height: 1;
     display: inline-flex;
     align-items: center;

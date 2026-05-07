@@ -132,7 +132,7 @@
     border: none;
     background: transparent;
     color: var(--novelist-text, #e0e0e0);
-    font-size: 13px;
+    font-size: 14px;
     cursor: pointer;
     text-align: left;
   }

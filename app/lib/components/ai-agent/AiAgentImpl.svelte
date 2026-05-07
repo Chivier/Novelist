@@ -725,7 +725,7 @@
     overflow: hidden;
     color: var(--novelist-text);
     background: var(--novelist-bg);
-    font-size: 13px;
+    font-size: 14px;
   }
   header {
     display: flex;

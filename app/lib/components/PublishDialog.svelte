@@ -288,7 +288,7 @@
   .inp {
     width: 100%; padding: 6px 8px; border-radius: 4px;
     border: 1px solid var(--novelist-border); background: var(--novelist-bg);
-    color: var(--novelist-text); font-size: 13px;
+    color: var(--novelist-text); font-size: 14px;
   }
   .inp-select { width: auto; padding-right: 24px; }
   .row { display: flex; gap: 16px; align-items: flex-start; }
@@ -341,7 +341,7 @@
     border-left: 3px solid #2da84a;
     padding: 8px 12px;
     border-radius: 0 3px 3px 0;
-    font-size: 13px;
+    font-size: 14px;
   }
 
   .footer {
@@ -350,16 +350,16 @@
     border-top: 1px solid var(--novelist-border);
   }
   .ghost-btn {
-    padding: 6px 14px; font-size: 13px;
+    padding: 6px 14px; font-size: 14px;
     border: 1px solid var(--novelist-border); background: transparent;
     border-radius: 4px; cursor: pointer;
   }
   .primary-btn {
-    padding: 6px 14px; font-size: 13px;
+    padding: 6px 14px; font-size: 14px;
     border: none; background: var(--novelist-accent); color: white;
     border-radius: 4px; cursor: pointer;
   }
   .primary-btn:disabled, .ghost-btn:disabled { opacity: 0.5; cursor: default; }
-  .link-btn { background: none; border: none; color: var(--novelist-accent); cursor: pointer; padding: 0; font-size: 13px; text-decoration: underline; }
+  .link-btn { background: none; border: none; color: var(--novelist-accent); cursor: pointer; padding: 0; font-size: 14px; text-decoration: underline; }
   .close-btn { background: none; border: 1px solid var(--novelist-border); border-radius: 3px; padding: 2px 8px; font-size: 12px; cursor: pointer; margin-left: auto; }
 </style>
