@@ -48,6 +48,8 @@ sha1 = "0.10"
 sha2 = "0.10"
 urlencoding = "2"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+arboard = { version = "3", default-features = false, features = ["image-data"] }
+png = "0.17"
 specta-typescript = { version = "0.0.11", optional = true }
 
 # macOS-only: needed to poke the NSWindow at setup time to disable the

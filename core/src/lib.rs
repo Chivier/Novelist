@@ -40,7 +40,7 @@ use commands::project::{detect_project, read_project_config};
 use commands::publish::{
     convert_markdown_to_html, get_publish_settings, list_publish_tags, publish_to_ghost,
     publish_to_medium, publish_to_wordpress_com, publish_to_wordpress_self_hosted,
-    set_publish_settings, upload_post_image_ghost, upload_post_image_medium,
+    read_clipboard_image, set_publish_settings, upload_post_image_ghost, upload_post_image_medium,
     upload_post_image_wordpress_com, upload_post_image_wordpress_self_hosted,
     verify_publish_channel,
 };
@@ -347,6 +347,7 @@ pub fn run() {
         convert_markdown_to_html,
         verify_publish_channel,
         list_publish_tags,
+        read_clipboard_image,
         get_publish_settings,
         set_publish_settings,
         write_binary_file,
@@ -467,6 +468,7 @@ pub fn run() {
         convert_markdown_to_html,
         verify_publish_channel,
         list_publish_tags,
+        read_clipboard_image,
         get_publish_settings,
         set_publish_settings,
         write_binary_file,

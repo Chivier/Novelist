@@ -177,32 +177,27 @@
     if (f && f.type.startsWith('image/')) setCover(f);
   }
 
-  /** Read an image from the system clipboard via the modern Clipboard API.
-   *  Surfaces a friendly error in `errorMessage` if the clipboard has no
-   *  image or the API is unavailable. */
+  /** Read an image from the system clipboard via the Rust-side
+   *  `arboard` API exposed as a Tauri command. Going through Rust
+   *  bypasses the WebKit/macOS "Paste" permission prompt that
+   *  `navigator.clipboard.read()` triggers — one-click instead of two. */
   async function pasteCoverFromClipboard() {
-    if (!navigator.clipboard?.read) {
-      errorMessage = t('publish.pasteUnavailable');
+    errorMessage = null;
+    const r = await commands.readClipboardImage();
+    if (r.status !== 'ok') {
+      // Distinguish "no image on clipboard" from a hard failure.
+      const msg = r.error.toLowerCase();
+      if (msg.includes('no image')) {
+        errorMessage = t('publish.pasteNoImage');
+      } else {
+        errorMessage = `${t('publish.pasteFailed')}: ${r.error}`;
+      }
       return;
     }
-    try {
-      const items = await navigator.clipboard.read();
-      for (const item of items) {
-        for (const type of item.types) {
-          if (type.startsWith('image/')) {
-            const blob = await item.getType(type);
-            const ext = type.split('/')[1] || 'png';
-            const file = new File([blob], `clipboard.${ext}`, { type });
-            setCover(file);
-            errorMessage = null;
-            return;
-          }
-        }
-      }
-      errorMessage = t('publish.pasteNoImage');
-    } catch (e) {
-      errorMessage = `${t('publish.pasteFailed')}: ${e instanceof Error ? e.message : String(e)}`;
-    }
+    const blob = new Blob([new Uint8Array(r.data.bytes)], { type: r.data.mime });
+    const ext = r.data.mime.split('/')[1] || 'png';
+    const file = new File([blob], `clipboard.${ext}`, { type: r.data.mime });
+    setCover(file);
   }
 
   async function doPublish() {
@@ -420,6 +415,9 @@
     color: var(--novelist-text); font-size: 14px;
   }
   .inp-select { width: auto; padding-right: 24px; }
+  /* Disable the resize handle on the excerpt textarea — keeping the
+     dialog layout stable matters more than letting users resize. */
+  textarea.inp { resize: none; }
   .row { display: flex; gap: 16px; align-items: flex-start; }
   .col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .status-lbl { margin-top: 0; align-self: center; }

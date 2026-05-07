@@ -167,6 +167,7 @@ export const commands = {
 	convertMarkdownToHtml: (markdown: string) => typedError<string, string>(__TAURI_INVOKE("convert_markdown_to_html", { markdown })),
 	verifyPublishChannel: (config: PlatformConfig) => typedError<string, string>(__TAURI_INVOKE("verify_publish_channel", { config })),
 	listPublishTags: (config: PlatformConfig) => typedError<string[], string>(__TAURI_INVOKE("list_publish_tags", { config })),
+	readClipboardImage: () => typedError<ClipboardImage, string>(__TAURI_INVOKE("read_clipboard_image")),
 	getPublishSettings: () => typedError<PublishSettings, string>(__TAURI_INVOKE("get_publish_settings")),
 	setPublishSettings: (settings: PublishSettings) => typedError<null, string>(__TAURI_INVOKE("set_publish_settings", { settings })),
 	// Reveal a file or folder in the platform's file manager (Finder on macOS).
@@ -624,6 +625,13 @@ export type PublishResult = {
 export type PostImageUploadResult = {
 	url: string,
 	attachment_id: number,
+};
+
+export type ClipboardImage = {
+	bytes: number[],
+	mime: string,
+	width: number,
+	height: number,
 };
 
 /* Tauri Specta runtime */

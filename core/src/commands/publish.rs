@@ -184,6 +184,55 @@ pub async fn verify_publish_channel(config: PlatformConfig) -> Result<String, Ap
     })
 }
 
+/// PNG-encoded image bytes pulled from the system clipboard via the
+/// Rust-side `arboard` API. Reading via Rust (instead of the browser's
+/// `navigator.clipboard.read()`) avoids the WebKit/macOS "Paste"
+/// permission prompt that otherwise pops up next to the cursor.
+#[derive(serde::Serialize, serde::Deserialize, specta::Type)]
+pub struct ClipboardImage {
+    pub bytes: Vec<u8>,
+    pub mime: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn read_clipboard_image() -> Result<ClipboardImage, AppError> {
+    // arboard is sync and may take a few ms on the OS clipboard read
+    // (especially on macOS when bridging across processes). Run it on
+    // a blocking thread so we don't stall the Tokio runtime.
+    let result = tokio::task::spawn_blocking(|| -> Result<ClipboardImage, String> {
+        let mut clipboard =
+            arboard::Clipboard::new().map_err(|e| format!("clipboard init failed: {e}"))?;
+        let img = clipboard
+            .get_image()
+            .map_err(|e| format!("no image on clipboard: {e}"))?;
+        let mut png_bytes = Vec::new();
+        {
+            let mut encoder =
+                png::Encoder::new(&mut png_bytes, img.width as u32, img.height as u32);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            let mut writer = encoder
+                .write_header()
+                .map_err(|e| format!("png header: {e}"))?;
+            writer
+                .write_image_data(&img.bytes)
+                .map_err(|e| format!("png data: {e}"))?;
+        }
+        Ok(ClipboardImage {
+            bytes: png_bytes,
+            mime: "image/png".to_string(),
+            width: img.width as u32,
+            height: img.height as u32,
+        })
+    })
+    .await
+    .map_err(|e| AppError::Custom(format!("clipboard task panicked: {e}")))?;
+    result.map_err(AppError::Custom)
+}
+
 /// Convert Markdown to HTML via the bundled / system Pandoc binary.
 /// Used by the frontend orchestrator before submitting to Ghost / WP /
 /// WP.com (Medium consumes Markdown directly).
