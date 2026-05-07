@@ -410,6 +410,9 @@ export const en: TranslationMap = {
   'settings.on': 'On',
   'settings.off': 'Off',
 
+  'settings.search.placeholder': 'Search settings…',
+  'settings.search.noResults': 'No matches.',
+
   'settings.editor.newFile.heading': 'New file in project',
   'settings.editor.newFile.detectFromFolder': 'Detect chapter patterns from folder',
   'settings.editor.newFile.detectFromFolderHint': 'When on, scans the folder and picks the next number in the existing series.',
@@ -425,6 +428,15 @@ export const en: TranslationMap = {
   'settings.editor.newFile.defaultDirPick': 'Choose…',
   'settings.editor.newFile.defaultDirClear': 'Reset',
   'settings.editor.newFile.presetCustom': 'Custom…',
+  'settings.editor.newFile.macroHint.label': 'Macro reference',
+  'settings.editor.newFile.macroHint.headingCounter': 'Counter slots (filename templates only)',
+  'settings.editor.newFile.macroHint.headingVariable': 'Variables',
+  'settings.editor.newFile.macroHint.headingExamples': 'Examples',
+  'settings.editor.newFile.macroHint.body':
+    '{N}        Arabic, natural width\n{2N} {3N}  Arabic, zero-padded\n{CN}       Chinese (一, 二, 三 …)\n{rN}       Roman (I, II, III …)\n{title}    H1 of the file (or "Untitled")\n{filename} Active editor\'s file stem\n{project}  Project folder name\n{date}                  2026-05-07\n{date:YYMMDD}           260507\n{date:YYYYMMDD}         20260507\n{time}                  14:08\n{time:HHmmss}           140832\n{datetime}              2026-05-07 14:08\n{datetime:timestamp}    Unix seconds\n{datetime:iso}          ISO 8601 with offset\n{datetime:YYYYMMDD-HHmmss}  20260507-140832',
+  'settings.editor.newFile.macroHint.example1': '第{N}章-{date:YYMMDD}  →  第1章-260507.md',
+  'settings.editor.newFile.macroHint.example2': '{datetime:YYYYMMDD-HHmmss}-{title}  →  20260507-140832-Untitled.md',
+  'settings.editor.newFile.macroHint.note': 'Characters like ":" and "/" are sanitized when used in filenames.',
 
   'settings.theme.system': 'System (Auto)',
   'settings.theme.dark': 'Dark',

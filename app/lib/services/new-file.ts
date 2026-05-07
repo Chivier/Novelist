@@ -57,7 +57,15 @@ export async function createNewFileInProject() {
     ? filesResult.data.filter(e => !e.is_dir).map(e => e.name)
     : [];
 
-  const userTemplate = parseTemplate(newFileSettings.template) ?? parseTemplate('Untitled {N}')!;
+  // Resolve `{date:fmt}` / `{time}` / `{datetime}` etc. in the user's
+  // template before numbering inference runs. `{N}` and friends pass
+  // through untouched (they're not in `simple`); inferNextName fills them.
+  const macroCtx = makeTemplateContext({
+    activeFilePath: tabsStore.activeTab?.filePath ?? null,
+    projectDir: projectStore.dirPath,
+  });
+  const resolvedTemplateRaw = resolveBody(newFileSettings.template, macroCtx);
+  const userTemplate = parseTemplate(resolvedTemplateRaw) ?? parseTemplate('Untitled {N}')!;
 
   const proposedName = newFileSettings.detectFromFolder
     ? inferNextName(siblings, userTemplate)

@@ -410,6 +410,9 @@ export const zhCN: TranslationMap = {
   'settings.on': '开',
   'settings.off': '关',
 
+  'settings.search.placeholder': '搜索设置…',
+  'settings.search.noResults': '无匹配结果。',
+
   'settings.editor.newFile.heading': '项目内新建文件',
   'settings.editor.newFile.detectFromFolder': '自动从文件夹推断章节命名',
   'settings.editor.newFile.detectFromFolderHint': '关闭后总是用下方的默认模板。',
@@ -425,6 +428,15 @@ export const zhCN: TranslationMap = {
   'settings.editor.newFile.defaultDirPick': '选择…',
   'settings.editor.newFile.defaultDirClear': '清除',
   'settings.editor.newFile.presetCustom': '自定义…',
+  'settings.editor.newFile.macroHint.label': '宏速查',
+  'settings.editor.newFile.macroHint.headingCounter': '编号占位符（仅文件名模板）',
+  'settings.editor.newFile.macroHint.headingVariable': '变量',
+  'settings.editor.newFile.macroHint.headingExamples': '示例',
+  'settings.editor.newFile.macroHint.body':
+    '{N}        阿拉伯数字（自然宽度）\n{2N} {3N}  阿拉伯数字补零\n{CN}       中文（一、二、三……）\n{rN}       罗马数字（I、II、III……）\n{title}    H1 标题（无 H1 时为 "Untitled"）\n{filename} 当前编辑器的文件名（不含扩展名）\n{project}  项目目录名\n{date}                  2026-05-07\n{date:YYMMDD}           260507\n{date:YYYYMMDD}         20260507\n{time}                  14:08\n{time:HHmmss}           140832\n{datetime}              2026-05-07 14:08\n{datetime:timestamp}    Unix 秒\n{datetime:iso}          ISO 8601 含时区\n{datetime:YYYYMMDD-HHmmss}  20260507-140832',
+  'settings.editor.newFile.macroHint.example1': '第{N}章-{date:YYMMDD}  →  第1章-260507.md',
+  'settings.editor.newFile.macroHint.example2': '{datetime:YYYYMMDD-HHmmss}-{title}  →  20260507-140832-Untitled.md',
+  'settings.editor.newFile.macroHint.note': '用作文件名时，":" "/" 等字符会被自动清理。',
 
   'settings.theme.system': '跟随系统',
   'settings.theme.dark': '深色',
