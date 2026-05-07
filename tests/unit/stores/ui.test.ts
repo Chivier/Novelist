@@ -11,7 +11,11 @@ import { describe, it, expect, beforeEach } from 'vitest';
  * provides a working documentElement so these assertions are real.
  */
 
-import { uiStore } from '$lib/stores/ui.svelte';
+import {
+  uiStore,
+  pickAutoZoomFromScreen,
+  autoInitZoomFromScreen,
+} from '$lib/stores/ui.svelte';
 
 function resetStore() {
   localStorage.clear();
@@ -170,6 +174,62 @@ describe('[contract] uiStore zoom', () => {
     uiStore.setZoom(2);
     expect(document.documentElement.style.width).toBe('50%');
     expect(document.documentElement.style.height).toBe('50%');
+  });
+});
+
+describe('[contract] pickAutoZoomFromScreen', () => {
+  it('returns 1.0 for sub-2K physical widths', () => {
+    expect(pickAutoZoomFromScreen(1024)).toBe(1.0);
+    expect(pickAutoZoomFromScreen(1920)).toBe(1.0);
+    expect(pickAutoZoomFromScreen(2559)).toBe(1.0);
+  });
+
+  it('returns 1.25 for [2560, 3840) — 2K range', () => {
+    expect(pickAutoZoomFromScreen(2560)).toBe(1.25);
+    expect(pickAutoZoomFromScreen(3439)).toBe(1.25);
+    expect(pickAutoZoomFromScreen(3839)).toBe(1.25);
+  });
+
+  it('returns 1.5 for ≥ 3840 — 4K and beyond', () => {
+    expect(pickAutoZoomFromScreen(3840)).toBe(1.5);
+    expect(pickAutoZoomFromScreen(5120)).toBe(1.5);
+    expect(pickAutoZoomFromScreen(7680)).toBe(1.5);
+  });
+});
+
+describe('[contract] autoInitZoomFromScreen — first-launch behavior', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('on fresh storage, picks zoom from physical width and writes both flags', () => {
+    const calls: number[] = [];
+    autoInitZoomFromScreen({ setZoom: (l) => calls.push(l) }, 3840);
+    expect(calls).toEqual([1.5]);
+    expect(localStorage.getItem('novelist-zoom-auto-inited')).toBe('1');
+  });
+
+  it('skips entirely when auto-inited flag is already set', () => {
+    localStorage.setItem('novelist-zoom-auto-inited', '1');
+    const calls: number[] = [];
+    autoInitZoomFromScreen({ setZoom: (l) => calls.push(l) }, 3840);
+    expect(calls).toEqual([]);
+  });
+
+  it('respects pre-existing novelist-zoom (legacy users), only writes the flag', () => {
+    localStorage.setItem('novelist-zoom', '0.8');
+    const calls: number[] = [];
+    autoInitZoomFromScreen({ setZoom: (l) => calls.push(l) }, 3840);
+    expect(calls).toEqual([]);
+    expect(localStorage.getItem('novelist-zoom')).toBe('0.8');
+    expect(localStorage.getItem('novelist-zoom-auto-inited')).toBe('1');
+  });
+
+  it('handles low-DPI displays — picks 1.0 and still records the flag', () => {
+    const calls: number[] = [];
+    autoInitZoomFromScreen({ setZoom: (l) => calls.push(l) }, 1920);
+    expect(calls).toEqual([1.0]);
+    expect(localStorage.getItem('novelist-zoom-auto-inited')).toBe('1');
   });
 });
 
