@@ -62,13 +62,21 @@
     ondrop={(e) => onDrop(e, node)}
     draggable="true"
     ondragstart={(e) => onDragStart(e, node)}
-    ondblclick={(e) => { e.preventDefault(); toggleFolder(); }}
+    onclick={(e) => {
+      // Single click on the row toggles folder; the chevron stops propagation
+      // so it doesn't double-fire there. Dblclick fires after click — Esc /
+      // blur during the in-flight expand is fine because rename overwrites it.
+      const target = e.target as HTMLElement;
+      if (target.closest('.tree-chevron')) return;
+      toggleFolder();
+    }}
+    ondblclick={(e) => { e.preventDefault(); onRenameRequest(node); }}
     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFolder(); } }}
   >
     <button
       class="tree-chevron"
       aria-label={node.expanded ? 'Collapse' : 'Expand'}
-      onclick={toggleFolder}
+      onclick={(e) => { e.stopPropagation(); toggleFolder(); }}
       ondblclick={(e) => e.stopPropagation()}
     >
       <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
@@ -125,6 +133,7 @@
     class="tree-row tree-file tree-disabled"
     style="padding-left: {indentPx + 16}px;"
     oncontextmenu={(e) => onContextMenu(e, node)}
+    ondblclick={(e) => { e.preventDefault(); onRenameRequest(node); }}
   >
     <svg class="tree-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
       <path d="M4 2h5l3 3v9H4z" />
