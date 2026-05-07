@@ -18,19 +18,16 @@ interface TabState {
   cursorPosition: number;
   version: number;
   /**
-   * True for tabs that were created this session via "New File" / "New Scratch
-   * File" / template "new-file". Gates H1-driven auto-rename in
-   * `tryRenameAfterSave` so that opening an existing file whose name happens
-   * to match a placeholder pattern (e.g. `第1章.md` the user created manually)
-   * does NOT get silently renamed on Cmd+S. Cleared after a successful
-   * auto-rename (one-shot); stays true across no-op saves so the rename can
-   * still fire once the user actually types an H1.
+   * Deprecated since v0.2.4 — see spec 2026-05-07-v0.2.4-rename-and-macros.md.
+   * Field retained so existing call sites and IPC mocks compile; no longer
+   * read by `tryRenameAfterSave`. Slated for removal after v0.2.5 once
+   * we confirm no external consumers depend on it.
    */
   justCreated: boolean;
 }
 
 interface OpenTabOptions {
-  /** Opt-in flag for the H1 auto-rename pipeline. See TabState.justCreated. */
+  /** Deprecated since v0.2.4 — kept for call-site compatibility. */
   justCreated?: boolean;
 }
 
@@ -193,17 +190,14 @@ class TabsStore {
    * rename the file to match. Returns the new path (== old path if no rename).
    * Safe to call after every successful writeFile.
    *
-   * Gated on the tab's `justCreated` flag — only fires for tabs created this
-   * session via New File / New Scratch / template new-file. Opening an
-   * existing file whose name happens to match a placeholder pattern (e.g.
-   * a `第1章.md` the user created in Finder) must NOT be auto-renamed, since
-   * the user explicitly chose that name. See the TabState.justCreated doc.
+   * Gating (v0.2.4+): the `auto_rename_from_h1` setting must be on, the file
+   * must currently match `isPlaceholder()`, and the H1 must be non-empty.
+   * Once the file is renamed, it no longer matches `isPlaceholder()`, so a
+   * second auto-rename cannot fire — the user can edit the H1 freely after
+   * the first rename. See spec 2026-05-07-v0.2.4-rename-and-macros.md.
    */
   async tryRenameAfterSave(filePath: string, content: string): Promise<string> {
     if (!newFileSettings.autoRenameFromH1) return filePath;
-
-    const tab = this.findByPath(filePath);
-    if (!tab || !tab.justCreated) return filePath;
 
     const fileName = filePath.split('/').pop() || filePath;
     if (!isPlaceholder(fileName)) return filePath;
@@ -227,13 +221,6 @@ class TabsStore {
     }
     const newPath = result.data;
     this.updatePath(filePath, newPath);
-    // Consume the one-shot: after a successful rename the tab is no longer
-    // a freshly-created placeholder. Future saves go through the normal path.
-    for (const pane of this.panes) {
-      for (const t of pane.tabs) {
-        if (t.filePath === newPath) t.justCreated = false;
-      }
-    }
 
     // Broadcast to other windows so their tabs/sidebar can update.
     await commands.broadcastFileRenamed(filePath, newPath).catch(() => {});

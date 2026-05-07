@@ -3,15 +3,15 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 /**
  * Regression coverage for `tabsStore.tryRenameAfterSave`.
  *
- * The H1-driven auto-rename pipeline must ONLY fire for tabs that were
- * created this session via "New File" / scratch / sidebar new-file. Opening
- * an existing file whose name happens to match a placeholder regex (e.g.
- * `第1章.md` the user created manually in Finder) must NOT be renamed on
- * Cmd+S — the user explicitly chose that name.
+ * Gating (v0.2.4+):
+ *  - `auto_rename_from_h1` setting must be on
+ *  - Filename must match `isPlaceholder()` (Untitled N / 第N章 / Chapter N / …)
+ *  - The save content must contain a non-empty H1
  *
- * The `justCreated` flag on TabState gates this. These tests pin both
- * branches so we don't regress to the old "rename every placeholder-named
- * file" behavior.
+ * Notably, the legacy `tab.justCreated` gate was removed in v0.2.4 — users
+ * who reopen a placeholder file in a later session and finally type an H1
+ * should still get the auto-rename. See spec
+ * `docs/product-specs/2026-05-07-v0.2.4-rename-and-macros.md`.
  */
 
 vi.mock('$lib/ipc/commands', () => ({
@@ -35,7 +35,7 @@ import { commands } from '$lib/ipc/commands';
 
 const PROJECT = '/proj';
 
-describe('tabsStore.tryRenameAfterSave — justCreated gating', () => {
+describe('tabsStore.tryRenameAfterSave — placeholder + H1 gating', () => {
   beforeEach(() => {
     tabsStore.closeAll();
     vi.clearAllMocks();
@@ -60,53 +60,48 @@ describe('tabsStore.tryRenameAfterSave — justCreated gating', () => {
     );
   });
 
-  it('does NOT rename an existing file whose name matches the placeholder regex', async () => {
-    // User created `第1章.md` manually (e.g. via Finder). Opening it via the
-    // sidebar produces a tab with justCreated=false — the default.
+  it('renames a placeholder-named tab opened from disk (no justCreated flag)', async () => {
+    // User created `第1章.md` manually (e.g. via Finder) or in a previous
+    // session. Opening it from the sidebar yields justCreated=false. Once
+    // the user finally types an H1 and saves, we still want the rename.
     tabsStore.openTab(`${PROJECT}/第1章.md`, 'existing body');
     const body = '# 开篇\n\nmore body';
 
     const newPath = await tabsStore.tryRenameAfterSave(`${PROJECT}/第1章.md`, body);
 
-    expect(newPath).toBe(`${PROJECT}/第1章.md`);
-    expect(commands.renameItem).not.toHaveBeenCalled();
-    expect(commands.listDirectory).not.toHaveBeenCalled();
+    expect(newPath).toBe(`${PROJECT}/第1章 开篇.md`);
+    expect(commands.renameItem).toHaveBeenCalledWith(
+      `${PROJECT}/第1章.md`,
+      '第1章 开篇.md',
+      true,
+    );
   });
 
-  it('clears justCreated after a successful rename (one-shot)', async () => {
+  it('does not double-rename: once the file is no longer a placeholder, future saves are no-ops', async () => {
     tabsStore.openTab(`${PROJECT}/Untitled 1.md`, '', { justCreated: true });
     const id = tabsStore.activeTabId!;
-    const firstBody = '# Title A';
 
-    await tabsStore.tryRenameAfterSave(`${PROJECT}/Untitled 1.md`, firstBody);
+    await tabsStore.tryRenameAfterSave(`${PROJECT}/Untitled 1.md`, '# Title A');
 
     const renamedTab = tabsStore.tabs.find(t => t.id === id);
     expect(renamedTab?.filePath).toBe(`${PROJECT}/Title A.md`);
-    expect(renamedTab?.justCreated).toBe(false);
 
-    // A subsequent save must NOT auto-rename again, even if the file happens
-    // to still match a placeholder pattern (it doesn't here, but the gate is
-    // on the flag regardless).
+    // A subsequent save must NOT auto-rename again — `Title A.md` no longer
+    // matches `isPlaceholder()`, so the gate naturally closes.
     (commands.renameItem as any).mockClear();
     await tabsStore.tryRenameAfterSave(`${PROJECT}/Title A.md`, '# Different Title');
     expect(commands.renameItem).not.toHaveBeenCalled();
   });
 
-  it('keeps justCreated set when the save contains no H1 (rename deferred)', async () => {
+  it('no-ops when the save contains no H1 yet (rename deferred until the user titles it)', async () => {
     tabsStore.openTab(`${PROJECT}/Untitled 1.md`, '', { justCreated: true });
-    const id = tabsStore.activeTabId!;
 
-    // First save: no H1 yet. tryRenameAfterSave should no-op *without*
-    // burning the one-shot — the user hasn't had a chance to title the file.
     const newPath = await tabsStore.tryRenameAfterSave(
       `${PROJECT}/Untitled 1.md`,
       'body with no heading',
     );
     expect(newPath).toBe(`${PROJECT}/Untitled 1.md`);
     expect(commands.renameItem).not.toHaveBeenCalled();
-
-    const tab = tabsStore.tabs.find(t => t.id === id);
-    expect(tab?.justCreated).toBe(true);
 
     // Later save WITH an H1 still triggers the rename.
     await tabsStore.tryRenameAfterSave(`${PROJECT}/Untitled 1.md`, '# 终于有标题了');
@@ -117,9 +112,10 @@ describe('tabsStore.tryRenameAfterSave — justCreated gating', () => {
     );
   });
 
-  it('defaults justCreated to false when openTab is called without options', () => {
-    tabsStore.openTab(`${PROJECT}/Untitled 1.md`, '');
-    const tab = tabsStore.tabs[0];
-    expect(tab.justCreated).toBe(false);
+  it('does nothing for non-placeholder filenames regardless of H1 content', async () => {
+    tabsStore.openTab(`${PROJECT}/my-novel.md`, '');
+    const newPath = await tabsStore.tryRenameAfterSave(`${PROJECT}/my-novel.md`, '# A Heading');
+    expect(newPath).toBe(`${PROJECT}/my-novel.md`);
+    expect(commands.renameItem).not.toHaveBeenCalled();
   });
 });
