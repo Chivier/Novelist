@@ -106,29 +106,32 @@
   function fieldsFor(c: ChannelConfig): Array<{ key: string; label: string; placeholder?: string; secret?: boolean; hint?: string }> {
     switch (c.platform) {
       case 'ghost': return [
-        { key: 'admin_url', label: 'Admin URL', placeholder: 'https://blog.example.com',
+        { key: 'admin_url', label: t('settings.publish.label.ghost.adminUrl'),
+          placeholder: 'https://blog.example.com',
           hint: t('settings.publish.hint.ghost.adminUrl') },
-        { key: 'api_key',   label: 'Admin API Key', secret: true,
+        { key: 'api_key',   label: t('settings.publish.label.ghost.apiKey'), secret: true,
           placeholder: '64a1b2c3d4e5f6:abcdef0123…',
           hint: t('settings.publish.hint.ghost.apiKey') },
       ];
       case 'wordpress_self_hosted': return [
-        { key: 'site_url',     label: 'Site URL', placeholder: 'https://blog.example.com',
+        { key: 'site_url',     label: t('settings.publish.label.wp.siteUrl'),
+          placeholder: 'https://blog.example.com',
           hint: t('settings.publish.hint.wp.siteUrl') },
-        { key: 'username',     label: 'WP username',
+        { key: 'username',     label: t('settings.publish.label.wp.username'),
           hint: t('settings.publish.hint.wp.username') },
-        { key: 'app_password', label: 'Application Password', secret: true,
+        { key: 'app_password', label: t('settings.publish.label.wp.appPassword'), secret: true,
           placeholder: 'abcd EFGH 1234 ijkl MNOP 6789',
           hint: t('settings.publish.hint.wp.appPassword') },
       ];
       case 'wordpress_com': return [
-        { key: 'site_id_or_domain', label: 'Site domain or id', placeholder: 'myblog.wordpress.com',
+        { key: 'site_id_or_domain', label: t('settings.publish.label.wpcom.site'),
+          placeholder: 'myblog.wordpress.com',
           hint: t('settings.publish.hint.wpcom.site') },
-        { key: 'access_token',      label: 'OAuth2 Access Token', secret: true,
+        { key: 'access_token',      label: t('settings.publish.label.wpcom.token'), secret: true,
           hint: t('settings.publish.hint.wpcom.token') },
       ];
       case 'medium': return [
-        { key: 'token', label: 'Integration Token (legacy)', secret: true,
+        { key: 'token', label: t('settings.publish.label.medium.token'), secret: true,
           hint: t('settings.publish.hint.medium.token') },
       ];
     }

@@ -166,6 +166,7 @@ export const commands = {
 	uploadPostImageMedium: (bytes: number[], filename: string, mime: string, config: PlatformConfig) => typedError<PostImageUploadResult, string>(__TAURI_INVOKE("upload_post_image_medium", { bytes, filename, mime, config })),
 	convertMarkdownToHtml: (markdown: string) => typedError<string, string>(__TAURI_INVOKE("convert_markdown_to_html", { markdown })),
 	verifyPublishChannel: (config: PlatformConfig) => typedError<string, string>(__TAURI_INVOKE("verify_publish_channel", { config })),
+	listPublishTags: (config: PlatformConfig) => typedError<string[], string>(__TAURI_INVOKE("list_publish_tags", { config })),
 	getPublishSettings: () => typedError<PublishSettings, string>(__TAURI_INVOKE("get_publish_settings")),
 	setPublishSettings: (settings: PublishSettings) => typedError<null, string>(__TAURI_INVOKE("set_publish_settings", { settings })),
 	// Reveal a file or folder in the platform's file manager (Finder on macOS).

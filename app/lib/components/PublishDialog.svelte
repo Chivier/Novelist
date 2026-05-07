@@ -1,6 +1,7 @@
 <script lang="ts">
-  import type { ChannelConfig, PlatformConfig } from '$lib/ipc/commands';
-  import { dispatchPublish, type DialogPayload } from '$lib/services/publish';
+  import { onMount } from 'svelte';
+  import { commands, type ChannelConfig, type PlatformConfig } from '$lib/ipc/commands';
+  import { dispatchPublish, toPlatformConfig, type DialogPayload } from '$lib/services/publish';
   import { t } from '$lib/i18n';
 
   interface Props {
@@ -30,20 +31,23 @@
   function statusOptionsFor(platform: PlatformConfig['platform']): { value: string; label: string }[] {
     switch (platform) {
       case 'ghost':
-        return [{ value: 'draft', label: 'Draft' }, { value: 'published', label: 'Published' }];
+        return [
+          { value: 'draft',     label: t('publish.statusOpt.draft') },
+          { value: 'published', label: t('publish.statusOpt.published') },
+        ];
       case 'wordpress_self_hosted':
       case 'wordpress_com':
         return [
-          { value: 'draft', label: 'Draft' },
-          { value: 'pending', label: 'Pending review' },
-          { value: 'private', label: 'Private' },
-          { value: 'publish', label: 'Publish' },
+          { value: 'draft',   label: t('publish.statusOpt.draft') },
+          { value: 'pending', label: t('publish.statusOpt.pending') },
+          { value: 'private', label: t('publish.statusOpt.private') },
+          { value: 'publish', label: t('publish.statusOpt.publish') },
         ];
       case 'medium':
         return [
-          { value: 'draft', label: 'Draft' },
-          { value: 'unlisted', label: 'Unlisted' },
-          { value: 'public', label: 'Public' },
+          { value: 'draft',    label: t('publish.statusOpt.draft') },
+          { value: 'unlisted', label: t('publish.statusOpt.unlisted') },
+          { value: 'public',   label: t('publish.statusOpt.public') },
         ];
     }
   }
@@ -76,6 +80,32 @@
   let publishing = $state(false);
   let errorMessage = $state<string | null>(null);
   let successUrl = $state<string | null>(null);
+
+  // Tag autocomplete: pre-fetch existing tags from the platform on mount.
+  // Empty array for platforms that don't expose a tag-list API.
+  let availableTags = $state<string[]>([]);
+  let tagSuggestionsOpen = $state(false);
+  // svelte-ignore state_referenced_locally
+  let tagSuggestions = $derived.by(() => {
+    const q = tagInput.trim().toLowerCase();
+    if (!q) return [] as string[];
+    return availableTags
+      .filter(t => t.toLowerCase().includes(q) && !tags.includes(t))
+      .slice(0, 8);
+  });
+
+  onMount(() => {
+    void (async () => {
+      const r = await commands.listPublishTags(toPlatformConfig(channel));
+      if (r.status === 'ok') availableTags = r.data;
+    })();
+  });
+
+  function selectSuggestion(name: string) {
+    if (!tags.includes(name)) tags = [...tags, name];
+    tagInput = '';
+    tagSuggestionsOpen = false;
+  }
 
   function addTagFromInput() {
     const v = tagInput.trim();
@@ -120,6 +150,34 @@
     e.preventDefault();
     const f = e.dataTransfer?.files?.[0];
     if (f && f.type.startsWith('image/')) setCover(f);
+  }
+
+  /** Read an image from the system clipboard via the modern Clipboard API.
+   *  Surfaces a friendly error in `errorMessage` if the clipboard has no
+   *  image or the API is unavailable. */
+  async function pasteCoverFromClipboard() {
+    if (!navigator.clipboard?.read) {
+      errorMessage = t('publish.pasteUnavailable');
+      return;
+    }
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        for (const type of item.types) {
+          if (type.startsWith('image/')) {
+            const blob = await item.getType(type);
+            const ext = type.split('/')[1] || 'png';
+            const file = new File([blob], `clipboard.${ext}`, { type });
+            setCover(file);
+            errorMessage = null;
+            return;
+          }
+        }
+      }
+      errorMessage = t('publish.pasteNoImage');
+    } catch (e) {
+      errorMessage = `${t('publish.pasteFailed')}: ${e instanceof Error ? e.message : String(e)}`;
+    }
   }
 
   async function doPublish() {
@@ -205,25 +263,44 @@
             </div>
             <div class="cover-actions">
               <button class="small-btn" onclick={pickCover}>{t('publish.choose')}</button>
+              <button class="small-btn" onclick={pasteCoverFromClipboard}>{t('publish.pasteFromClipboard')}</button>
               {#if coverFile}<button class="small-btn" onclick={clearCover}>{t('publish.remove')}</button>{/if}
             </div>
           </div>
 
           <div class="col">
             <label for="pub-tags" class="lbl">{t('publish.tags')}</label>
-            <div class="tag-row">
-              {#each tags as tag}
-                <span class="tag-chip">{tag} <button class="chip-x" onclick={() => removeTag(tag)}>×</button></span>
-              {/each}
-              <input
-                id="pub-tags"
-                type="text"
-                class="tag-inp"
-                bind:value={tagInput}
-                onkeydown={onTagKeydown}
-                onblur={addTagFromInput}
-                placeholder={tags.length === 0 ? t('publish.tagsPlaceholder') : ''}
-              />
+            <div class="tag-input-wrap">
+              <div class="tag-row">
+                {#each tags as tag}
+                  <span class="tag-chip">{tag} <button class="chip-x" onclick={() => removeTag(tag)}>×</button></span>
+                {/each}
+                <input
+                  id="pub-tags"
+                  type="text"
+                  class="tag-inp"
+                  bind:value={tagInput}
+                  oninput={() => { tagSuggestionsOpen = true; }}
+                  onfocus={() => { tagSuggestionsOpen = true; }}
+                  onkeydown={onTagKeydown}
+                  onblur={() => {
+                    // Delay so a click on a suggestion fires before the dropdown closes.
+                    setTimeout(() => { tagSuggestionsOpen = false; addTagFromInput(); }, 120);
+                  }}
+                  placeholder={tags.length === 0 ? t('publish.tagsPlaceholder') : ''}
+                />
+              </div>
+              {#if tagSuggestionsOpen && tagSuggestions.length > 0}
+                <ul class="tag-suggestions">
+                  {#each tagSuggestions as s}
+                    <li>
+                      <button type="button" class="tag-suggestion-item" onmousedown={(e) => { e.preventDefault(); selectSuggestion(s); }}>
+                        {s}
+                      </button>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
             </div>
 
             <label for="pub-excerpt" class="lbl">{t('publish.excerpt')}</label>
@@ -312,11 +389,41 @@
     cursor: pointer;
   }
 
+  .tag-input-wrap { position: relative; }
   .tag-row {
     display: flex; flex-wrap: wrap; gap: 4px;
     border: 1px solid var(--novelist-border); border-radius: 4px;
     padding: 4px; min-height: 28px; align-items: center;
   }
+  .tag-suggestions {
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 0;
+    right: 0;
+    background: var(--novelist-bg);
+    border: 1px solid var(--novelist-border);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    max-height: 180px;
+    overflow-y: auto;
+    list-style: none;
+    margin: 0;
+    padding: 2px 0;
+    z-index: 10;
+  }
+  .tag-suggestions li { margin: 0; }
+  .tag-suggestion-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 4px 10px;
+    border: none;
+    background: transparent;
+    color: var(--novelist-text);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .tag-suggestion-item:hover { background: var(--novelist-sidebar-hover); }
   .tag-chip {
     background: color-mix(in srgb, var(--novelist-accent) 16%, transparent);
     border-radius: 3px; padding: 2px 6px;

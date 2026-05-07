@@ -144,6 +144,25 @@ pub async fn upload_post_image_medium(
     })
 }
 
+/// Fetch existing tag names for the channel (used by the Publish
+/// dialog's tag autocomplete). Returns an empty vec for platforms
+/// that don't expose a tag-list API in v0.2.4 (Medium, WordPress —
+/// can be added later by extending the relevant adapter).
+#[tauri::command]
+#[specta::specta]
+pub async fn list_publish_tags(config: PlatformConfig) -> Result<Vec<String>, AppError> {
+    Ok(match &config {
+        PlatformConfig::Ghost { admin_url, api_key } => {
+            ghost::list_tags(admin_url, api_key).await?
+        }
+        // WP/WP.com tag listing requires pagination; deferred to v0.2.5.
+        // Medium has no public tag-listing API.
+        PlatformConfig::WordPressSelfHosted { .. }
+        | PlatformConfig::WordPressCom { .. }
+        | PlatformConfig::Medium { .. } => Vec::new(),
+    })
+}
+
 /// Read-only credentials check per platform. Returns a short
 /// human-friendly status line like "Connected as alice" on success;
 /// errors propagate with the platform's response body included.

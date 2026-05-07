@@ -38,10 +38,11 @@ use commands::plugin::{
 };
 use commands::project::{detect_project, read_project_config};
 use commands::publish::{
-    convert_markdown_to_html, get_publish_settings, publish_to_ghost, publish_to_medium,
-    publish_to_wordpress_com, publish_to_wordpress_self_hosted, set_publish_settings,
-    upload_post_image_ghost, upload_post_image_medium, upload_post_image_wordpress_com,
-    upload_post_image_wordpress_self_hosted, verify_publish_channel,
+    convert_markdown_to_html, get_publish_settings, list_publish_tags, publish_to_ghost,
+    publish_to_medium, publish_to_wordpress_com, publish_to_wordpress_self_hosted,
+    set_publish_settings, upload_post_image_ghost, upload_post_image_medium,
+    upload_post_image_wordpress_com, upload_post_image_wordpress_self_hosted,
+    verify_publish_channel,
 };
 use commands::recent::{
     add_recent_project, get_recent_projects, remove_recent_project, reorder_recent_projects,
@@ -345,6 +346,7 @@ pub fn run() {
         upload_post_image_medium,
         convert_markdown_to_html,
         verify_publish_channel,
+        list_publish_tags,
         get_publish_settings,
         set_publish_settings,
         write_binary_file,
@@ -464,6 +466,7 @@ pub fn run() {
         upload_post_image_medium,
         convert_markdown_to_html,
         verify_publish_channel,
+        list_publish_tags,
         get_publish_settings,
         set_publish_settings,
         write_binary_file,

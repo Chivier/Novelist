@@ -33,6 +33,50 @@ const ADMIN_PATH_PREFIX: &str = "/ghost/api/admin";
 const ACCEPT_VERSION: &str = "v5.0";
 const TOKEN_TTL_SECONDS: i64 = 5 * 60;
 
+/// Fetch every tag the user has on the Ghost site, returning their
+/// names sorted alphabetically. Used by the Publish dialog's tag
+/// autocomplete. Reads `/ghost/api/admin/tags/?limit=all`.
+pub async fn list_tags(admin_url: &str, api_key: &str) -> Result<Vec<String>, PublishError> {
+    if admin_url.is_empty() || api_key.is_empty() {
+        return Err(PublishError::BadConfig(
+            "ghost config missing admin_url or api_key".into(),
+        ));
+    }
+    let token = make_jwt(api_key)?;
+    let endpoint = format!(
+        "{}{}/tags/?limit=all",
+        admin_url.trim_end_matches('/'),
+        ADMIN_PATH_PREFIX
+    );
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| PublishError::Network(e.to_string()))?;
+    let resp = client
+        .get(&endpoint)
+        .header("Authorization", format!("Ghost {token}"))
+        .header("Accept-Version", ACCEPT_VERSION)
+        .send()
+        .await
+        .map_err(|e| PublishError::Network(e.to_string()))?;
+    let resp = crate::services::publish::require_success(resp).await?;
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| PublishError::UnexpectedResponse(format!("json: {e}")))?;
+    let arr = body
+        .get("tags")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| PublishError::UnexpectedResponse("no tags array".into()))?;
+    let mut names: Vec<String> = arr
+        .iter()
+        .filter_map(|t| t.get("name").and_then(|n| n.as_str()).map(String::from))
+        .collect();
+    names.sort();
+    names.dedup();
+    Ok(names)
+}
+
 /// Read-only credentials check: `GET /ghost/api/admin/site/` with a
 /// fresh JWT. Returns the site title on success — surfaces nicely in
 /// the Test button's status pane.
