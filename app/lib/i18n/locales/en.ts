@@ -666,6 +666,14 @@ export const en: TranslationMap = {
   'settings.publish.platform.wordpress_self_hosted': 'WordPress (self-hosted)',
   'settings.publish.platform.wordpress_com': 'WordPress.com',
   'settings.publish.platform.medium': 'Medium',
+  'settings.publish.hint.ghost.adminUrl': 'The full URL of your Ghost site (the same URL you use to log in).',
+  'settings.publish.hint.ghost.apiKey': 'Use the Admin API Key (id:secret format), NOT the Content API Key. Find it in Ghost Admin → Settings → Integrations → your custom integration.',
+  'settings.publish.hint.wp.siteUrl': 'The full URL of your WordPress site, e.g. https://blog.example.com (HTTPS required).',
+  'settings.publish.hint.wp.username': 'Your regular WordPress login name (NOT email).',
+  'settings.publish.hint.wp.appPassword': 'Application Password from WP Admin → Users → Profile → Application Passwords. The 24-char string with spaces.',
+  'settings.publish.hint.wpcom.site': 'Your WordPress.com site domain (e.g. myblog.wordpress.com) or numeric site id.',
+  'settings.publish.hint.wpcom.token': 'Personal access token from developer.wordpress.com (OAuth2 Bearer).',
+  'settings.publish.hint.medium.token': 'Legacy Integration Token from Settings → Security → Integration Tokens. Medium removed this UI for new accounts in late 2024 — only pre-existing tokens still work.',
 
   // --- Editor share menu ---
   'share.button': 'Share / Export / Publish',

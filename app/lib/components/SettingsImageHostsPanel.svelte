@@ -60,7 +60,8 @@
     editing = { host: newHost(provider), isNew: true };
   }
   function startEdit(host: HostConfig) {
-    editing = { host: structuredClone(host), isNew: false };
+    // $state.snapshot — structuredClone throws on Svelte 5 $state proxies.
+    editing = { host: $state.snapshot(host) as HostConfig, isNew: false };
   }
   function cancelEdit() { editing = null; }
   async function saveEdit() {

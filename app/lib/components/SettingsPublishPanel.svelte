@@ -46,7 +46,11 @@
   }
 
   function startAdd(platform: PlatformId) { editing = { channel: newChannel(platform), isNew: true }; }
-  function startEdit(c: ChannelConfig)   { editing = { channel: structuredClone(c), isNew: false }; }
+  function startEdit(c: ChannelConfig)   {
+    // Use $state.snapshot — structuredClone() throws DataCloneError on
+    // Svelte 5 $state proxies, which silently kills the Edit button.
+    editing = { channel: $state.snapshot(c) as ChannelConfig, isNew: false };
+  }
   function cancelEdit()                  { editing = null; }
   async function saveEdit() {
     if (!editing) return;
@@ -109,23 +113,33 @@
     return rest as PlatformConfig;
   }
 
-  function fieldsFor(c: ChannelConfig): Array<{ key: string; label: string; placeholder?: string; secret?: boolean }> {
+  function fieldsFor(c: ChannelConfig): Array<{ key: string; label: string; placeholder?: string; secret?: boolean; hint?: string }> {
     switch (c.platform) {
       case 'ghost': return [
-        { key: 'admin_url', label: 'Admin URL', placeholder: 'https://blog.example.com' },
-        { key: 'api_key',   label: 'Admin API key (id:secret)', secret: true },
+        { key: 'admin_url', label: 'Admin URL', placeholder: 'https://blog.example.com',
+          hint: t('settings.publish.hint.ghost.adminUrl') },
+        { key: 'api_key',   label: 'Admin API Key', secret: true,
+          placeholder: '64a1b2c3d4e5f6:abcdef0123…',
+          hint: t('settings.publish.hint.ghost.apiKey') },
       ];
       case 'wordpress_self_hosted': return [
-        { key: 'site_url',     label: 'Site URL', placeholder: 'https://blog.example.com' },
-        { key: 'username',     label: 'WP username' },
-        { key: 'app_password', label: 'Application password', secret: true },
+        { key: 'site_url',     label: 'Site URL', placeholder: 'https://blog.example.com',
+          hint: t('settings.publish.hint.wp.siteUrl') },
+        { key: 'username',     label: 'WP username',
+          hint: t('settings.publish.hint.wp.username') },
+        { key: 'app_password', label: 'Application Password', secret: true,
+          placeholder: 'abcd EFGH 1234 ijkl MNOP 6789',
+          hint: t('settings.publish.hint.wp.appPassword') },
       ];
       case 'wordpress_com': return [
-        { key: 'site_id_or_domain', label: 'Site domain or id', placeholder: 'myblog.wordpress.com' },
-        { key: 'access_token',      label: 'OAuth2 access token', secret: true },
+        { key: 'site_id_or_domain', label: 'Site domain or id', placeholder: 'myblog.wordpress.com',
+          hint: t('settings.publish.hint.wpcom.site') },
+        { key: 'access_token',      label: 'OAuth2 Access Token', secret: true,
+          hint: t('settings.publish.hint.wpcom.token') },
       ];
       case 'medium': return [
-        { key: 'token', label: 'Integration token (legacy)', secret: true },
+        { key: 'token', label: 'Integration Token (legacy)', secret: true,
+          hint: t('settings.publish.hint.medium.token') },
       ];
     }
   }
@@ -194,18 +208,23 @@
         </div>
 
         {#each fieldsFor(editing.channel) as f}
-          <div class="flex items-center justify-between mb-3 gap-2">
-            <label class="text-xs w-32" for={`ch-${f.key}`}>{f.label}</label>
-            <input id={`ch-${f.key}`}
-                   type={f.secret ? 'password' : 'text'}
-                   placeholder={f.placeholder ?? ''}
-                   class="text-sm flex-1 px-2 py-1 rounded"
-                   style="border: 1px solid var(--novelist-border); background: var(--novelist-bg);"
-                   value={(editing.channel as unknown as Record<string, string>)[f.key] ?? ''}
-                   oninput={(e) => {
-                     const v = (e.currentTarget as HTMLInputElement).value;
-                     (editing!.channel as unknown as Record<string, string>)[f.key] = v;
-                   }} />
+          <div class="mb-3">
+            <div class="flex items-center justify-between gap-2">
+              <label class="text-xs w-32 shrink-0" for={`ch-${f.key}`}>{f.label}</label>
+              <input id={`ch-${f.key}`}
+                     type={f.secret ? 'password' : 'text'}
+                     placeholder={f.placeholder ?? ''}
+                     class="text-sm flex-1 px-2 py-1 rounded"
+                     style="border: 1px solid var(--novelist-border); background: var(--novelist-bg);"
+                     value={(editing.channel as unknown as Record<string, string>)[f.key] ?? ''}
+                     oninput={(e) => {
+                       const v = (e.currentTarget as HTMLInputElement).value;
+                       (editing!.channel as unknown as Record<string, string>)[f.key] = v;
+                     }} />
+            </div>
+            {#if f.hint}
+              <div class="text-[11px] mt-1" style="color: var(--novelist-text-secondary); padding-left: 8.5rem;">{f.hint}</div>
+            {/if}
           </div>
         {/each}
 

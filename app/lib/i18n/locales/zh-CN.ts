@@ -666,6 +666,14 @@ export const zhCN: TranslationMap = {
   'settings.publish.platform.wordpress_self_hosted': 'WordPress（自托管）',
   'settings.publish.platform.wordpress_com': 'WordPress.com',
   'settings.publish.platform.medium': 'Medium',
+  'settings.publish.hint.ghost.adminUrl': 'Ghost 站点的完整 URL（即登录后台时使用的地址）。',
+  'settings.publish.hint.ghost.apiKey': '请使用 Admin API Key（格式为 id:secret），不是 Content API Key。在 Ghost Admin → Settings → Integrations → 你创建的 Custom Integration 中找到。',
+  'settings.publish.hint.wp.siteUrl': 'WordPress 站点完整 URL，例如 https://blog.example.com（必须 HTTPS）。',
+  'settings.publish.hint.wp.username': '你的 WordPress 登录用户名（不是邮箱）。',
+  'settings.publish.hint.wp.appPassword': '在 WP 后台 → 用户 → 个人资料 → Application Passwords 生成的 24 位字符串（含空格）。',
+  'settings.publish.hint.wpcom.site': 'WordPress.com 站点域名（例如 myblog.wordpress.com）或数字 site id。',
+  'settings.publish.hint.wpcom.token': '在 developer.wordpress.com 申请的 OAuth2 Personal Access Token。',
+  'settings.publish.hint.medium.token': '在 Medium → Settings → Security → Integration Tokens 中创建的老旧 Token。Medium 已于 2024 年底移除该 UI，新账号无法生成，仅老 Token 仍可用。',
 
   // --- Editor share menu ---
   'share.button': '分享 / 导出 / 发布',

@@ -39,16 +39,27 @@ pub fn make_jwt(api_key: &str) -> Result<String, PublishError> {
 }
 
 pub fn make_jwt_with_clock(api_key: &str, now_secs: i64) -> Result<String, PublishError> {
-    let (id, secret_hex) = api_key
-        .split_once(':')
-        .ok_or_else(|| PublishError::BadConfig("api_key must be 'id:secret_hex'".into()))?;
+    let trimmed = api_key.trim();
+    let (id, secret_hex) = trimmed.split_once(':').ok_or_else(|| {
+        PublishError::BadConfig(
+            "Ghost api_key must be 'id:secret' (Admin API Key from Ghost Admin → \
+             Integrations). The Content API Key is a single hex string with no \
+             colon and cannot publish — use the Admin API Key instead."
+                .into(),
+        )
+    })?;
     if id.is_empty() || secret_hex.is_empty() {
         return Err(PublishError::BadConfig(
-            "api_key has empty id or secret".into(),
+            "Ghost api_key has empty id or secret half".into(),
         ));
     }
-    let key_bytes = hex_decode(secret_hex)
-        .map_err(|e| PublishError::BadConfig(format!("hex-decode secret: {e}")))?;
+    let key_bytes = hex_decode(secret_hex).map_err(|e| {
+        PublishError::BadConfig(format!(
+            "Ghost api_key secret half must be hex characters (got: {e}). \
+             Make sure you copied the full Admin API Key from Ghost Admin → \
+             Integrations → your integration."
+        ))
+    })?;
 
     let header = serde_json::json!({"alg":"HS256","kid":id,"typ":"JWT"});
     let header_b64 = b64url(&serde_json::to_vec(&header).unwrap());
@@ -305,8 +316,27 @@ mod tests {
     fn malformed_api_key_is_bad_config() {
         let err = make_jwt("no-colon-here").unwrap_err();
         assert!(matches!(err, PublishError::BadConfig(_)), "got {err:?}");
+        // The error should mention Admin vs Content API key distinction so
+        // a user pasting the wrong key type gets actionable guidance.
+        if let PublishError::BadConfig(msg) = err {
+            assert!(
+                msg.contains("Admin API Key") && msg.contains("Content API Key"),
+                "error should distinguish Admin vs Content API Key, got: {msg}"
+            );
+        }
         let err = make_jwt("only-id:").unwrap_err();
         assert!(matches!(err, PublishError::BadConfig(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn whitespace_in_api_key_is_trimmed() {
+        // Users sometimes paste with surrounding whitespace.
+        let token = make_jwt_with_clock(
+            "  abc:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd  ",
+            1_700_000_000,
+        )
+        .unwrap();
+        assert_eq!(token.split('.').count(), 3);
     }
 
     #[tokio::test]
