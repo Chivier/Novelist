@@ -674,6 +674,8 @@ export const en: TranslationMap = {
   'settings.publish.hint.wpcom.site': 'Your WordPress.com site domain (e.g. myblog.wordpress.com) or numeric site id.',
   'settings.publish.hint.wpcom.token': 'Personal access token from developer.wordpress.com (OAuth2 Bearer).',
   'settings.publish.hint.medium.token': 'Legacy Integration Token from Settings → Security → Integration Tokens. Medium removed this UI for new accounts in late 2024 — only pre-existing tokens still work.',
+  'settings.publish.showSecret': 'Show',
+  'settings.publish.hideSecret': 'Hide',
 
   // --- Editor share menu ---
   'share.button': 'Share / Export / Publish',

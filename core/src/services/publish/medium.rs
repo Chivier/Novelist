@@ -26,11 +26,32 @@ use crate::services::publish::types::{PublishError, PublishInput, PublishResult}
 const DEFAULT_BASE: &str = "https://api.medium.com";
 const MAX_BYTES: u64 = 25 * 1024 * 1024;
 
-/// `GET /v1/me`. Used by `publish` to resolve the author id and as a
-/// connectivity smoke-check from the Test button in Settings.
-#[allow(dead_code)]
-pub async fn get_user_id(token: &str) -> Result<String, PublishError> {
-    get_user_id_with_base(token, DEFAULT_BASE).await
+/// Read-only credentials check. Returns the username on success.
+pub async fn verify(token: &str) -> Result<String, PublishError> {
+    if token.is_empty() {
+        return Err(PublishError::BadConfig("medium token is empty".into()));
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| PublishError::Network(e.to_string()))?;
+    let resp = client
+        .get(format!("{DEFAULT_BASE}/v1/me"))
+        .header("Authorization", format!("Bearer {token}"))
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(|e| PublishError::Network(e.to_string()))?;
+    let resp = crate::services::publish::require_success(resp).await?;
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| PublishError::UnexpectedResponse(format!("json: {e}")))?;
+    let username = body
+        .pointer("/data/username")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Medium account");
+    Ok(format!("Connected as @{username}"))
 }
 
 pub async fn get_user_id_with_base(token: &str, base: &str) -> Result<String, PublishError> {
@@ -48,7 +69,7 @@ pub async fn get_user_id_with_base(token: &str, base: &str) -> Result<String, Pu
         .send()
         .await
         .map_err(|e| PublishError::Network(e.to_string()))?;
-    map_response_status(&resp)?;
+    let resp = crate::services::publish::require_success(resp).await?;
     let body: serde_json::Value = resp
         .json()
         .await
@@ -100,7 +121,7 @@ pub async fn upload_image_with_base(
         .send()
         .await
         .map_err(|e| PublishError::Network(e.to_string()))?;
-    map_response_status(&resp)?;
+    let resp = crate::services::publish::require_success(resp).await?;
     let body: serde_json::Value = resp
         .json()
         .await
@@ -175,7 +196,7 @@ pub async fn publish_with_base(
         .send()
         .await
         .map_err(|e| PublishError::Network(e.to_string()))?;
-    map_response_status(&resp)?;
+    let resp = crate::services::publish::require_success(resp).await?;
     let body: serde_json::Value = resp
         .json()
         .await
@@ -191,23 +212,6 @@ pub async fn publish_with_base(
         .ok_or_else(|| PublishError::UnexpectedResponse("no data.id".into()))?
         .to_string();
     Ok(PublishResult { url, remote_id: id })
-}
-
-/// Map a non-success status into the right `PublishError` variant.
-/// Returns `Ok(())` if the response was 2xx.
-fn map_response_status(resp: &reqwest::Response) -> Result<(), PublishError> {
-    let status = resp.status();
-    if status.is_success() {
-        return Ok(());
-    }
-    Err(match status.as_u16() {
-        401 | 403 => PublishError::Auth(format!("status {}", status.as_u16())),
-        429 => PublishError::QuotaExceeded(format!("status {}", status.as_u16())),
-        s => PublishError::Server {
-            status: s,
-            message: format!("status {s}"),
-        },
-    })
 }
 
 #[cfg(test)]

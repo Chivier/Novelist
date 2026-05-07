@@ -14,6 +14,36 @@ use crate::services::publish::types::{PublishError, PublishInput, PublishResult}
 
 const DEFAULT_BASE: &str = "https://public-api.wordpress.com";
 
+/// Read-only credentials check: `GET /wp/v2/sites/<id>/users/me`.
+pub async fn verify(site: &str, token: &str) -> Result<String, PublishError> {
+    if site.is_empty() || token.is_empty() {
+        return Err(PublishError::BadConfig(
+            "wordpress_com config missing site or access_token".into(),
+        ));
+    }
+    let endpoint = format!("{DEFAULT_BASE}/wp/v2/sites/{site}/users/me");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| PublishError::Network(e.to_string()))?;
+    let resp = client
+        .get(&endpoint)
+        .header("Authorization", format!("Bearer {token}"))
+        .send()
+        .await
+        .map_err(|e| PublishError::Network(e.to_string()))?;
+    let resp = crate::services::publish::require_success(resp).await?;
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| PublishError::UnexpectedResponse(format!("json: {e}")))?;
+    let name = body
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("WordPress.com user");
+    Ok(format!("Connected as {name}"))
+}
+
 pub async fn upload_image(
     site: &str,
     token: &str,
@@ -52,7 +82,7 @@ pub async fn upload_image_with_base(
         .send()
         .await
         .map_err(|e| PublishError::Network(e.to_string()))?;
-    map_response_status(&resp)?;
+    let resp = crate::services::publish::require_success(resp).await?;
     let body: serde_json::Value = resp
         .json()
         .await
@@ -129,7 +159,7 @@ pub async fn publish_with_base(
         .send()
         .await
         .map_err(|e| PublishError::Network(e.to_string()))?;
-    map_response_status(&resp)?;
+    let resp = crate::services::publish::require_success(resp).await?;
     let body: serde_json::Value = resp
         .json()
         .await
@@ -168,7 +198,7 @@ async fn resolve_tag_ids_with_base(
             .send()
             .await
             .map_err(|e| PublishError::Network(e.to_string()))?;
-        map_response_status(&resp)?;
+        let resp = crate::services::publish::require_success(resp).await?;
         let body: serde_json::Value = resp
             .json()
             .await
@@ -195,7 +225,7 @@ async fn resolve_tag_ids_with_base(
             .send()
             .await
             .map_err(|e| PublishError::Network(e.to_string()))?;
-        map_response_status(&create)?;
+        let create = crate::services::publish::require_success(create).await?;
         let body: serde_json::Value = create
             .json()
             .await
@@ -207,21 +237,6 @@ async fn resolve_tag_ids_with_base(
         out.push(id);
     }
     Ok(out)
-}
-
-fn map_response_status(resp: &reqwest::Response) -> Result<(), PublishError> {
-    let status = resp.status();
-    if status.is_success() {
-        return Ok(());
-    }
-    Err(match status.as_u16() {
-        401 | 403 => PublishError::Auth(format!("status {}", status.as_u16())),
-        429 => PublishError::QuotaExceeded(format!("status {}", status.as_u16())),
-        s => PublishError::Server {
-            status: s,
-            message: format!("status {s}"),
-        },
-    })
 }
 
 #[cfg(test)]

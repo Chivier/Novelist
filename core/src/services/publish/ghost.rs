@@ -33,6 +33,44 @@ const ADMIN_PATH_PREFIX: &str = "/ghost/api/admin";
 const ACCEPT_VERSION: &str = "v5.0";
 const TOKEN_TTL_SECONDS: i64 = 5 * 60;
 
+/// Read-only credentials check: `GET /ghost/api/admin/site/` with a
+/// fresh JWT. Returns the site title on success — surfaces nicely in
+/// the Test button's status pane.
+pub async fn verify(admin_url: &str, api_key: &str) -> Result<String, PublishError> {
+    if admin_url.is_empty() || api_key.is_empty() {
+        return Err(PublishError::BadConfig(
+            "ghost config missing admin_url or api_key".into(),
+        ));
+    }
+    let token = make_jwt(api_key)?;
+    let endpoint = format!(
+        "{}{}/site/",
+        admin_url.trim_end_matches('/'),
+        ADMIN_PATH_PREFIX
+    );
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| PublishError::Network(e.to_string()))?;
+    let resp = client
+        .get(&endpoint)
+        .header("Authorization", format!("Ghost {token}"))
+        .header("Accept-Version", ACCEPT_VERSION)
+        .send()
+        .await
+        .map_err(|e| PublishError::Network(e.to_string()))?;
+    let resp = crate::services::publish::require_success(resp).await?;
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| PublishError::UnexpectedResponse(format!("json: {e}")))?;
+    let title = body
+        .pointer("/site/title")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Ghost site");
+    Ok(format!("Connected to {title}"))
+}
+
 /// Split `id:secret_hex`, hex-decode the secret, build a fresh JWT.
 pub fn make_jwt(api_key: &str) -> Result<String, PublishError> {
     make_jwt_with_clock(api_key, chrono::Utc::now().timestamp())
@@ -140,7 +178,7 @@ pub async fn upload_image(
         .send()
         .await
         .map_err(|e| PublishError::Network(e.to_string()))?;
-    map_response_status(&resp)?;
+    let resp = crate::services::publish::require_success(resp).await?;
     let body: serde_json::Value = resp
         .json()
         .await
@@ -207,7 +245,7 @@ pub async fn publish(
         .send()
         .await
         .map_err(|e| PublishError::Network(e.to_string()))?;
-    map_response_status(&resp)?;
+    let resp = crate::services::publish::require_success(resp).await?;
     let body: serde_json::Value = resp
         .json()
         .await
@@ -223,21 +261,6 @@ pub async fn publish(
         .ok_or_else(|| PublishError::UnexpectedResponse("no posts[0].url".into()))?
         .to_string();
     Ok(PublishResult { url, remote_id: id })
-}
-
-fn map_response_status(resp: &reqwest::Response) -> Result<(), PublishError> {
-    let status = resp.status();
-    if status.is_success() {
-        return Ok(());
-    }
-    Err(match status.as_u16() {
-        401 | 403 => PublishError::Auth(format!("status {}", status.as_u16())),
-        429 => PublishError::QuotaExceeded(format!("status {}", status.as_u16())),
-        s => PublishError::Server {
-            status: s,
-            message: format!("status {s}"),
-        },
-    })
 }
 
 #[cfg(test)]

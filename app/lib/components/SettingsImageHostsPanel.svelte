@@ -13,6 +13,14 @@
 
   // Form state for the "Add host" / edit dialog.
   let editing = $state<{ host: HostConfig; isNew: boolean } | null>(null);
+  /** Set of secret-field keys whose value is currently revealed. */
+  let revealedFields = $state<Set<string>>(new Set());
+  function toggleReveal(key: string) {
+    const next = new Set(revealedFields);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    revealedFields = next;
+  }
 
   onMount(async () => {
     await reload();
@@ -231,22 +239,36 @@
         </div>
 
         {#each fieldsFor(editing.host) as f}
+          {@const shown = f.secret && revealedFields.has(f.key)}
           <div class="flex items-center justify-between mb-3 gap-2">
-            <label class="text-xs w-32" for="host-{f.key}">
+            <label class="text-xs w-32 shrink-0" for="host-{f.key}">
               {f.label}{#if f.optional} <span style="color: var(--novelist-text-secondary);">(opt)</span>{/if}
             </label>
-            <input
-              id="host-{f.key}"
-              type={f.secret ? 'password' : 'text'}
-              placeholder={f.placeholder ?? ''}
-              class="text-sm flex-1 px-2 py-1 rounded"
-              style="border: 1px solid var(--novelist-border); background: var(--novelist-bg);"
-              value={(editing.host as unknown as Record<string, string>)[f.key] ?? ''}
-              oninput={(e) => {
-                const val = (e.currentTarget as HTMLInputElement).value;
-                (editing!.host as unknown as Record<string, string>)[f.key] = val;
-              }}
-            />
+            <div class="flex flex-1 gap-1">
+              <input
+                id="host-{f.key}"
+                type={f.secret && !shown ? 'password' : 'text'}
+                placeholder={f.placeholder ?? ''}
+                class="text-sm flex-1 px-2 py-1 rounded"
+                style="border: 1px solid var(--novelist-border); background: var(--novelist-bg);"
+                value={(editing.host as unknown as Record<string, string>)[f.key] ?? ''}
+                oninput={(e) => {
+                  const val = (e.currentTarget as HTMLInputElement).value;
+                  (editing!.host as unknown as Record<string, string>)[f.key] = val;
+                }}
+              />
+              {#if f.secret}
+                <button type="button" class="reveal-btn" onclick={() => toggleReveal(f.key)}
+                        title={shown ? '隐藏' : '显示'}
+                        aria-label={shown ? '隐藏' : '显示'}>
+                  {#if shown}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+                  {:else}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                  {/if}
+                </button>
+              {/if}
+            </div>
           </div>
         {/each}
 
@@ -262,6 +284,22 @@
 </div>
 
 <style>
+  .reveal-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+    background: transparent;
+    border: 1px solid var(--novelist-border);
+    border-radius: 4px;
+    color: var(--novelist-text-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .reveal-btn:hover {
+    color: var(--novelist-text);
+    background: var(--novelist-sidebar-hover);
+  }
   .modal-backdrop {
     position: fixed; inset: 0;
     background: rgba(0,0,0,0.4);

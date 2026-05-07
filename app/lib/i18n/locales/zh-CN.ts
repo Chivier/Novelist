@@ -674,6 +674,8 @@ export const zhCN: TranslationMap = {
   'settings.publish.hint.wpcom.site': 'WordPress.com 站点域名（例如 myblog.wordpress.com）或数字 site id。',
   'settings.publish.hint.wpcom.token': '在 developer.wordpress.com 申请的 OAuth2 Personal Access Token。',
   'settings.publish.hint.medium.token': '在 Medium → Settings → Security → Integration Tokens 中创建的老旧 Token。Medium 已于 2024 年底移除该 UI，新账号无法生成，仅老 Token 仍可用。',
+  'settings.publish.showSecret': '显示',
+  'settings.publish.hideSecret': '隐藏',
 
   // --- Editor share menu ---
   'share.button': '分享 / 导出 / 发布',

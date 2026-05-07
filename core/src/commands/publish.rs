@@ -144,6 +144,27 @@ pub async fn upload_post_image_medium(
     })
 }
 
+/// Read-only credentials check per platform. Returns a short
+/// human-friendly status line like "Connected as alice" on success;
+/// errors propagate with the platform's response body included.
+#[tauri::command]
+#[specta::specta]
+pub async fn verify_publish_channel(config: PlatformConfig) -> Result<String, AppError> {
+    Ok(match &config {
+        PlatformConfig::Ghost { admin_url, api_key } => ghost::verify(admin_url, api_key).await?,
+        PlatformConfig::WordPressSelfHosted {
+            site_url,
+            username,
+            app_password,
+        } => wordpress::verify(site_url, username, app_password).await?,
+        PlatformConfig::WordPressCom {
+            site_id_or_domain,
+            access_token,
+        } => wordpress_com::verify(site_id_or_domain, access_token).await?,
+        PlatformConfig::Medium { token } => medium::verify(token).await?,
+    })
+}
+
 /// Convert Markdown to HTML via the bundled / system Pandoc binary.
 /// Used by the frontend orchestrator before submitting to Ghost / WP /
 /// WP.com (Medium consumes Markdown directly).
