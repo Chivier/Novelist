@@ -27,3 +27,4 @@ ships.
 - [Competitive analysis](competitive-analysis.md)
 - [Image hosting (v0.2.4)](2026-05-06-image-host.md)
 - [Publishing (v0.2.4)](2026-05-06-publish.md)
+- [File renaming & filename macros (v0.2.4)](2026-05-07-v0.2.4-rename-and-macros.md)
