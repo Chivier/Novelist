@@ -732,4 +732,7 @@ export const en: TranslationMap = {
   'publish.statusOpt.publish': 'Publish',
   'publish.statusOpt.unlisted': 'Unlisted',
   'publish.statusOpt.public': 'Public',
+  'publish.tagsAvailable': 'Available tags',
+  'publish.tagsNoMatch': 'No matching tags.',
+  'publish.tagsDropdownToggle': 'Browse existing tags',
 };

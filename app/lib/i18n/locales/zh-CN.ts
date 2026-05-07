@@ -732,4 +732,7 @@ export const zhCN: TranslationMap = {
   'publish.statusOpt.publish': '发布',
   'publish.statusOpt.unlisted': '不公开列表',
   'publish.statusOpt.public': '公开',
+  'publish.tagsAvailable': '已有标签',
+  'publish.tagsNoMatch': '没有匹配的标签。',
+  'publish.tagsDropdownToggle': '浏览已有标签',
 };

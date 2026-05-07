@@ -85,13 +85,20 @@
   // Empty array for platforms that don't expose a tag-list API.
   let availableTags = $state<string[]>([]);
   let tagSuggestionsOpen = $state(false);
+  let tagInputEl = $state<HTMLInputElement | null>(null);
+
+  /**
+   * Tags shown in the dropdown. With no query, show every available
+   * tag the user hasn't already added (so the dropdown serves as a
+   * "browse" UI). When typing, filter case-insensitively. Cap at 60
+   * to keep the dropdown bounded for users with long tag taxonomies.
+   */
   // svelte-ignore state_referenced_locally
   let tagSuggestions = $derived.by(() => {
     const q = tagInput.trim().toLowerCase();
-    if (!q) return [] as string[];
-    return availableTags
-      .filter(t => t.toLowerCase().includes(q) && !tags.includes(t))
-      .slice(0, 8);
+    const filtered = availableTags.filter(t => !tags.includes(t));
+    const matched = q ? filtered.filter(t => t.toLowerCase().includes(q)) : filtered;
+    return matched.slice(0, 60);
   });
 
   onMount(() => {
@@ -104,7 +111,25 @@
   function selectSuggestion(name: string) {
     if (!tags.includes(name)) tags = [...tags, name];
     tagInput = '';
-    tagSuggestionsOpen = false;
+    // Keep dropdown open after selection — user often wants to add several.
+    // It will close when they click outside or press Escape.
+    tagInputEl?.focus();
+  }
+
+  function toggleSuggestionsDropdown() {
+    tagSuggestionsOpen = !tagSuggestionsOpen;
+    if (tagSuggestionsOpen) tagInputEl?.focus();
+  }
+
+  /**
+   * Stable hash of a tag string into one of N color slots — keeps a
+   * given tag the same color across renders and matches mweb / Notion
+   * style where each tag has its own consistent hue.
+   */
+  function hashColorIndex(s: string): number {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+    return Math.abs(h) % 6;
   }
 
   function addTagFromInput() {
@@ -273,33 +298,60 @@
             <div class="tag-input-wrap">
               <div class="tag-row">
                 {#each tags as tag}
-                  <span class="tag-chip">{tag} <button class="chip-x" onclick={() => removeTag(tag)}>×</button></span>
+                  <span class="tag-pill tag-pill-selected">
+                    {tag}
+                    <button type="button" class="pill-x" onclick={() => removeTag(tag)} aria-label="remove tag">×</button>
+                  </span>
                 {/each}
                 <input
                   id="pub-tags"
                   type="text"
                   class="tag-inp"
+                  bind:this={tagInputEl}
                   bind:value={tagInput}
                   oninput={() => { tagSuggestionsOpen = true; }}
                   onfocus={() => { tagSuggestionsOpen = true; }}
                   onkeydown={onTagKeydown}
                   onblur={() => {
                     // Delay so a click on a suggestion fires before the dropdown closes.
-                    setTimeout(() => { tagSuggestionsOpen = false; addTagFromInput(); }, 120);
+                    setTimeout(() => { tagSuggestionsOpen = false; addTagFromInput(); }, 150);
                   }}
                   placeholder={tags.length === 0 ? t('publish.tagsPlaceholder') : ''}
                 />
+                {#if availableTags.length > 0}
+                  <button
+                    type="button"
+                    class="tag-dropdown-toggle"
+                    onmousedown={(e) => { e.preventDefault(); toggleSuggestionsDropdown(); }}
+                    aria-label={t('publish.tagsDropdownToggle')}
+                    title={t('publish.tagsDropdownToggle')}
+                  >
+                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M4 6l4 4 4-4" />
+                    </svg>
+                  </button>
+                {/if}
               </div>
-              {#if tagSuggestionsOpen && tagSuggestions.length > 0}
-                <ul class="tag-suggestions">
-                  {#each tagSuggestions as s}
-                    <li>
-                      <button type="button" class="tag-suggestion-item" onmousedown={(e) => { e.preventDefault(); selectSuggestion(s); }}>
-                        {s}
-                      </button>
-                    </li>
-                  {/each}
-                </ul>
+              {#if tagSuggestionsOpen && availableTags.length > 0}
+                <div class="tag-suggestions">
+                  {#if tagSuggestions.length > 0}
+                    <div class="tag-suggestions-header">{t('publish.tagsAvailable')} ({tagSuggestions.length}{availableTags.length - tags.length > 60 ? `/${availableTags.length - tags.length}` : ''})</div>
+                    <div class="tag-pill-grid">
+                      {#each tagSuggestions as s, i}
+                        {@const colorIdx = hashColorIndex(s)}
+                        <button
+                          type="button"
+                          class={`tag-pill tag-pill-available pill-c${colorIdx}`}
+                          onmousedown={(e) => { e.preventDefault(); selectSuggestion(s); }}
+                        >
+                          {s}
+                        </button>
+                      {/each}
+                    </div>
+                  {:else}
+                    <div class="tag-suggestions-empty">{t('publish.tagsNoMatch')}</div>
+                  {/if}
+                </div>
               {/if}
             </div>
 
@@ -389,48 +441,118 @@
     cursor: pointer;
   }
 
+  /* Tag input + dropdown — pill-styled chips arranged in a wrapping
+     grid. Inspired by mweb / Notion-style multi-select pickers. */
   .tag-input-wrap { position: relative; }
   .tag-row {
-    display: flex; flex-wrap: wrap; gap: 4px;
-    border: 1px solid var(--novelist-border); border-radius: 4px;
-    padding: 4px; min-height: 28px; align-items: center;
+    display: flex; flex-wrap: wrap; gap: 6px;
+    border: 1px solid var(--novelist-border); border-radius: 6px;
+    padding: 6px 8px; min-height: 36px; align-items: center;
+    background: var(--novelist-bg);
   }
+  .tag-inp {
+    flex: 1; min-width: 100px;
+    border: none; outline: none; background: transparent;
+    font-size: 13px; color: var(--novelist-text);
+    padding: 2px 0;
+  }
+  .tag-dropdown-toggle {
+    flex-shrink: 0;
+    width: 22px; height: 22px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: transparent; border: none; border-radius: 4px;
+    color: var(--novelist-text-secondary); cursor: pointer;
+  }
+  .tag-dropdown-toggle:hover {
+    background: var(--novelist-sidebar-hover);
+    color: var(--novelist-text);
+  }
+
+  /* Pill — base style for both selected chips (in the input row) and
+     available chips (in the dropdown). Use a light-tinted background
+     with same-hue text, mweb / Notion-style. */
+  .tag-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    line-height: 1.3;
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: filter 100ms;
+  }
+  .tag-pill:hover { filter: brightness(0.95); }
+
+  .pill-x {
+    background: none; border: none; cursor: pointer;
+    font-size: 13px; line-height: 1; padding: 0;
+    margin-left: 2px; opacity: 0.55;
+    color: inherit;
+  }
+  .pill-x:hover { opacity: 1; }
+
+  /* Selected chips use the accent color so they read clearly against
+     the input row. */
+  .tag-pill-selected {
+    background: color-mix(in srgb, var(--novelist-accent) 18%, transparent);
+    color: var(--novelist-accent);
+    font-weight: 500;
+  }
+
+  /* Available chips in the dropdown get one of six stable colors
+     hashed from the tag name, so a given tag is always the same hue. */
+  .tag-pill-available { font-weight: 500; }
+  .pill-c0 { background: rgba(245, 158,  11, 0.18); color: #b45309; }
+  .pill-c1 { background: rgba(124,  58, 237, 0.18); color: #6d28d9; }
+  .pill-c2 { background: rgba( 14, 165, 233, 0.18); color: #0369a1; }
+  .pill-c3 { background: rgba( 22, 163,  74, 0.18); color: #15803d; }
+  .pill-c4 { background: rgba(225,  29,  72, 0.18); color: #be123c; }
+  .pill-c5 { background: rgba(168,  85, 247, 0.18); color: #7e22ce; }
+  /* Dark-mode adjustment: lift text brightness so colored pills don't
+     muddy against a dark background. */
+  @media (prefers-color-scheme: dark) {
+    .pill-c0 { color: #fbbf24; }
+    .pill-c1 { color: #a78bfa; }
+    .pill-c2 { color: #38bdf8; }
+    .pill-c3 { color: #4ade80; }
+    .pill-c4 { color: #fb7185; }
+    .pill-c5 { color: #c084fc; }
+  }
+
+  /* Dropdown panel — a card with a small header and a wrapping grid
+     of pills. Multiple per row, scrolls vertically when long. */
   .tag-suggestions {
     position: absolute;
-    top: calc(100% + 2px);
+    top: calc(100% + 4px);
     left: 0;
     right: 0;
     background: var(--novelist-bg);
     border: 1px solid var(--novelist-border);
-    border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-    max-height: 180px;
+    border-radius: 6px;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.14);
+    max-height: 240px;
     overflow-y: auto;
-    list-style: none;
-    margin: 0;
-    padding: 2px 0;
     z-index: 10;
+    padding: 8px 10px;
   }
-  .tag-suggestions li { margin: 0; }
-  .tag-suggestion-item {
-    display: block;
-    width: 100%;
-    text-align: left;
-    padding: 4px 10px;
-    border: none;
-    background: transparent;
-    color: var(--novelist-text);
+  .tag-suggestions-header {
+    font-size: 10px;
+    color: var(--novelist-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+  }
+  .tag-suggestions-empty {
     font-size: 12px;
-    cursor: pointer;
+    color: var(--novelist-text-secondary);
+    padding: 4px 0;
   }
-  .tag-suggestion-item:hover { background: var(--novelist-sidebar-hover); }
-  .tag-chip {
-    background: color-mix(in srgb, var(--novelist-accent) 16%, transparent);
-    border-radius: 3px; padding: 2px 6px;
-    font-size: 12px; display: inline-flex; gap: 4px; align-items: center;
+  .tag-pill-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
   }
-  .chip-x { background: none; border: none; cursor: pointer; font-size: 12px; padding: 0; line-height: 1; }
-  .tag-inp { flex: 1; min-width: 80px; border: none; outline: none; background: transparent; font-size: 12px; }
 
   .error-banner {
     background: rgba(210, 74, 74, 0.12);
