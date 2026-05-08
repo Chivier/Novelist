@@ -73,6 +73,12 @@ pub struct GlobalSettings {
     /// here only — same convention as image_hosts.
     #[serde(default)]
     pub publish: PublishSettings,
+    /// Optional override path to the Pandoc binary. When unset (or
+    /// empty), Novelist auto-detects Pandoc from `$PATH` and common
+    /// install locations. Pandoc is NOT bundled with Novelist — users
+    /// without it installed are pointed at https://pandoc.org/installing.html.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pandoc_path: Option<String>,
 }
 
 /// Fully resolved settings handed to the frontend — no `Option`s.
@@ -201,6 +207,7 @@ mod tests {
             plugins: PluginsConfig::default(),
             image_hosts: Default::default(),
             publish: Default::default(),
+            pandoc_path: None,
         };
         let eff = resolve(&global, None, None, None);
         assert_eq!(eff.view.sort_mode, "name-asc");
@@ -302,6 +309,7 @@ mod tests {
             plugins: PluginsConfig { enabled: plugins },
             image_hosts: Default::default(),
             publish: Default::default(),
+            pandoc_path: None,
         };
         let json = serde_json::to_string(&original).unwrap();
         let back: GlobalSettings = serde_json::from_str(&json).unwrap();

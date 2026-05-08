@@ -19,7 +19,7 @@ use commands::claude_bridge::{
 };
 use commands::cli_shim::{cli_shim_status, install_cli_shim};
 use commands::draft::{delete_draft_note, has_draft_note, read_draft_note, write_draft_note};
-use commands::export::{check_pandoc, export_project};
+use commands::export::{check_pandoc, export_project, set_pandoc_path};
 use commands::file::{
     broadcast_file_renamed, create_directory, create_file, create_scratch_file, delete_item,
     duplicate_file, get_file_encoding, list_directory, move_item, read_file, read_image_data_uri,
@@ -266,6 +266,7 @@ pub fn run() {
         move_item,
         delete_item,
         check_pandoc,
+        set_pandoc_path,
         export_project,
         detect_project,
         read_project_config,
@@ -387,6 +388,7 @@ pub fn run() {
         move_item,
         delete_item,
         check_pandoc,
+        set_pandoc_path,
         export_project,
         detect_project,
         read_project_config,

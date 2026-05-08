@@ -10,6 +10,7 @@
   import { confirmUnsavedChanges } from '$lib/composables/unsaved-prompt.svelte';
   import FileTreeNode from '$lib/components/FileTreeNode.svelte';
   import { compareByMode, type SortMode } from '$lib/utils/file-sort';
+  import { proposeNewFileName } from '$lib/services/new-file';
 
   // --- Project switcher popup (Notion-style) ---
   let switcherOpen = $state(false);
@@ -226,10 +227,15 @@
   let newItemName = $state('');
   let newItemInput = $state<HTMLInputElement | null>(null);
 
-  function startCreateFile() {
+  async function startCreateFile() {
     creatingFile = true;
     creatingFolder = false;
-    newItemName = 'untitled.md';
+    // Seed the inline input with the smart name from settings
+    // (date/time macros + {N} numbering inferred from siblings) so the
+    // sidebar "+" matches Cmd+N's naming, instead of always "untitled.md".
+    newItemName = projectStore.dirPath
+      ? await proposeNewFileName(projectStore.dirPath)
+      : 'untitled.md';
     // Focus after DOM update
     requestAnimationFrame(() => {
       if (newItemInput) {
@@ -297,7 +303,8 @@
   async function createFileAt(targetDir: string, ext: string = '.md') {
     closeContextMenu();
     closeViewMenu();
-    const result = await commands.createFile(targetDir, `untitled${ext}`);
+    const proposedName = await proposeNewFileName(targetDir, ext === '.md' ? undefined : ext);
+    const result = await commands.createFile(targetDir, proposedName);
     if (result.status !== 'ok') {
       console.error('Failed to create file:', result.error);
       return;

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { commands, type ChannelConfig, type PlatformConfig, type PublishSettings } from '$lib/ipc/commands';
+  import { commands, type ChannelConfig, type PandocStatus, type PlatformConfig, type PublishSettings } from '$lib/ipc/commands';
   import { t } from '$lib/i18n';
 
   type PlatformId = PlatformConfig['platform'];
@@ -20,8 +20,37 @@
     revealedFields = next;
   }
 
+  // --- Pandoc status / override ---
+  // Ghost and WordPress publish flows convert MD→HTML via Pandoc;
+  // we surface its status here so the user can fix a broken install
+  // without leaving the Publish settings page.
+  let pandocStatus = $state<PandocStatus | null>(null);
+  let pandocOverrideInput = $state('');
+  let pandocSavingOverride = $state(false);
+
+  async function refreshPandocStatus() {
+    const r = await commands.checkPandoc();
+    if (r.status === 'ok') {
+      pandocStatus = r.data;
+      pandocOverrideInput = r.data.override_path ?? '';
+    }
+  }
+
+  async function savePandocOverride() {
+    pandocSavingOverride = true;
+    const value = pandocOverrideInput.trim();
+    await commands.setPandocPath(value === '' ? null : value);
+    await refreshPandocStatus();
+    pandocSavingOverride = false;
+  }
+
+  function openPandocInstallPage() {
+    window.open('https://pandoc.org/installing.html', '_blank');
+  }
+
   onMount(async () => {
     await reload();
+    await refreshPandocStatus();
     loading = false;
   });
 
@@ -144,6 +173,56 @@
   {#if loading}
     <div class="text-sm" style="color: var(--novelist-text-secondary);">…</div>
   {:else}
+    <!-- Pandoc status card — Ghost / WordPress publish flows need
+         pandoc on the system. We never bundle it (binary-size cost),
+         so users without it are pointed at the install page or can
+         set a custom path. -->
+    {#if pandocStatus}
+      <div class="pandoc-card" class:pandoc-ok={pandocStatus.available} class:pandoc-err={!pandocStatus.available}>
+        <div class="pandoc-row">
+          <div class="pandoc-icon">
+            {#if pandocStatus.available}✓{:else}!{/if}
+          </div>
+          <div class="pandoc-text">
+            {#if pandocStatus.available}
+              <div class="pandoc-headline">{t('settings.pandoc.foundHeadline')}</div>
+              <div class="pandoc-detail">
+                {pandocStatus.version ?? ''}
+                {#if pandocStatus.resolved_path}
+                  <span class="pandoc-path-mono">— {pandocStatus.resolved_path}</span>
+                {/if}
+              </div>
+            {:else}
+              <div class="pandoc-headline">{t('settings.pandoc.notFoundHeadline')}</div>
+              <div class="pandoc-detail">{t('settings.pandoc.notFoundHint')}</div>
+            {/if}
+          </div>
+          <button class="pandoc-btn" onclick={refreshPandocStatus} title={t('settings.pandoc.recheck')}>
+            {t('settings.pandoc.recheck')}
+          </button>
+        </div>
+
+        <div class="pandoc-override-row">
+          <label class="text-xs shrink-0" for="pandoc-override-input" style="color: var(--novelist-text-secondary);">
+            {t('settings.pandoc.overrideLabel')}
+          </label>
+          <input
+            id="pandoc-override-input"
+            type="text"
+            class="pandoc-input"
+            placeholder={t('settings.pandoc.overridePlaceholder')}
+            bind:value={pandocOverrideInput}
+          />
+          <button class="pandoc-btn" onclick={savePandocOverride} disabled={pandocSavingOverride}>
+            {pandocSavingOverride ? t('settings.pandoc.saving') : t('settings.pandoc.save')}
+          </button>
+          <button class="pandoc-btn pandoc-btn-link" onclick={openPandocInstallPage}>
+            {t('settings.pandoc.installLink')}
+          </button>
+        </div>
+      </div>
+    {/if}
+
     <div class="text-xs uppercase tracking-wide mb-2" style="color: var(--novelist-text-secondary);">{t('settings.publish.configured')}</div>
 
     {#if settings.channels.length === 0}
@@ -264,6 +343,65 @@
 </div>
 
 <style>
+  /* Pandoc status / override card — sits at the top of the publish
+     panel so users hitting "spawn pandoc: No such file" land here. */
+  .pandoc-card {
+    border: 1px solid var(--novelist-border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 16px;
+    background: var(--novelist-bg);
+  }
+  .pandoc-ok { border-left: 3px solid #2da84a; }
+  .pandoc-err { border-left: 3px solid #d24a4a; background: rgba(210, 74, 74, 0.04); }
+  .pandoc-row {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .pandoc-icon {
+    flex-shrink: 0;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 13px;
+  }
+  .pandoc-ok .pandoc-icon { color: #2da84a; background: rgba(45,168,74,0.14); }
+  .pandoc-err .pandoc-icon { color: #d24a4a; background: rgba(210,74,74,0.14); }
+  .pandoc-text { flex: 1; min-width: 0; }
+  .pandoc-headline { font-size: 13px; font-weight: 500; }
+  .pandoc-detail {
+    font-size: 11px; color: var(--novelist-text-secondary);
+    margin-top: 2px; word-break: break-word;
+  }
+  .pandoc-path-mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    margin-left: 4px;
+  }
+  .pandoc-override-row {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 10px;
+  }
+  .pandoc-input {
+    flex: 1;
+    font-size: 12px; padding: 4px 8px; border-radius: 4px;
+    border: 1px solid var(--novelist-border);
+    background: var(--novelist-bg); color: var(--novelist-text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .pandoc-btn {
+    flex-shrink: 0;
+    font-size: 12px; padding: 4px 10px;
+    border: 1px solid var(--novelist-border); background: transparent;
+    color: var(--novelist-text); border-radius: 4px; cursor: pointer;
+  }
+  .pandoc-btn:hover { background: var(--novelist-sidebar-hover); }
+  .pandoc-btn:disabled { opacity: 0.5; cursor: default; }
+  .pandoc-btn-link {
+    border: none; color: var(--novelist-accent); text-decoration: underline;
+    background: transparent;
+  }
+  .pandoc-btn-link:hover { background: transparent; }
+
   .test-detail {
     margin: 0;
     padding: 6px 10px;

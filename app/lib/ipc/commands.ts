@@ -39,6 +39,7 @@ export const commands = {
 	moveItem: (sourcePath: string, targetDir: string) => typedError<string, string>(__TAURI_INVOKE("move_item", { sourcePath, targetDir })),
 	deleteItem: (path: string) => typedError<null, string>(__TAURI_INVOKE("delete_item", { path })),
 	checkPandoc: () => typedError<PandocStatus, string>(__TAURI_INVOKE("check_pandoc")),
+	setPandocPath: (path: string | null) => typedError<null, string>(__TAURI_INVOKE("set_pandoc_path", { path })),
 	exportProject: (inputFiles: string[], outputPath: string, format: string, extraArgs: string[]) => typedError<string, string>(__TAURI_INVOKE("export_project", { inputFiles, outputPath, format, extraArgs })),
 	detectProject: (dirPath: string) => typedError<{
 	project: ProjectMeta,
@@ -290,6 +291,8 @@ export type OutlineConfig = {
 export type PandocStatus = {
 	available: boolean,
 	version: string | null,
+	resolved_path?: string,
+	override_path?: string,
 };
 
 export type PluginInfo = {
