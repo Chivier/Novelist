@@ -191,11 +191,16 @@
   }
   .tree-file-active .tree-icon { opacity: 0.75; }
   .tree-disabled { cursor: default; opacity: 0.35; }
-  .tree-name { overflow: hidden; text-overflow: ellipsis; }
+  .tree-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: var(--novelist-mono-font, ui-monospace, 'SF Mono', 'Cascadia Code', monospace);
+  }
   .tree-ext {
     color: var(--novelist-text-tertiary, var(--novelist-text-secondary));
     font-size: 0.78rem;
     flex-shrink: 0;
+    font-family: var(--novelist-mono-font, ui-monospace, 'SF Mono', 'Cascadia Code', monospace);
   }
   .drag-over {
     background: color-mix(in srgb, var(--novelist-accent) 18%, transparent) !important;
