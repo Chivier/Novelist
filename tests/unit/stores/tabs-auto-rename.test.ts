@@ -118,4 +118,23 @@ describe('tabsStore.tryRenameAfterSave — placeholder + H1 gating', () => {
     expect(newPath).toBe(`${PROJECT}/my-novel.md`);
     expect(commands.renameItem).not.toHaveBeenCalled();
   });
+
+  it('runs even when the tab is clean — Editor.saveCurrentFile relies on this for Cmd+S on clean tabs', async () => {
+    // Open a placeholder tab and immediately mark it saved (no writeFile). This
+    // simulates a file that's been autosaved already, where the user then
+    // presses Cmd+S to confirm — the filename should still update.
+    tabsStore.openTab(`${PROJECT}/Untitled 1.md`, '# 开篇');
+    const id = tabsStore.activeTabId!;
+    tabsStore.markSaved(id);
+    const tab = tabsStore.tabs.find(t => t.id === id);
+    expect(tab?.isDirty).toBe(false);
+
+    const newPath = await tabsStore.tryRenameAfterSave(`${PROJECT}/Untitled 1.md`, '# 开篇');
+    expect(newPath).toBe(`${PROJECT}/开篇.md`);
+    expect(commands.renameItem).toHaveBeenCalledWith(
+      `${PROJECT}/Untitled 1.md`,
+      '开篇.md',
+      true,
+    );
+  });
 });

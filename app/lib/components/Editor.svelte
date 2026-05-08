@@ -315,9 +315,21 @@
   async function saveCurrentFile() {
     if (isSaving) return;
     const tab = getActiveTab();
-    if (!tab || !tab.isDirty || !view) return;
+    if (!tab || !view) return;
 
     const content = view.state.doc.toString();
+
+    // Cmd+S on a clean tab: nothing to write, but the user may have just
+    // typed an H1 then triggered autosave (or come back to a placeholder
+    // file from disk). Still run the H1-driven rename check so the
+    // filename gets a chance to catch up. See spec
+    // 2026-05-07-v0.2.4-rename-and-macros.md.
+    if (!tab.isDirty) {
+      if (!isScratchFile(tab.filePath)) {
+        await tabsStore.tryRenameAfterSave(tab.filePath, content);
+      }
+      return;
+    }
 
     isSaving = true;
     try {
