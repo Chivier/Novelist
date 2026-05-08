@@ -89,6 +89,124 @@ pub async fn resolve_with_settings() -> Option<(String, String)> {
     resolve_pandoc(g.pandoc_path.as_deref()).await
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Skip-on-no-pandoc helper — different from the production probe
+    /// in that it shells out via `which`/`PATH` only, not via our
+    /// extended resolver, so the test can isolate "is pandoc reachable
+    /// at all" from "does our resolver find it".
+    fn pandoc_anywhere_on_system() -> bool {
+        std::process::Command::new("pandoc")
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+            || std::path::Path::new("/opt/homebrew/bin/pandoc").exists()
+            || std::path::Path::new("/usr/local/bin/pandoc").exists()
+            || std::path::Path::new("/usr/bin/pandoc").exists()
+    }
+
+    #[tokio::test]
+    async fn resolve_with_no_override_finds_pandoc_when_installed() {
+        if !pandoc_anywhere_on_system() {
+            eprintln!("skipping: pandoc not installed anywhere we recognize");
+            return;
+        }
+        let result = resolve_pandoc(None).await;
+        assert!(result.is_some(), "resolver should locate pandoc");
+        let (path, version) = result.unwrap();
+        assert!(!path.is_empty(), "resolved path empty");
+        assert!(
+            version.to_lowercase().contains("pandoc"),
+            "version line should mention pandoc: {version}"
+        );
+        eprintln!("resolve_pandoc(None) → {path} ({version})");
+    }
+
+    #[tokio::test]
+    async fn resolve_with_explicit_override_uses_override() {
+        // Pick whichever common location exists on this box.
+        let candidate = [
+            "/opt/homebrew/bin/pandoc",
+            "/usr/local/bin/pandoc",
+            "/usr/bin/pandoc",
+        ]
+        .iter()
+        .find(|p| std::path::Path::new(p).exists())
+        .map(|s| s.to_string());
+        let Some(path) = candidate else {
+            eprintln!("skipping: no pandoc at common paths");
+            return;
+        };
+        let result = resolve_pandoc(Some(&path)).await;
+        assert!(
+            result.is_some(),
+            "resolver should accept the explicit override"
+        );
+        let (resolved, _) = result.unwrap();
+        assert_eq!(resolved, path, "override should be used verbatim");
+    }
+
+    #[tokio::test]
+    async fn override_with_bad_path_falls_back_to_path_or_common() {
+        if !pandoc_anywhere_on_system() {
+            eprintln!("skipping: pandoc not installed");
+            return;
+        }
+        let result = resolve_pandoc(Some("/totally/nonexistent/pandoc-binary-xxxxx")).await;
+        assert!(
+            result.is_some(),
+            "broken override should fall back, not return None"
+        );
+        let (resolved, _) = result.unwrap();
+        assert_ne!(
+            resolved, "/totally/nonexistent/pandoc-binary-xxxxx",
+            "broken override path must NOT be returned"
+        );
+    }
+
+    #[tokio::test]
+    async fn empty_string_override_treated_as_none() {
+        if !pandoc_anywhere_on_system() {
+            return;
+        }
+        let with_empty = resolve_pandoc(Some("")).await;
+        let with_none = resolve_pandoc(None).await;
+        assert_eq!(
+            with_empty.is_some(),
+            with_none.is_some(),
+            "empty string should behave identically to None"
+        );
+    }
+
+    #[tokio::test]
+    async fn whitespace_override_treated_as_none() {
+        if !pandoc_anywhere_on_system() {
+            return;
+        }
+        let result = resolve_pandoc(Some("   ")).await;
+        assert!(
+            result.is_some(),
+            "whitespace-only override should fall through"
+        );
+    }
+
+    #[tokio::test]
+    async fn truly_missing_pandoc_returns_none() {
+        // Hard to truly remove pandoc from the test environment; instead
+        // exercise the negative path of `probe()` directly via an
+        // override we know doesn't exist, AND simulate "no pandoc on
+        // PATH" by relying on the bogus override falling through to
+        // PATH/common probing. Where we can't simulate (pandoc IS
+        // reachable), assert the structural property: the bad override
+        // alone never resolves to itself.
+        let bogus_only = probe("totally-nonexistent-pandoc-xyz").await;
+        assert!(bogus_only.is_none(), "probe of a fake binary must be None");
+    }
+}
+
 /// Run pandoc export. Honors the user's `pandoc_path` override.
 pub async fn run_pandoc(
     input_path: &Path,

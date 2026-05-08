@@ -129,6 +129,10 @@ const PLACEHOLDER_PATTERNS: RegExp[] = [
   /^Ch\.?\d+\.md$/,
   /^Part \d+\.md$/,
   /^\d+[-_. ]Untitled\.md$/,
+  // Date-prefixed Untitled with counter: `260508_Untitled 1.md`,
+  // `20260508-Untitled 12.md`, etc. The date portion belongs to the user;
+  // H1 auto-rename must replace the "Untitled N" portion only.
+  /^\d+[-_. ]Untitled \d+\.md$/,
   // Legacy: pre-v0.1.x timestamp-scratch naming. Kept so existing files in
   // user folders auto-rename on first save. Remove after v0.3.x.
   /^novelist_scratch_\d+\.md$/,
@@ -178,7 +182,11 @@ function familyMatcher(template: Template): RegExp {
   return new RegExp(`^${escapePrefix}([\\d\\u4e00-\\u9fff]+)${escapeSuffix}\\.md$`);
 }
 
-function detectFamily(filenames: string[], template: Template): FamilyMatch | null {
+function detectFamily(
+  filenames: string[],
+  template: Template,
+  maxValue?: number,
+): FamilyMatch | null {
   const re = familyMatcher(template);
   interface Match { value: number; style: NumberStyle; }
   const matches: Match[] = [];
@@ -188,7 +196,9 @@ function detectFamily(filenames: string[], template: Template): FamilyMatch | nu
     const stem = f.replace(/\.md$/, '');
     if (SKIP_TITLES.has(stem)) continue;
     const parsed = parseNumber(m[1]);
-    if (parsed) matches.push({ value: parsed.value, style: parsed.style });
+    if (!parsed) continue;
+    if (maxValue !== undefined && parsed.value > maxValue) continue;
+    matches.push({ value: parsed.value, style: parsed.style });
   }
   if (matches.length === 0) return null;
   // Dominant style = most common; tie-break by first occurrence
@@ -219,20 +229,35 @@ function detectFamily(filenames: string[], template: Template): FamilyMatch | nu
  * - Empty folder or nothing matches → render default template at N=1 with its natural style.
  * - Collision resolution: bump the number until free.
  */
-export function inferNextName(folderFiles: string[], userDefaultTemplate: Template): string {
-  const candidates: FamilyMatch[] = [];
+/**
+ * Plausibility cap for builtin family detection. Generic builtins like
+ * `{N}_{title}` would otherwise mis-interpret a date prefix like `260508` as a
+ * 260508-th chapter, then "increment" it to 260509 — producing files that
+ * advance by date instead of by N. The cap (chosen well above any plausible
+ * chapter count) keeps date-prefixed user templates working while still
+ * letting the builtins kick in for novels with hundreds or low thousands of
+ * chapters. The user's own template is never subject to this cap.
+ */
+const BUILTIN_FAMILY_MAX_VALUE = 9999;
 
-  // Built-in families: threshold 2
+export function inferNextName(folderFiles: string[], userDefaultTemplate: Template): string {
+  // User default: threshold 1, no plausibility cap (trusts user intent).
+  const userMatch = detectFamily(folderFiles, userDefaultTemplate);
+  if (userMatch && userMatch.numbers.length >= 1) {
+    const next = Math.max(...userMatch.numbers) + 1;
+    const style = userMatch.template.forceStyle ?? userMatch.style;
+    return bumpUntilFree(userMatch.template, next, style, folderFiles);
+  }
+
+  // Builtin families: threshold 2, plausibility cap to avoid treating date
+  // prefixes as chapter numbers.
+  const candidates: FamilyMatch[] = [];
   for (const tmplStr of BUILTIN_TEMPLATES) {
     const tmpl = parseTemplate(tmplStr);
     if (!tmpl) continue;
-    const m = detectFamily(folderFiles, tmpl);
+    const m = detectFamily(folderFiles, tmpl, BUILTIN_FAMILY_MAX_VALUE);
     if (m && m.numbers.length >= 2) candidates.push(m);
   }
-
-  // User default: threshold 1
-  const userMatch = detectFamily(folderFiles, userDefaultTemplate);
-  if (userMatch && userMatch.numbers.length >= 1) candidates.push(userMatch);
 
   if (candidates.length === 0) {
     // No recognizable pattern → render user default at N=1
@@ -298,6 +323,10 @@ function computeNewNameForPlaceholder(currentName: string, h1Stem: string): stri
   if (/^Untitled \d+\.md$/.test(currentName)) return `${h1Stem}.md`;
   // legacy scratch: replace whole stem
   if (/^novelist_scratch_\d+\.md$/.test(currentName)) return `${h1Stem}.md`;
+  // {date}<sep>Untitled <N>: keep the date prefix, drop the "Untitled N"
+  // suffix. e.g. `260508_Untitled 3.md` + `开篇` → `260508_开篇.md`.
+  const datedSlotMatch = /^(\d+[-_. ])Untitled \d+\.md$/.exec(currentName);
+  if (datedSlotMatch) return `${datedSlotMatch[1]}${h1Stem}.md`;
   // {N}<sep>Untitled with title slot: substitute "Untitled" with H1
   const slotMatch = /^(\d+[-_. ])Untitled\.md$/.exec(currentName);
   if (slotMatch) return `${slotMatch[1]}${h1Stem}.md`;

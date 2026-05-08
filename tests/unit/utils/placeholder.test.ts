@@ -208,6 +208,32 @@ describe('inferNextName', () => {
     expect(inferNextName(['Untitled 1.md', 'Untitled 2.md'], defaultTemplate))
       .toBe('Untitled 3.md');
   });
+
+  // Regression: a date-prefixed user template (e.g. `{date:YYMMDD}_{N}` resolved
+  // to `260508_{N}`) must not have the generic `{N}_{title}` builtin family
+  // misinterpret the date prefix as a chapter number — that would produce
+  // `260509_Untitled.md` instead of `260508_3.md`.
+  describe('date-prefixed user template — bug repro', () => {
+    it('user template wins over builtin {N}_{title} when both match (same day)', () => {
+      const t = parseTemplate('260508_{N}')!;
+      expect(inferNextName(['260508_1.md', '260508_2.md'], t)).toBe('260508_3.md');
+    });
+    it('cross-day: date-prefixed template gets fresh N=1 even with prior-day siblings', () => {
+      // May 9: user template resolved to `260509_{N}`, siblings only from May 8.
+      const t = parseTemplate('260509_{N}')!;
+      expect(inferNextName(['260508_1.md', '260508_2.md'], t)).toBe('260509_1.md');
+    });
+    it('user-renamed sibling with implausible date prefix does not derail today', () => {
+      const t = parseTemplate('260508_Untitled {N}')!;
+      // User has manually renamed an old file to a custom date — still in folder.
+      expect(inferNextName(['261225_Special.md'], t)).toBe('260508_Untitled 1.md');
+    });
+    it('{date}_Untitled {N} same-day increments N, not date', () => {
+      const t = parseTemplate('260508_Untitled {N}')!;
+      expect(inferNextName(['260508_Untitled 1.md', '260508_Untitled 2.md'], t))
+        .toBe('260508_Untitled 3.md');
+    });
+  });
 });
 
 describe('renameFromH1', () => {
@@ -239,6 +265,12 @@ describe('renameFromH1', () => {
   it('collision bumps with " 2"', () => {
     expect(renameFromH1('Untitled 1.md', '开篇', ['开篇.md'])).toBe('开篇 2.md');
     expect(renameFromH1('Untitled 1.md', '开篇', ['开篇.md', '开篇 2.md'])).toBe('开篇 3.md');
+  });
+  it('260508_Untitled 1.md + 开篇 → 260508_开篇.md (date prefix preserved)', () => {
+    expect(renameFromH1('260508_Untitled 1.md', '开篇', [])).toBe('260508_开篇.md');
+  });
+  it('20260508-Untitled 3.md + Opening → 20260508-Opening.md', () => {
+    expect(renameFromH1('20260508-Untitled 3.md', 'Opening', [])).toBe('20260508-Opening.md');
   });
   it('non-placeholder returns null even with a fresh H1 (body H1 must not rename)', () => {
     // Once the file has a real name, typing more H1s in the body must not
