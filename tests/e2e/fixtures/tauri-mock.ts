@@ -487,6 +487,9 @@ export function buildTauriMockScript(config: TauriMockConfig): string {
             files.push({ ...f, mtime: f.mtime != null ? f.mtime : nowTs });
           }
         },
+        seedFileContents(map) {
+          for (const k of Object.keys(map || {})) fileContents[k] = map[k];
+        },
         renameFile(oldPath, newPath) {
           const f = files.find(x => x.path === oldPath);
           if (!f) return;
