@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { open as shellOpen } from '@tauri-apps/plugin-shell';
   import { commands, type ChannelConfig, type PlatformConfig } from '$lib/ipc/commands';
   import { dispatchPublish, toPlatformConfig, type DialogPayload } from '$lib/services/publish';
   import { t } from '$lib/i18n';
@@ -234,8 +235,16 @@
     }
   }
 
-  function openInBrowser() {
-    if (successUrl) window.open(successUrl, '_blank');
+  async function openInBrowser() {
+    // `window.open` no-ops inside the Tauri WKWebView. Route through the
+    // shell plugin so the system browser handles the URL.
+    if (!successUrl) return;
+    try {
+      await shellOpen(successUrl);
+    } catch (e) {
+      console.error('[publish] shell.open failed:', e);
+      errorMessage = e instanceof Error ? e.message : String(e);
+    }
   }
 </script>
 

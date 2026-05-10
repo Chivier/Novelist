@@ -2,6 +2,7 @@ import { ViewPlugin, Decoration, type DecorationSet, EditorView, type ViewUpdate
 import { syntaxTree } from '@codemirror/language';
 import { type EditorState, type Extension, type Range, StateField } from '@codemirror/state';
 import { invoke } from '@tauri-apps/api/core';
+import { open as shellOpen } from '@tauri-apps/plugin-shell';
 import { imeComposingField } from './ime-guard';
 
 function uint8ToBase64(bytes: Uint8Array): string {
@@ -191,7 +192,8 @@ class ImageContextMenu {
       items.push({
         label: 'Open in Browser',
         action: () => {
-          window.open(this.imgSrc, '_blank');
+          // Tauri WKWebView blocks `window.open`; route through the shell plugin.
+          shellOpen(this.imgSrc).catch(e => console.error('[editor] shell.open failed:', e));
           this.destroy();
         },
       });
@@ -1056,7 +1058,8 @@ export const linkClickPlugin = EditorView.domEventHandlers({
       if (!/^https?:\/\//i.test(url)) {
         url = 'https://' + url;
       }
-      window.open(url, '_blank');
+      // Tauri WKWebView blocks `window.open`; route through the shell plugin.
+      shellOpen(url).catch(e => console.error('[editor] shell.open failed:', e));
       event.preventDefault();
       return true;
     }

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { open as shellOpen } from '@tauri-apps/plugin-shell';
   import { commands, type ChannelConfig, type PandocStatus, type PlatformConfig, type PublishSettings } from '$lib/ipc/commands';
   import { t } from '$lib/i18n';
 
@@ -44,8 +45,13 @@
     pandocSavingOverride = false;
   }
 
-  function openPandocInstallPage() {
-    window.open('https://pandoc.org/installing.html', '_blank');
+  async function openPandocInstallPage() {
+    // Tauri WKWebView blocks `window.open`; route through the shell plugin.
+    try {
+      await shellOpen('https://pandoc.org/installing.html');
+    } catch (e) {
+      console.error('[settings] shell.open failed:', e);
+    }
   }
 
   onMount(async () => {
