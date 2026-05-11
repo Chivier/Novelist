@@ -118,6 +118,23 @@ sm.ms 或自定义 HTTP 接口），并直接发布到 Ghost / WordPress / Mediu
   autocomplete, redesigned pill-grid tag picker, native clipboard
   read, Test button that actually hits the platform, edit button +
   secret-reveal in the credential rows, fully localized.
+- **`{title}`-only filename template** — new-file template now
+  accepts `{title}` without a `{N}` counter slot (renders
+  `Untitled.md` initially, then `Untitled 2.md`, `Untitled 3.md`
+  on collision; H1 auto-rename replaces the whole stem). Typo
+  tokens like `{cN}` or `{Title}` are still rejected so a misspelt
+  placeholder doesn't silently become literal text.
+- **Sort sidebar by creation time** — Sidebar view menu adds
+  *Created (newest)* / *创建时间（最新）* and *Created (oldest)* /
+  *创建时间（最早）* alongside the existing modified-time options.
+  Filesystems that don't expose birth time fall back to mtime.
+- **Command-palette shortcut chip uses the UI font** so Apple
+  shortcut symbols (⇧⌘⌥⌃) render with the same stroke weight as
+  the letter next to them.
+- **Settings checkbox rows align with the first text line** —
+  the wrap-filenames, detect-from-folder, and auto-rename rows
+  in Settings → Editor previously floated their checkbox above
+  the label baseline; they now line up.
 
 ### Fixed
 
