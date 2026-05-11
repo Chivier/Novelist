@@ -34,12 +34,24 @@ describe('compareByMode — numeric-asc', () => {
   it('orders chinese chapters numerically', () => {
     expect(sortNames(
       [
+        { name: '第十一章.md', is_dir: false },
+        { name: '第九章.md', is_dir: false },
         { name: '第十章.md', is_dir: false },
         { name: '第二章.md', is_dir: false },
         { name: '第一章.md', is_dir: false },
       ],
       'numeric-asc'
-    )).toEqual(['第一章.md', '第二章.md', '第十章.md']);
+    )).toEqual(['第一章.md', '第二章.md', '第九章.md', '第十章.md', '第十一章.md']);
+  });
+  it('extracts the leftmost CJK numeral run instead of parsing the whole Chinese stem', () => {
+    expect(sortNames(
+      [
+        { name: '第十章终稿.md', is_dir: false },
+        { name: '第二章终稿.md', is_dir: false },
+        { name: '第一章终稿.md', is_dir: false },
+      ],
+      'numeric-asc'
+    )).toEqual(['第一章终稿.md', '第二章终稿.md', '第十章终稿.md']);
   });
   it('orders arabic prefixes numerically', () => {
     expect(sortNames(
