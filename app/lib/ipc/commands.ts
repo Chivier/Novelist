@@ -282,6 +282,9 @@ export type FileEntry = {
 	size: number,
 	// Unix epoch milliseconds; None when filesystem doesn't expose mtime.
 	mtime: number | null,
+	// Unix epoch milliseconds for filesystem creation/birth time. None on
+	// platforms or filesystems that don't expose it.
+	ctime: number | null,
 };
 
 export type OutlineConfig = {

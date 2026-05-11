@@ -6,12 +6,15 @@ export type SortMode =
   | 'numeric-asc'
   | 'numeric-desc'
   | 'mtime-desc'
-  | 'mtime-asc';
+  | 'mtime-asc'
+  | 'ctime-desc'
+  | 'ctime-asc';
 
 export interface SortableEntry {
   name: string;
   is_dir: boolean;
   mtime?: number | null;
+  ctime?: number | null;
 }
 
 /**
@@ -64,5 +67,7 @@ export function compareByMode(a: SortableEntry, b: SortableEntry, mode: SortMode
     case 'numeric-desc': return -compareNumeric(a, b);
     case 'mtime-desc': return (b.mtime ?? 0) - (a.mtime ?? 0);
     case 'mtime-asc': return (a.mtime ?? 0) - (b.mtime ?? 0);
+    case 'ctime-desc': return (b.ctime ?? b.mtime ?? 0) - (a.ctime ?? a.mtime ?? 0);
+    case 'ctime-asc': return (a.ctime ?? a.mtime ?? 0) - (b.ctime ?? b.mtime ?? 0);
   }
 }

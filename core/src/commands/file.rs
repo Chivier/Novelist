@@ -362,12 +362,18 @@ pub async fn list_directory(
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|d| d.as_millis() as i64);
+        let ctime = metadata
+            .created()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as i64);
         entries.push(FileEntry {
             name,
             path: entry.path().to_string_lossy().to_string(),
             is_dir: metadata.is_dir(),
             size: metadata.len(),
             mtime,
+            ctime,
         });
     }
 

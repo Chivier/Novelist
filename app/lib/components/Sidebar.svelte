@@ -28,6 +28,8 @@
     { id: 'name-desc', labelKey: 'sidebar.sort.nameDesc' },
     { id: 'mtime-desc', labelKey: 'sidebar.sort.mtimeDesc' },
     { id: 'mtime-asc', labelKey: 'sidebar.sort.mtimeAsc' },
+    { id: 'ctime-desc', labelKey: 'sidebar.sort.ctimeDesc' },
+    { id: 'ctime-asc', labelKey: 'sidebar.sort.ctimeAsc' },
   ];
 
   function selectSort(mode: SortMode) {

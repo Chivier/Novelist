@@ -5,7 +5,10 @@ import { settingsStore } from '$lib/stores/settings.svelte';
 import { pathBasename } from '$lib/utils/path';
 
 const VALID_SORT_MODES: readonly SortMode[] = [
-  'name-asc', 'name-desc', 'numeric-asc', 'numeric-desc', 'mtime-asc', 'mtime-desc',
+  'name-asc', 'name-desc',
+  'numeric-asc', 'numeric-desc',
+  'mtime-asc', 'mtime-desc',
+  'ctime-asc', 'ctime-desc',
 ];
 
 function coerceSortMode(value: string): SortMode {

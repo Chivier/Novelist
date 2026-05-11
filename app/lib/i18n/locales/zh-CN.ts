@@ -47,6 +47,8 @@ export const zhCN: TranslationMap = {
   'sidebar.sort.numericDesc': '编号（N \u2192 1）',
   'sidebar.sort.mtimeDesc': '修改时间（最新）',
   'sidebar.sort.mtimeAsc': '修改时间（最早）',
+  'sidebar.sort.ctimeDesc': '创建时间（最新）',
+  'sidebar.sort.ctimeAsc': '创建时间（最早）',
   'sidebar.view.showHidden': '显示隐藏文件',
   'sidebar.view.hideHidden': '隐藏文件',
   'sidebar.menu.newFile': '新建文件',

@@ -47,6 +47,8 @@ export const en: TranslationMap = {
   'sidebar.sort.numericDesc': 'Number (N \u2192 1)',
   'sidebar.sort.mtimeDesc': 'Modified (newest)',
   'sidebar.sort.mtimeAsc': 'Modified (oldest)',
+  'sidebar.sort.ctimeDesc': 'Created (newest)',
+  'sidebar.sort.ctimeAsc': 'Created (oldest)',
   'sidebar.view.showHidden': 'Show hidden files',
   'sidebar.view.hideHidden': 'Hide hidden files',
   'sidebar.menu.newFile': 'New File',
