@@ -5,7 +5,7 @@ All notable changes to Novelist will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.4] - 2026-05-06
+## [0.2.4] - 2026-05-11
 
 Major release adding **image hosting** and **publishing** — Novelist
 can now upload images to your CDN of choice and push the active
@@ -91,12 +91,79 @@ sm.ms 或自定义 HTTP 接口），并直接发布到 Ghost / WordPress / Mediu
   user find "Toggle Outline" by typing either *outline* or *大纲*.
 - **Double-click to rename** in the file tree — double-clicking a file
   row in the sidebar opens inline rename. Folder double-click still
-  toggles expansion.
+  toggles expansion. Rename input now renders inline under the
+  renamed node (previously rendered at the top of the sidebar).
 - **Right-side panel shortcuts moved to Cmd+Shift+1/2/3/4** — outline,
   draft, snapshot, stats. Easier chord than Cmd+Alt. Note: macOS users
   may need to disable system screenshot shortcuts (Cmd+Shift+3/4) for
   4-position behavior. Toggle-template stays on Cmd+Alt+5 (Cmd+Shift+5
   is the macOS screenshot toolbar).
+- **Drag files from the sidebar into a pane or split-right zone** —
+  while dragging a leaf node the editor area shows two drop overlays
+  (the active pane + a right-edge "split right" gutter); dropping
+  opens the file in that pane. Tab bars accept the same payload.
+- **Wrap long file names** — new Settings → Editor toggle keeps long
+  file names on multiple lines instead of truncating to an ellipsis.
+- **Edge-mounted sidebar toggle** — collapse/reopen the sidebar from a
+  small ◁ / ▷ button on the resize handle, in addition to the
+  existing keyboard shortcut.
+- **Editor max-width is a slider + numeric input** (480–9999px)
+  instead of a fixed dropdown.
+- **Filename macros for new files** — `{yyyy}`, `{mm}`, `{dd}`,
+  `{HH}`, `{MM}`, `{ss}` are expanded in the new-file template,
+  with live previews under the setting.
+- **Searchable Settings dialog** — top filter narrows visible panels
+  and rows by label, hint, or keyword (Chinese aliases included).
+- **Publish dialog polish** — paste-from-clipboard, Ghost tag
+  autocomplete, redesigned pill-grid tag picker, native clipboard
+  read, Test button that actually hits the platform, edit button +
+  secret-reveal in the credential rows, fully localized.
+
+### Fixed
+
+- **Numeric sidebar sort orders 第九 < 第十 < 第十一** and no
+  longer misplaces files whose Chinese number is followed by extra
+  characters like `第十章终稿.md`.
+- **In-project search is now Unicode case-insensitive** and emits
+  UTF-16 offsets, so highlights land on the right glyphs for CJK
+  and Latin-with-diacritic queries; empty queries short-circuit
+  instead of scanning the project.
+- **File watcher refreshes the right parent on rename / delete**
+  on Windows + macOS, emitting a separate `directory-changed`
+  event and polling every 15s so the sidebar doesn't keep ghost
+  rows around after a rename done in another window or by an
+  external tool. `.canvas` and `.kanban` files now open via the
+  same external open-file path as Markdown.
+- **Plain folders without `.novelist/project.toml`** stay
+  global-scoped — previously the app tried to write view settings
+  into folders it had no project file in.
+- **Save (Cmd+S) on a clean tab still runs the H1 → file-name
+  auto-rename check** when no edits since the last save introduced
+  a new H1.
+- **External links open via tauri-plugin-shell** instead of the
+  default WebKit navigation, so they actually open in the
+  system browser.
+- **Pandoc auto-discovery + user override** — no longer relies on
+  the previously-bundled Pandoc binary; falls back to PATH probing
+  with a manual override in Settings → Editor.
+
+### Security
+
+- **Template zip import** is now done via the `zip` crate (instead
+  of shelling out to `unzip`), rejects symlinks, NUL bytes,
+  path-traversal entries, and caps the archive at 2048 entries /
+  50 MiB uncompressed. Template ids are validated to
+  `[a-z0-9-]{1,96}` before they reach the filesystem.
+- **WebDAV sync** validates remote file paths before downloading —
+  absolute paths, `..` components, and dotfile-prefixed components
+  are rejected, so a hostile server can't write above the project
+  root.
+
+### Platform
+
+- **macOS bundle declares `CFBundleLocalizations` for `en` and
+  `zh-Hans`** via the newly bundled `core/Info.plist`, so Chinese
+  users get localized application menus and system dialogs.
 
 ### Removed
 
