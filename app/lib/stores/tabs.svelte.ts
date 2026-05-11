@@ -6,6 +6,7 @@ import { isPlaceholder, renameFromH1 } from '$lib/utils/placeholder';
 import { extractFirstH1 } from '$lib/utils/h1';
 import { newFileSettings } from '$lib/stores/new-file-settings.svelte';
 import { t } from '$lib/i18n';
+import { pathBasename, pathDirname } from '$lib/utils/path';
 import type { EditorView } from '@codemirror/view';
 
 interface TabState {
@@ -174,7 +175,7 @@ class TabsStore {
 
   /** Update filePath and fileName for ALL tabs across ALL panes that match `oldPath`. */
   updatePath(oldPath: string, newPath: string) {
-    const newName = newPath.split('/').pop() || newPath;
+    const newName = pathBasename(newPath) || newPath;
     for (const pane of this.panes) {
       for (const tab of pane.tabs) {
         if (tab.filePath === oldPath) {
@@ -199,13 +200,12 @@ class TabsStore {
   async tryRenameAfterSave(filePath: string, content: string): Promise<string> {
     if (!newFileSettings.autoRenameFromH1) return filePath;
 
-    const fileName = filePath.split('/').pop() || filePath;
+    const fileName = pathBasename(filePath) || filePath;
     if (!isPlaceholder(fileName)) return filePath;
     const h1 = extractFirstH1(content);
     if (!h1 || h1.trim().length === 0) return filePath;
 
-    const lastSlash = filePath.lastIndexOf('/');
-    const parentDir = lastSlash > 0 ? filePath.slice(0, lastSlash) : filePath;
+    const parentDir = pathDirname(filePath) || filePath;
 
     // Re-list to get current siblings for collision check
     const list = await commands.listDirectory(parentDir, null);
@@ -233,7 +233,7 @@ class TabsStore {
     const existing = pane.tabs.find(t => t.filePath === filePath);
     if (existing) { pane.activeTabId = existing.id; return; }
 
-    const rawName = filePath.split('/').pop() || filePath;
+    const rawName = pathBasename(filePath) || filePath;
     const fileName = isScratchFile(filePath) ? nextScratchDisplayName() : rawName;
     const id = crypto.randomUUID();
     pane.tabs.push({
@@ -257,7 +257,7 @@ class TabsStore {
     const existing = pane.tabs.find(t => t.filePath === filePath);
     if (existing) { pane.activeTabId = existing.id; return; }
 
-    const fileName = filePath.split('/').pop() || filePath;
+    const fileName = pathBasename(filePath) || filePath;
     const id = crypto.randomUUID();
     pane.tabs.push({
       id,
@@ -426,7 +426,7 @@ class TabsStore {
       const tab = pane.tabs.find(t => t.id === id);
       if (tab) {
         tab.filePath = newPath;
-        tab.fileName = newPath.split('/').pop() || newPath;
+        tab.fileName = pathBasename(newPath) || newPath;
         return;
       }
     }
