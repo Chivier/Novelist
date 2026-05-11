@@ -4,7 +4,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::time::SystemTime;
 
 #[derive(Serialize, Deserialize, Clone, Type, Debug)]
@@ -104,6 +104,24 @@ fn is_syncable(path: &Path) -> bool {
         path.extension().and_then(|e| e.to_str()),
         Some("md" | "markdown" | "txt" | "json" | "jsonl" | "csv")
     )
+}
+
+fn is_safe_relative_sync_path(path: &str) -> bool {
+    if path.trim().is_empty() || path.contains('\0') {
+        return false;
+    }
+    let path = Path::new(path);
+    if path.is_absolute() {
+        return false;
+    }
+    path.components().all(|component| match component {
+        Component::Normal(part) => {
+            let name = part.to_string_lossy();
+            !name.is_empty() && !name.starts_with('.')
+        }
+        Component::CurDir => true,
+        Component::ParentDir | Component::RootDir | Component::Prefix(_) => false,
+    })
 }
 
 /// Collect local syncable files with their modification timestamps (seconds since epoch)
@@ -212,6 +230,9 @@ fn build_remote_file_map(entries: &[DavEntry], base_href: &str) -> HashMap<Strin
         }
         // Percent-decode the relative path
         let decoded = percent_decode(relative);
+        if !is_safe_relative_sync_path(&decoded) || !is_syncable(Path::new(&decoded)) {
+            continue;
+        }
         let mod_time = entry
             .last_modified
             .as_deref()
@@ -393,9 +414,7 @@ pub async fn perform_sync(project_dir: &str) -> Result<SyncStatus, AppError> {
     // 2. Files that exist only on remote -> download
     for rel_path in remote_files.keys() {
         if !local_files.contains_key(rel_path) {
-            // Check if it's a syncable extension
-            let p = Path::new(rel_path);
-            if !is_syncable(p) {
+            if !is_safe_relative_sync_path(rel_path) || !is_syncable(Path::new(rel_path)) {
                 continue;
             }
             let local_path = project_path.join(rel_path);
@@ -623,6 +642,35 @@ mod tests {
         }];
         let map = build_remote_file_map(&entries, "/novelist/project");
         assert!(map.contains_key("chapter1.md"));
+    }
+
+    #[test]
+    fn test_build_remote_file_map_rejects_unsafe_paths() {
+        let entries = vec![
+            DavEntry {
+                href: "/novelist/project/../escape.md".to_string(),
+                last_modified: Some("Thu, 01 Jan 1970 00:00:00 GMT".to_string()),
+                content_length: Some(1),
+                is_collection: false,
+            },
+            DavEntry {
+                href: "/novelist/project/.hidden.md".to_string(),
+                last_modified: Some("Thu, 01 Jan 1970 00:00:00 GMT".to_string()),
+                content_length: Some(1),
+                is_collection: false,
+            },
+            DavEntry {
+                href: "/novelist/project/safe.md".to_string(),
+                last_modified: Some("Thu, 01 Jan 1970 00:00:00 GMT".to_string()),
+                content_length: Some(1),
+                is_collection: false,
+            },
+        ];
+
+        let map = build_remote_file_map(&entries, "/novelist/project");
+
+        assert_eq!(map.len(), 1);
+        assert!(map.contains_key("safe.md"));
     }
 
     #[test]

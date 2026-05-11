@@ -1,7 +1,14 @@
 use crate::error::AppError;
 use crate::models::template::{TemplateInfo, TemplateMeta};
 use crate::services::template_scaffold::{self, ScaffoldLocale};
+use std::fs::File;
+use std::io;
 use std::path::{Path, PathBuf};
+use zip::ZipArchive;
+
+const MAX_TEMPLATE_ZIP_ENTRIES: usize = 2048;
+const MAX_TEMPLATE_ZIP_UNCOMPRESSED_BYTES: u64 = 50 * 1024 * 1024;
+const TEMPLATE_ID_MAX_LEN: usize = 96;
 
 /// Returns the base directory for user templates: ~/.novelist/templates/
 ///
@@ -76,6 +83,36 @@ fn builtin_templates() -> Vec<TemplateInfo> {
             builtin: true,
         },
     ]
+}
+
+fn normalize_template_id(raw: &str) -> Result<String, AppError> {
+    let id = raw
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '-' })
+        .collect::<String>();
+    let id = id.trim_matches('-').to_string();
+    validate_template_id(&id)?;
+    Ok(id)
+}
+
+fn validate_template_id(id: &str) -> Result<(), AppError> {
+    if id.is_empty() || id.len() > TEMPLATE_ID_MAX_LEN {
+        return Err(AppError::InvalidInput(format!(
+            "Invalid template id: {}",
+            id
+        )));
+    }
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    {
+        return Err(AppError::InvalidInput(format!(
+            "Invalid template id: {}",
+            id
+        )));
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -270,6 +307,77 @@ fn copy_template_files(tpl_dir: &Path, dest: &Path) -> Result<(), AppError> {
     Ok(())
 }
 
+fn zip_err(e: zip::result::ZipError) -> AppError {
+    AppError::Custom(format!("Invalid template zip: {e}"))
+}
+
+fn unique_template_import_tmp_dir() -> PathBuf {
+    std::env::temp_dir().join(format!(
+        "novelist-import-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ))
+}
+
+fn extract_template_zip(zip_file: &Path, tmp_dir: &Path) -> Result<(), AppError> {
+    let file = File::open(zip_file)?;
+    let mut archive = ZipArchive::new(file).map_err(zip_err)?;
+    if archive.len() > MAX_TEMPLATE_ZIP_ENTRIES {
+        return Err(AppError::InvalidInput(format!(
+            "Template zip has too many entries: {}",
+            archive.len()
+        )));
+    }
+
+    let mut total_uncompressed = 0u64;
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i).map_err(zip_err)?;
+        if entry.name().contains('\0') || entry.enclosed_name().is_none() {
+            return Err(AppError::InvalidInput(format!(
+                "Template zip contains unsafe path: {}",
+                entry.name()
+            )));
+        }
+        if entry.is_symlink() {
+            return Err(AppError::InvalidInput(format!(
+                "Template zip contains unsupported symlink: {}",
+                entry.name()
+            )));
+        }
+
+        total_uncompressed = total_uncompressed.saturating_add(entry.size());
+        if total_uncompressed > MAX_TEMPLATE_ZIP_UNCOMPRESSED_BYTES {
+            return Err(AppError::InvalidInput(
+                "Template zip is too large after extraction".into(),
+            ));
+        }
+
+        let relative = entry.enclosed_name().ok_or_else(|| {
+            AppError::InvalidInput(format!(
+                "Template zip contains unsafe path: {}",
+                entry.name()
+            ))
+        })?;
+        let outpath = tmp_dir.join(relative);
+
+        if entry.is_dir() {
+            std::fs::create_dir_all(&outpath)?;
+            continue;
+        }
+
+        if let Some(parent) = outpath.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let mut outfile = File::create(&outpath)?;
+        io::copy(&mut entry, &mut outfile)?;
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn save_project_as_template(
@@ -284,16 +392,7 @@ pub async fn save_project_as_template(
         ));
     }
 
-    // Generate ID from name
-    let id = template_name
-        .to_lowercase()
-        .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '-' })
-        .collect::<String>();
-    let id = id.trim_matches('-').to_string();
-    if id.is_empty() {
-        return Err(AppError::InvalidInput("Template name is empty".into()));
-    }
+    let id = normalize_template_id(&template_name)?;
 
     let tpl_dir = templates_dir()?.join(&id);
     if tpl_dir.exists() {
@@ -347,6 +446,7 @@ pub async fn save_project_as_template(
 #[tauri::command]
 #[specta::specta]
 pub async fn delete_template(template_id: String) -> Result<(), AppError> {
+    validate_template_id(&template_id)?;
     let tpl_dir = templates_dir()?.join(&template_id);
     if !tpl_dir.exists() {
         return Err(AppError::FileNotFound(format!(
@@ -372,24 +472,13 @@ pub async fn import_template_zip(zip_path: String) -> Result<TemplateInfo, AppEr
         .and_then(|s| s.to_str())
         .unwrap_or("imported");
 
-    // Create a temp dir, extract, then move to templates
-    let tmp_dir = std::env::temp_dir().join(format!("novelist-import-{}", std::process::id()));
+    // Create a unique temp dir, extract safely, then copy to templates.
+    let tmp_dir = unique_template_import_tmp_dir();
     std::fs::create_dir_all(&tmp_dir)?;
 
-    // Extract zip using system unzip command
-    let output = std::process::Command::new("unzip")
-        .arg("-o")
-        .arg(zip_file)
-        .arg("-d")
-        .arg(&tmp_dir)
-        .output()?;
-
-    if !output.status.success() {
+    if let Err(e) = extract_template_zip(zip_file, &tmp_dir) {
         let _ = std::fs::remove_dir_all(&tmp_dir);
-        return Err(AppError::Custom(format!(
-            "Failed to extract zip: {}",
-            String::from_utf8_lossy(&output.stderr)
-        )));
+        return Err(e);
     }
 
     // Find the actual content root (might be nested in a single directory)
@@ -402,14 +491,11 @@ pub async fn import_template_zip(zip_path: String) -> Result<TemplateInfo, AppEr
     let (id, name, description, category) = if meta_path.exists() {
         let content = std::fs::read_to_string(&meta_path)?;
         let meta: TemplateMeta = toml::from_str(&content)?;
+        validate_template_id(&meta.id)?;
         (meta.id, meta.name, meta.description, meta.category)
     } else if novelist_dir.exists() {
         // No template.toml but has .novelist — use zip stem as name
-        let id = stem
-            .to_lowercase()
-            .chars()
-            .map(|c| if c.is_alphanumeric() { c } else { '-' })
-            .collect::<String>();
+        let id = normalize_template_id(stem)?;
         (id, stem.to_string(), String::new(), "custom".to_string())
     } else {
         let _ = std::fs::remove_dir_all(&tmp_dir);
@@ -474,7 +560,9 @@ fn find_content_root(dir: &Path) -> Result<PathBuf, AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
     use tempfile::TempDir;
+    use zip::write::SimpleFileOptions;
 
     #[tokio::test]
     #[serial_test::serial(templates_dir)]
@@ -748,6 +836,102 @@ mod tests {
         let result =
             create_project_from_template("blank".into(), "Dup".into(), parent, "en".into()).await;
         assert!(result.is_err());
+    }
+
+    fn write_test_zip(path: &Path, files: &[(&str, &str)]) {
+        let file = std::fs::File::create(path).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let options = SimpleFileOptions::default();
+        for (name, content) in files {
+            zip.start_file(*name, options).unwrap();
+            zip.write_all(content.as_bytes()).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+
+    #[tokio::test]
+    #[serial_test::serial(templates_dir)]
+    async fn test_import_template_zip() {
+        let _guard = IsolatedTemplatesDir::new();
+        let dir = TempDir::new().unwrap();
+        let zip_path = dir.path().join("Imported.zip");
+        write_test_zip(
+            &zip_path,
+            &[
+                (
+                    "template.toml",
+                    "id = \"imported\"\nname = \"Imported\"\ndescription = \"\"\ncategory = \"custom\"\n",
+                ),
+                (".novelist/project.toml", "[project]\nname = \"Imported\"\n"),
+                ("chapter.md", "# Chapter\n"),
+            ],
+        );
+
+        let info = import_template_zip(zip_path.to_string_lossy().to_string())
+            .await
+            .unwrap();
+
+        assert_eq!(info.id, "imported");
+        assert!(templates_dir()
+            .unwrap()
+            .join("imported")
+            .join("chapter.md")
+            .exists());
+    }
+
+    #[tokio::test]
+    #[serial_test::serial(templates_dir)]
+    async fn test_import_template_zip_rejects_unsafe_template_id() {
+        let _guard = IsolatedTemplatesDir::new();
+        let dir = TempDir::new().unwrap();
+        let zip_path = dir.path().join("Unsafe.zip");
+        write_test_zip(
+            &zip_path,
+            &[
+                (
+                    "template.toml",
+                    "id = \"../escape\"\nname = \"Unsafe\"\ndescription = \"\"\ncategory = \"custom\"\n",
+                ),
+                (".novelist/project.toml", "[project]\nname = \"Unsafe\"\n"),
+            ],
+        );
+
+        let err = import_template_zip(zip_path.to_string_lossy().to_string())
+            .await
+            .unwrap_err();
+
+        assert!(err.to_string().contains("Invalid template id"));
+        assert!(!templates_dir().unwrap().join("escape").exists());
+    }
+
+    #[tokio::test]
+    #[serial_test::serial(templates_dir)]
+    async fn test_delete_template_rejects_path_traversal_id() {
+        let _guard = IsolatedTemplatesDir::new();
+
+        let err = delete_template("../escape".into()).await.unwrap_err();
+
+        assert!(err.to_string().contains("Invalid template id"));
+    }
+
+    #[test]
+    fn test_extract_template_zip_rejects_unsafe_path() {
+        let dir = TempDir::new().unwrap();
+        let zip_path = dir.path().join("unsafe.zip");
+        write_test_zip(
+            &zip_path,
+            &[
+                ("template.toml", "id = \"unsafe\"\nname = \"Unsafe\"\n"),
+                ("../escape.md", "nope"),
+            ],
+        );
+        let out_dir = dir.path().join("out");
+        std::fs::create_dir(&out_dir).unwrap();
+
+        let err = extract_template_zip(&zip_path, &out_dir).unwrap_err();
+
+        assert!(err.to_string().contains("unsafe path"));
+        assert!(!dir.path().join("escape.md").exists());
     }
 
     /// RAII guard: redirect `templates_dir()` to a fresh TempDir for the
