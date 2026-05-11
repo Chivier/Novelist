@@ -6,6 +6,8 @@ export const en: TranslationMap = {
   'app.subtitle': 'A desktop writing app for novelists',
   'app.openFolder': 'Open a folder to get started',
   'app.openFile': 'Open a file in this pane',
+  'pane.drop.openHere': 'Open in this pane',
+  'pane.drop.splitRight': 'Split right',
 
   // --- Welcome ---
   'welcome.recentProjects': 'Recent Projects',
@@ -407,6 +409,8 @@ export const en: TranslationMap = {
 
   'settings.highlightMatches': 'Highlight Matching Words',
   'settings.renderImages': 'Render Image Previews',
+  'settings.sidebar.wrapFileNames': 'Wrap sidebar file names',
+  'settings.sidebar.wrapFileNamesHint': 'Show long names on multiple lines instead of truncating them.',
   'settings.on': 'On',
   'settings.off': 'Off',
 

@@ -23,7 +23,7 @@ import { settingsStore } from '$lib/stores/settings.svelte';
 import { commands } from '$lib/ipc/commands';
 
 const DEFAULT_EFFECTIVE = {
-  view: { sort_mode: 'numeric-asc', show_hidden_files: false },
+  view: { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: false },
   new_file: {
     template: 'Untitled {N}',
     detect_from_folder: true,
@@ -51,7 +51,7 @@ describe('[contract] settingsStore.load', () => {
       status: 'ok',
       data: {
         ...DEFAULT_EFFECTIVE,
-        view: { sort_mode: 'name-desc', show_hidden_files: true },
+        view: { sort_mode: 'name-desc', show_hidden_files: true, wrap_file_names: false },
         is_project_scoped: true,
       },
     });
@@ -62,6 +62,20 @@ describe('[contract] settingsStore.load', () => {
     expect(settingsStore.effective.view.show_hidden_files).toBe(true);
     expect(settingsStore.effective.is_project_scoped).toBe(true);
     expect(settingsStore.isProjectScoped).toBe(true);
+  });
+
+  it('treats an opened plain folder without project.toml as global-scoped settings', async () => {
+    (commands.getEffectiveSettings as any).mockResolvedValue({
+      status: 'ok',
+      data: {
+        ...DEFAULT_EFFECTIVE,
+        is_project_scoped: false,
+      },
+    });
+
+    await settingsStore.load('/plain-folder');
+
+    expect(settingsStore.isProjectScoped).toBe(false);
   });
 
   it('falls back to defaults + logs error when IPC returns error', async () => {
@@ -109,7 +123,7 @@ describe('[contract] settingsStore.load — migration from localStorage', () => 
 
     expect(commands.writeProjectSettings).toHaveBeenCalledWith(
       '/proj',
-      { sort_mode: 'name-desc', show_hidden_files: null },
+      { sort_mode: 'name-desc', show_hidden_files: null, wrap_file_names: null },
       null,
       null,
     );
@@ -212,19 +226,55 @@ describe('[contract] settingsStore.writeView', () => {
 
     await settingsStore.writeView({ sort_mode: 'name-asc' });
 
-    expect(commands.writeGlobalSettings).toHaveBeenCalled();
+    expect(commands.writeGlobalSettings).toHaveBeenCalledWith(
+      { sort_mode: 'name-asc', show_hidden_files: false, wrap_file_names: false },
+      null,
+      null,
+    );
     expect(commands.writeProjectSettings).not.toHaveBeenCalled();
     expect(settingsStore.effective.view.sort_mode).toBe('name-asc');
   });
 
-  it('routes to writeProjectSettings when a project is open', async () => {
+  it('persists sidebar filename wrapping with the rest of the view config', async () => {
+    (commands.writeGlobalSettings as any).mockResolvedValue({ status: 'ok', data: null });
+
+    await settingsStore.writeView({ wrap_file_names: true });
+
+    expect(commands.writeGlobalSettings).toHaveBeenCalledWith(
+      { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: true },
+      null,
+      null,
+    );
+    expect(settingsStore.effective.view.wrap_file_names).toBe(true);
+  });
+
+  it('routes to writeProjectSettings when a Novelist project is open', async () => {
     (settingsStore as any).dirPath = '/proj';
+    settingsStore.effective = {
+      ...settingsStore.effective,
+      is_project_scoped: true,
+    };
     (commands.writeProjectSettings as any).mockResolvedValue({ status: 'ok', data: null });
 
     await settingsStore.writeView({ show_hidden_files: true });
 
     expect(commands.writeProjectSettings).toHaveBeenCalled();
     expect(settingsStore.effective.view.show_hidden_files).toBe(true);
+  });
+
+  it('routes to writeGlobalSettings for an opened plain folder without project.toml', async () => {
+    (settingsStore as any).dirPath = '/plain-folder';
+    settingsStore.effective = {
+      ...settingsStore.effective,
+      is_project_scoped: false,
+    };
+    (commands.writeGlobalSettings as any).mockResolvedValue({ status: 'ok', data: null });
+
+    await settingsStore.writeView({ sort_mode: 'name-desc' });
+
+    expect(commands.writeGlobalSettings).toHaveBeenCalled();
+    expect(commands.writeProjectSettings).not.toHaveBeenCalled();
+    expect(settingsStore.effective.view.sort_mode).toBe('name-desc');
   });
 
   it('logs + early-returns on IPC error without mutating effective', async () => {
@@ -301,6 +351,10 @@ describe('[contract] settingsStore.writePluginEnabled', () => {
 
   it('project mode: stores an override when the new value differs from the global default', async () => {
     (settingsStore as any).dirPath = '/proj';
+    settingsStore.effective = {
+      ...settingsStore.effective,
+      is_project_scoped: true,
+    };
     (commands.getGlobalSettings as any).mockResolvedValue({
       status: 'ok',
       data: { plugins: { enabled: { mindmap: true } } },
@@ -323,6 +377,10 @@ describe('[contract] settingsStore.writePluginEnabled', () => {
 
   it('project mode: removes the override when the value equals the global default', async () => {
     (settingsStore as any).dirPath = '/proj';
+    settingsStore.effective = {
+      ...settingsStore.effective,
+      is_project_scoped: true,
+    };
     (commands.getGlobalSettings as any).mockResolvedValue({
       status: 'ok',
       data: { plugins: { enabled: { mindmap: true } } },
@@ -345,6 +403,10 @@ describe('[contract] settingsStore.writePluginEnabled', () => {
 
   it('project mode: defaults a missing global entry to true (so overriding to true removes it)', async () => {
     (settingsStore as any).dirPath = '/proj';
+    settingsStore.effective = {
+      ...settingsStore.effective,
+      is_project_scoped: true,
+    };
     (commands.getGlobalSettings as any).mockResolvedValue({
       status: 'ok',
       data: { plugins: { enabled: {} } },
@@ -377,6 +439,10 @@ describe('[contract] settingsStore.resetPluginOverride', () => {
 
   it('is a no-op when the plugin has no override in the project config', async () => {
     (settingsStore as any).dirPath = '/proj';
+    settingsStore.effective = {
+      ...settingsStore.effective,
+      is_project_scoped: true,
+    };
     (commands.readProjectConfig as any).mockResolvedValue({
       status: 'ok',
       data: { project: null, view: null, new_file: null, plugins: { enabled: {} } },
@@ -389,6 +455,10 @@ describe('[contract] settingsStore.resetPluginOverride', () => {
 
   it('removes the override and reloads effective settings', async () => {
     (settingsStore as any).dirPath = '/proj';
+    settingsStore.effective = {
+      ...settingsStore.effective,
+      is_project_scoped: true,
+    };
     (commands.readProjectConfig as any).mockResolvedValue({
       status: 'ok',
       data: { project: null, view: null, new_file: null, plugins: { enabled: { mindmap: false } } },
@@ -413,6 +483,10 @@ describe('[contract] settingsStore.resetPluginOverride', () => {
 
   it('logs and returns on write error', async () => {
     (settingsStore as any).dirPath = '/proj';
+    settingsStore.effective = {
+      ...settingsStore.effective,
+      is_project_scoped: true,
+    };
     (commands.readProjectConfig as any).mockResolvedValue({
       status: 'ok',
       data: { project: null, view: null, new_file: null, plugins: { enabled: { mindmap: false } } },
@@ -436,7 +510,7 @@ describe('[contract] settingsStore.promoteToGlobal', () => {
   it('writes the current effective settings as the new globals', async () => {
     settingsStore.effective = {
       ...DEFAULT_EFFECTIVE,
-      view: { sort_mode: 'mtime-desc', show_hidden_files: true },
+      view: { sort_mode: 'mtime-desc', show_hidden_files: true, wrap_file_names: false },
       new_file: {
         template: 'Chapter {N}',
         detect_from_folder: false,
@@ -451,7 +525,7 @@ describe('[contract] settingsStore.promoteToGlobal', () => {
     await settingsStore.promoteToGlobal();
 
     expect(commands.writeGlobalSettings).toHaveBeenCalledWith(
-      { sort_mode: 'mtime-desc', show_hidden_files: true },
+      { sort_mode: 'mtime-desc', show_hidden_files: true, wrap_file_names: false },
       { template: 'Chapter {N}', detect_from_folder: false, auto_rename_from_h1: false },
       { enabled: { mindmap: false } },
     );

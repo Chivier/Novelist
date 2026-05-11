@@ -81,6 +81,29 @@ pub struct FileChangedPayload {
     pub path: String,
 }
 
+#[derive(Debug)]
+struct PendingFsEvent {
+    path: PathBuf,
+    refresh_dir: Option<PathBuf>,
+}
+
+fn is_temp_write_path(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.ends_with(".novelist-tmp"))
+        .unwrap_or(false)
+}
+
+fn refresh_dir_for_path(path: &Path, watching_dir: &Path) -> Option<PathBuf> {
+    if is_temp_write_path(path) {
+        return None;
+    }
+    if path == watching_dir {
+        return Some(path.to_path_buf());
+    }
+    path.parent().map(Path::to_path_buf)
+}
+
 // ── Shared state ────────────────────────────────────────────────────
 
 pub struct FileWatcherState {
@@ -133,17 +156,25 @@ pub async fn start_file_watcher(
     }
 
     // Channel for raw notify events -> debounce processor
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<PathBuf>();
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<PendingFsEvent>();
 
     // Create the notify watcher that sends paths into the channel
+    let dir_for_events = dir.clone();
     let mut watcher = RecommendedWatcher::new(
         move |res: Result<notify::Event, notify::Error>| {
             if let Ok(event) = res {
-                // Only care about modify/create events
+                // Content changes refresh open tracked files; structural
+                // changes refresh the sidebar tree. Windows' watcher often
+                // reports rename/delete as Modify(Name) with one or more
+                // paths, so keep the filter broad here and debounce below.
                 match event.kind {
-                    notify::EventKind::Modify(_) | notify::EventKind::Create(_) => {
+                    notify::EventKind::Any
+                    | notify::EventKind::Modify(_)
+                    | notify::EventKind::Create(_)
+                    | notify::EventKind::Remove(_) => {
                         for path in event.paths {
-                            let _ = tx.send(path);
+                            let refresh_dir = refresh_dir_for_path(&path, &dir_for_events);
+                            let _ = tx.send(PendingFsEvent { path, refresh_dir });
                         }
                     }
                     _ => {}
@@ -185,8 +216,8 @@ pub async fn start_file_watcher(
             };
 
             // Collect more events during the debounce window
-            let mut paths = HashSet::new();
-            paths.insert(first);
+            let mut events = Vec::new();
+            events.push(first);
 
             let debounce = tokio::time::sleep(Duration::from_millis(200));
             tokio::pin!(debounce);
@@ -194,7 +225,7 @@ pub async fn start_file_watcher(
             loop {
                 tokio::select! {
                     path = rx.recv() => match path {
-                        Some(p) => { paths.insert(p); },
+                        Some(p) => { events.push(p); },
                         None => break,
                     },
                     _ = &mut debounce => break,
@@ -207,13 +238,24 @@ pub async fn start_file_watcher(
             // Modify/Create events on either old or new path depending on the
             // platform (FSEvents vs inotify vs ReadDirectoryChangesW), so we
             // filter every path conservatively.
-            let mut filtered_paths: Vec<PathBuf> = Vec::with_capacity(paths.len());
-            for path in paths {
-                let key = path.to_string_lossy().to_string();
+            let mut filtered_paths: HashSet<PathBuf> = HashSet::new();
+            let mut refresh_dirs: HashSet<PathBuf> = HashSet::new();
+            for event in events {
+                let key = event.path.to_string_lossy().to_string();
                 if take_rename_ignored(&key).await {
                     continue;
                 }
-                filtered_paths.push(path);
+                if let Some(dir) = event.refresh_dir {
+                    refresh_dirs.insert(dir);
+                }
+                filtered_paths.insert(event.path);
+            }
+
+            for dir in refresh_dirs {
+                let payload = FileChangedPayload {
+                    path: dir.to_string_lossy().to_string(),
+                };
+                let _ = app.emit("directory-changed", &payload);
             }
 
             // Process collected paths
@@ -373,6 +415,29 @@ mod tests {
         assert!(guard.watcher.is_none());
         assert!(guard.tracked_files.is_empty());
         assert!(guard.watching_dir.is_none());
+    }
+
+    #[test]
+    fn test_refresh_dir_for_file_path() {
+        let root = PathBuf::from("/tmp/novelist");
+        let file = root.join("sub").join("a.md");
+        assert_eq!(
+            refresh_dir_for_path(&file, &root),
+            Some(root.join("sub"))
+        );
+    }
+
+    #[test]
+    fn test_refresh_dir_for_watching_root() {
+        let root = PathBuf::from("/tmp/novelist");
+        assert_eq!(refresh_dir_for_path(&root, &root), Some(root.clone()));
+    }
+
+    #[test]
+    fn test_refresh_dir_ignores_atomic_write_temp_file() {
+        let root = PathBuf::from("/tmp/novelist");
+        let temp = root.join("a.md.novelist-tmp");
+        assert_eq!(refresh_dir_for_path(&temp, &root), None);
     }
 
     #[tokio::test]

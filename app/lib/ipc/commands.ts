@@ -335,6 +335,7 @@ export type ProjectConfig = {
 export type ViewConfig = {
 	sort_mode?: string | null,
 	show_hidden_files?: boolean | null,
+	wrap_file_names?: boolean | null,
 };
 
 export type NewFileConfig = {
@@ -358,6 +359,7 @@ export type GlobalSettings = {
 export type ResolvedView = {
 	sort_mode: string,
 	show_hidden_files: boolean,
+	wrap_file_names: boolean,
 };
 
 export type ResolvedNewFile = {

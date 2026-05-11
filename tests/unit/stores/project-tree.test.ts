@@ -15,6 +15,7 @@ function node(name: string, isDir: boolean, path = `/proj/${name}`): FileNode {
 
 describe('projectStore tree extensions', () => {
   beforeEach(() => {
+    localStorage.clear();
     projectStore.close();
     vi.clearAllMocks();
   });

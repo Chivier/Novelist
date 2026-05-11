@@ -6,6 +6,7 @@ import { projectStore } from '$lib/stores/project.svelte';
 import { tabsStore } from '$lib/stores/tabs.svelte';
 import { uiStore } from '$lib/stores/ui.svelte';
 import { handleCliOpen, openProjectInThisWindow } from '$lib/services/cli-open';
+import { pathDirname } from '$lib/utils/path';
 
 export type AppEventContext = {
   /** Called when file-changed arrives for a dirty open tab. */
@@ -18,7 +19,7 @@ export type AppEventContext = {
   onOpenProjectInThisWindow: (dirPath: string) => Promise<void> | void;
 };
 
-const TEXT_EXTENSIONS = ['.md', '.markdown', '.txt', '.json', '.jsonl', '.csv'];
+const TEXT_EXTENSIONS = ['.md', '.markdown', '.txt', '.canvas', '.kanban', '.json', '.jsonl', '.csv'];
 
 /**
  * Open a text file by absolute path. Used by pending-files drain, the
@@ -62,6 +63,7 @@ export function wireAppEvents(ctx: AppEventContext): () => void {
   let unlistenDragDrop: (() => void) | null = null;
   let unlistenOpenFile: (() => void) | null = null;
   let unlistenFileRenamed: (() => void) | null = null;
+  let unlistenDirectoryChanged: (() => void) | null = null;
   let unlistenRecentProjectsUpdated: (() => void) | null = null;
 
   let unlistenCliOpen: (() => void) | null = null;
@@ -120,20 +122,29 @@ export function wireAppEvents(ctx: AppEventContext): () => void {
     // Refresh the sidebar folder containing the changed path, IF it's
     // been loaded (expanded at least once). refreshFolder is a no-op for
     // folders whose children are still undefined.
-    const slashIdx = path.lastIndexOf('/');
-    if (slashIdx > 0) {
-      await projectStore.refreshFolder(path.slice(0, slashIdx));
+    const parent = pathDirname(path);
+    if (parent) {
+      await projectStore.refreshFolder(parent);
     }
   }).then(fn => { unlistenFileChanged = fn; });
+
+  listen<{ path: string }>('directory-changed', async (event) => {
+    await projectStore.refreshFolder(event.payload.path);
+  }).then(fn => { unlistenDirectoryChanged = fn; });
+
+  const refreshInterval = window.setInterval(() => {
+    if (projectStore.dirPath) {
+      projectStore.refreshLoadedFolders().catch(() => {});
+    }
+  }, 15_000);
 
   // Cross-window file rename broadcast: another window auto-renamed a file we
   // may have open. Update our tab paths and refresh the affected sidebar folder.
   listen<{ old_path: string; new_path: string }>('file-renamed', (event) => {
     const { old_path, new_path } = event.payload;
     tabsStore.updatePath(old_path, new_path);
-    const parentIdx = new_path.lastIndexOf('/');
-    if (parentIdx > 0) {
-      const parent = new_path.slice(0, parentIdx);
+    const parent = pathDirname(new_path);
+    if (parent) {
       projectStore.refreshFolder(parent).catch(() => {});
     }
   }).then(fn => { unlistenFileRenamed = fn; });
@@ -162,11 +173,13 @@ export function wireAppEvents(ctx: AppEventContext): () => void {
 
   return () => {
     unlistenFileChanged?.();
+    unlistenDirectoryChanged?.();
     unlistenDragDrop?.();
     unlistenOpenFile?.();
     unlistenFileRenamed?.();
     unlistenRecentProjectsUpdated?.();
     unlistenCliOpen?.();
+    window.clearInterval(refreshInterval);
     window.removeEventListener('novelist-goto-line', handleGotoLine);
   };
 }

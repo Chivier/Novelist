@@ -55,9 +55,36 @@
     dialogOpen = true;
   }
 
+  function estimatedMenuHeight(s: TemplateFileSummary): number {
+    // Item height is 30px, padding is 8px. Project rows also include a 9px separator.
+    return s.source === 'bundled' ? 68 : 137;
+  }
+
+  function currentZoom(): number {
+    const transform = document.documentElement.style.transform || getComputedStyle(document.documentElement).transform;
+    const scale = transform.match(/scale\(([^)]+)\)/)?.[1];
+    if (scale) return parseFloat(scale) || 1;
+
+    const matrix = transform.match(/matrix\(([^,]+),/);
+    if (matrix) return parseFloat(matrix[1]) || 1;
+
+    return 1;
+  }
+
+  function menuPosition(e: MouseEvent, s: TemplateFileSummary): { x: number; y: number } {
+    const margin = 8;
+    const width = 180;
+    const height = estimatedMenuHeight(s);
+    const zoom = currentZoom();
+    const visualX = Math.min(Math.max(margin, e.clientX), Math.max(margin, window.innerWidth - width * zoom - margin));
+    const visualY = Math.min(Math.max(margin, e.clientY), Math.max(margin, window.innerHeight - height * zoom - margin));
+    return { x: visualX / zoom, y: visualY / zoom };
+  }
+
   function showCtxMenu(e: MouseEvent, s: TemplateFileSummary) {
     e.preventDefault();
-    ctxMenu = { x: e.clientX, y: e.clientY, summary: s };
+    e.stopPropagation();
+    ctxMenu = { ...menuPosition(e, s), summary: s };
   }
 
   function closeCtxMenu() { ctxMenu = null; }
@@ -190,7 +217,7 @@
             data-testid="template-row-{s.source}-{s.id}"
             role="button"
             tabindex="0"
-            onclick={() => onRowClick(s)}
+            onclick={(e) => { if (e.button === 0) onRowClick(s); }}
             onkeydown={(e) => { if (e.key === 'Enter') onRowClick(s); }}
             oncontextmenu={(e) => showCtxMenu(e, s)}
           >
@@ -226,7 +253,7 @@
               data-testid="template-row-{s.source}-{s.id}"
               role="button"
               tabindex="0"
-              onclick={() => onRowClick(s)}
+              onclick={(e) => { if (e.button === 0) onRowClick(s); }}
               onkeydown={(e) => { if (e.key === 'Enter') onRowClick(s); }}
               oncontextmenu={(e) => showCtxMenu(e, s)}
             >
@@ -332,7 +359,7 @@
   .tmpl-ctx-menu {
     position: fixed;
     z-index: 100;
-    min-width: 180px;
+    width: 180px;
     background: var(--novelist-bg);
     border: 1px solid var(--novelist-border);
     border-radius: 5px;

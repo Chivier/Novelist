@@ -106,16 +106,13 @@
   ];
   const fontSizeOptions = [13, 14, 15, 16, 17, 18, 20, 22, 24];
   const lineHeightOptions = [1.4, 1.5, 1.6, 1.8, 2.0, 2.2];
-  const maxWidthOptions = [
-    { label: '600px (Narrow)', value: 600 },
-    { label: '680px', value: 680 },
-    { label: '720px (Default)', value: 720 },
-    { label: '800px', value: 800 },
-    { label: '900px (Wide)', value: 900 },
-    { label: '100% (Full)', value: 9999 },
-  ];
 
   let settings = $derived(uiStore.editorSettings);
+
+  function setEditorMaxWidth(value: number) {
+    const next = Math.max(480, Math.min(9999, Math.round(value)));
+    uiStore.updateEditorSettings({ maxWidth: next });
+  }
 
   // Theme options: system + builtins + custom (imported)
   let customThemes = $state(loadCustomThemes());
@@ -740,9 +737,28 @@
 
         <div class="flex items-center justify-between mb-3">
           <label for="settings-width" class="text-sm">{t('settings.width')}</label>
-          <select id="settings-width" class="text-sm px-2 py-1 rounded cursor-pointer" style="background: var(--novelist-bg-secondary); color: var(--novelist-text); border: 1px solid var(--novelist-border);" value={settings.maxWidth} onchange={(e) => uiStore.updateEditorSettings({ maxWidth: Number((e.target as HTMLSelectElement).value) })}>
-            {#each maxWidthOptions as opt}<option value={opt.value}>{opt.label}</option>{/each}
-          </select>
+          <div class="flex items-center gap-2" style="min-width: 220px;">
+            <input
+              id="settings-width"
+              type="range"
+              min="480"
+              max="1600"
+              step="20"
+              value={Math.min(settings.maxWidth, 1600)}
+              oninput={(e) => setEditorMaxWidth(Number((e.target as HTMLInputElement).value))}
+              style="width: 130px; accent-color: var(--novelist-accent);"
+            />
+            <input
+              type="number"
+              min="480"
+              max="9999"
+              step="20"
+              value={settings.maxWidth}
+              oninput={(e) => setEditorMaxWidth(Number((e.target as HTMLInputElement).value))}
+              class="text-sm px-2 py-1 rounded"
+              style="width: 76px; background: var(--novelist-bg-secondary); color: var(--novelist-text); border: 1px solid var(--novelist-border);"
+            />
+          </div>
         </div>
 
         <div class="flex items-center justify-between mb-3">
@@ -785,6 +801,21 @@
             onclick={() => uiStore.updateEditorSettings({ renderImages: !settings.renderImages })}
           >{settings.renderImages ? t('settings.on') : t('settings.off')}</button>
         </div>
+
+        <label class="flex items-start gap-2 mb-3">
+          <input
+            type="checkbox"
+            data-testid="settings-sidebar-wrap-filenames"
+            checked={settingsStore.effective.view.wrap_file_names}
+            onchange={(e) => settingsStore.writeView({ wrap_file_names: e.currentTarget.checked })}
+          />
+          <div>
+            <div class="text-sm">{t('settings.sidebar.wrapFileNames')}</div>
+            <div class="text-xs" style="color: var(--novelist-text-secondary);">
+              {t('settings.sidebar.wrapFileNamesHint')}
+            </div>
+          </div>
+        </label>
 
         <div class="mt-4 rounded p-3 text-sm" style="background: var(--novelist-bg-secondary); font-family: {settings.fontFamily}; font-size: {settings.fontSize}px; line-height: {settings.lineHeight}; border: 1px solid var(--novelist-border);">
           The quick brown fox jumps over the lazy dog.<br/>

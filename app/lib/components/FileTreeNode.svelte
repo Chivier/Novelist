@@ -16,6 +16,11 @@
     onDragLeave: (e: DragEvent, node: FileNode) => void;
     onDrop: (e: DragEvent, node: FileNode) => void | Promise<void>;
     isTextFile: (name: string) => boolean;
+    renamingPath?: string | null;
+    renameValue?: string;
+    onRenameInput?: (value: string) => void;
+    onRenameKeydown?: (e: KeyboardEvent) => void;
+    onRenameBlur?: () => void | Promise<void>;
   }
 
   let {
@@ -29,6 +34,11 @@
     onDragLeave,
     onDrop,
     isTextFile,
+    renamingPath = null,
+    renameValue = '',
+    onRenameInput,
+    onRenameKeydown,
+    onRenameBlur,
   }: Props = $props();
 
   // Sort using the project-wide sort mode (folders-first is handled by compareByMode).
@@ -42,9 +52,32 @@
   }
 
   const indentPx = $derived(depth * 12 + 6);
+  let renameInputEl = $state<HTMLInputElement | null>(null);
+
+  $effect(() => {
+    if (renamingPath !== node.path || !renameInputEl) return;
+    const input = renameInputEl;
+    requestAnimationFrame(() => {
+      input.focus();
+      const dotIdx = node.name.lastIndexOf('.');
+      input.setSelectionRange(0, node.is_dir ? node.name.length : (dotIdx > 0 ? dotIdx : node.name.length));
+    });
+  });
 </script>
 
-{#if node.is_dir}
+{#if renamingPath === node.path}
+  <div class="tree-input-row" style="padding-left: {node.is_dir ? indentPx : indentPx + 16}px;">
+    <input
+      bind:this={renameInputEl}
+      value={renameValue}
+      oninput={(e) => onRenameInput?.((e.target as HTMLInputElement).value)}
+      onkeydown={(e) => onRenameKeydown?.(e)}
+      onblur={() => onRenameBlur?.()}
+      class="tree-input"
+      data-testid="sidebar-input"
+    />
+  </div>
+{:else if node.is_dir}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div
@@ -54,6 +87,7 @@
     tabindex="0"
     class="tree-row tree-dir"
     class:drag-over={node.dragOver}
+    class:tree-row-wrap={projectStore.wrapFileNames}
     style="padding-left: {indentPx}px;"
     data-testid="sidebar-folder-{node.name}"
     oncontextmenu={(e) => onContextMenu(e, node)}
@@ -102,6 +136,11 @@
         {onDragLeave}
         {onDrop}
         {isTextFile}
+        {renamingPath}
+        {renameValue}
+        {onRenameInput}
+        {onRenameKeydown}
+        {onRenameBlur}
       />
     {/each}
   {/if}
@@ -109,6 +148,7 @@
   <button
     class="tree-row tree-file"
     class:tree-file-active={tabsStore.activeTab?.filePath === node.path}
+    class:tree-row-wrap={projectStore.wrapFileNames}
     style="padding-left: {indentPx + 16}px;"
     data-testid="sidebar-file-{node.name}"
     draggable="true"
@@ -131,6 +171,7 @@
     aria-selected={false}
     tabindex="-1"
     class="tree-row tree-file tree-disabled"
+    class:tree-row-wrap={projectStore.wrapFileNames}
     style="padding-left: {indentPx + 16}px;"
     oncontextmenu={(e) => onContextMenu(e, node)}
     ondblclick={(e) => { e.preventDefault(); onRenameRequest(node); }}
@@ -163,6 +204,27 @@
     overflow: hidden;
     gap: 6px;
   }
+  .tree-input-row {
+    padding-top: 2px;
+    padding-bottom: 2px;
+    padding-right: 6px;
+  }
+  .tree-input {
+    width: 100%;
+    padding: 4px 8px;
+    border: 1px solid var(--novelist-accent);
+    border-radius: 5px;
+    background: var(--novelist-bg);
+    color: var(--novelist-text);
+    font-size: 0.8rem;
+    outline: none;
+    font-family: var(--novelist-mono-font, ui-monospace, 'SF Mono', 'Cascadia Code', monospace);
+  }
+  .tree-row-wrap {
+    align-items: flex-start;
+    white-space: normal;
+    min-height: 28px;
+  }
   .tree-row:hover { background: var(--novelist-sidebar-hover); }
   .tree-dir {
     cursor: default;
@@ -192,15 +254,28 @@
   .tree-file-active .tree-icon { opacity: 0.75; }
   .tree-disabled { cursor: default; opacity: 0.35; }
   .tree-name {
+    flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     font-family: var(--novelist-mono-font, ui-monospace, 'SF Mono', 'Cascadia Code', monospace);
+  }
+  .tree-row-wrap .tree-name {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.35;
   }
   .tree-ext {
     color: var(--novelist-text-tertiary, var(--novelist-text-secondary));
     font-size: 0.78rem;
     flex-shrink: 0;
     font-family: var(--novelist-mono-font, ui-monospace, 'SF Mono', 'Cascadia Code', monospace);
+  }
+  .tree-row-wrap .tree-ext {
+    padding-top: 2px;
   }
   .drag-over {
     background: color-mix(in srgb, var(--novelist-accent) 18%, transparent) !important;

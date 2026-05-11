@@ -52,6 +52,7 @@
   import { handleTitlebarDrag } from '$lib/utils/window-drag';
   import { useWindowTitle } from '$lib/composables/window-title.svelte';
   import { promptGoToLine } from '$lib/utils/go-to-line';
+  import { pathBasename } from '$lib/utils/path';
   import { registerAppCommands } from '$lib/app-commands';
   import { wireAppEvents } from '$lib/composables/app-events.svelte';
   import { wireMenuEvents } from '$lib/composables/menu-events.svelte';
@@ -62,6 +63,7 @@
   import { createKeydownHandler } from '$lib/composables/app-shortcuts.svelte';
   import { createCloseTab } from '$lib/composables/close-tab.svelte';
   import { createScratchFile, createNewFileInProject, executeTemplate, requestSaveCurrentAsTemplate } from '$lib/services/new-file';
+  import { SIDEBAR_PATH_MIME, hasSidebarPath, openPathInPane, openPathSplitRight } from '$lib/services/pane-drop';
   import { shortcutsStore, initShortcutsI18n, formatShortcut } from '$lib/stores/shortcuts.svelte';
   import { t } from '$lib/i18n';
   import type { HeadingItem } from '$lib/editor/outline';
@@ -128,6 +130,39 @@ let paletteOpen = $state(false);
 
   let isDraggingAny = $derived(isDraggingSplit || isDraggingLeftSidebar || isDraggingRightPanel);
 
+  // Pane drop overlay (sidebar file → pane / split). The hovered zone drives
+  // the visible drop indicator. 'none' = overlay rendered but no zone hot.
+  type DropZone = 'none' | 'pane-1' | 'pane-2' | 'split-right';
+  let activeDropZone = $state<DropZone>('none');
+
+  function paneDragOver(e: DragEvent, zone: 'pane-1' | 'pane-2' | 'split-right') {
+    if (!hasSidebarPath(e.dataTransfer?.types)) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    activeDropZone = zone;
+  }
+
+  function paneDragLeave(zone: 'pane-1' | 'pane-2' | 'split-right') {
+    // Only clear if the zone we're leaving is still the active one — otherwise
+    // a sibling's dragenter may have already taken over.
+    if (activeDropZone === zone) activeDropZone = 'none';
+  }
+
+  async function paneDrop(e: DragEvent, zone: 'pane-1' | 'pane-2' | 'split-right') {
+    if (!hasSidebarPath(e.dataTransfer?.types)) return;
+    e.preventDefault();
+    activeDropZone = 'none';
+    const path = e.dataTransfer?.getData(SIDEBAR_PATH_MIME);
+    if (!path) return;
+    if (zone === 'split-right') await openPathSplitRight(path);
+    else await openPathInPane(zone, path);
+  }
+
+  function clearSidebarDragState() {
+    uiStore.sidebarFileDragActive = false;
+    activeDropZone = 'none';
+  }
+
   // Whether any right panel content (not just toggle tabs) is visible
   let rightPanelContentVisible = $derived(
     uiStore.outlineVisible ||
@@ -187,7 +222,7 @@ let paletteOpen = $state(false);
     tabsStore.closeAll();
 
     // Track as recent project (backend persistence for next launch)
-    const name = config?.project?.name || dirPath.split('/').pop() || 'Untitled';
+    const name = config?.project?.name || pathBasename(dirPath) || 'Untitled';
     await commands.addRecentProject(dirPath, name);
 
     // Keep Cmd+number mapping stable: only append truly new projects
@@ -427,6 +462,8 @@ let paletteOpen = $state(false);
     if (editorCtxMenu && e.key === 'Escape') { closeEditorCtxMenu(); e.preventDefault(); return; }
     handleKeydown(e);
   }}
+  ondragend={clearSidebarDragState}
+  ondrop={clearSidebarDragState}
   onmousedown={handleTitlebarDrag}
   onclick={closeEditorCtxMenu}
   oncontextmenu={(e: MouseEvent) => {
@@ -521,7 +558,34 @@ let paletteOpen = $state(false);
         />
       </div>
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="panel-resize-handle" onmousedown={startLeftSidebarDrag}></div>
+      <div class="sidebar-edge">
+        <button
+          type="button"
+          class="sidebar-toggle-handle"
+          data-testid="sidebar-edge-toggle"
+          title="{t('command.toggleSidebar')} ({formatShortcut(shortcutsStore.get('toggle-sidebar'))})"
+          aria-label={t('command.toggleSidebar')}
+          onclick={() => uiStore.toggleSidebar()}
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 4L6 8l4 4" />
+          </svg>
+        </button>
+        <div class="panel-resize-handle" onmousedown={startLeftSidebarDrag}></div>
+      </div>
+    {:else if projectStore.isOpen}
+      <button
+        type="button"
+        class="sidebar-reopen-handle"
+        data-testid="sidebar-edge-toggle"
+        title="{t('command.toggleSidebar')} ({formatShortcut(shortcutsStore.get('toggle-sidebar'))})"
+        aria-label={t('command.toggleSidebar')}
+        onclick={() => uiStore.toggleSidebar()}
+      >
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 4l4 4-4 4" />
+        </svg>
+      </button>
     {/if}
 
     <!-- Main editor column (contains split panes + status bar) -->
@@ -542,7 +606,7 @@ let paletteOpen = $state(false);
         >
           <TabBar paneId="pane-1" />
 
-          <div class="flex-1 min-h-0 overflow-hidden">
+          <div class="flex-1 min-h-0 overflow-hidden relative">
             {#if tabsStore.getPaneActiveTab('pane-1')}
               {@const fileName1 = tabsStore.getPaneActiveTab('pane-1')?.fileName ?? ''}
               {@const lower1 = fileName1.toLowerCase()}
@@ -574,6 +638,33 @@ let paletteOpen = $state(false);
                 </div>
               </div>
             {/if}
+
+            <!-- Sidebar-file drop overlay (open in pane-1 / split right) -->
+            {#if uiStore.sidebarFileDragActive}
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div
+                class="pane-drop-zone pane-drop-main"
+                class:pane-drop-active={activeDropZone === 'pane-1'}
+                style="right: {tabsStore.splitActive ? '0' : '30%'};"
+                ondragover={(e) => paneDragOver(e, 'pane-1')}
+                ondragleave={() => paneDragLeave('pane-1')}
+                ondrop={(e) => paneDrop(e, 'pane-1')}
+              >
+                <span class="pane-drop-label">{t('pane.drop.openHere')}</span>
+              </div>
+              {#if !tabsStore.splitActive}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div
+                  class="pane-drop-zone pane-drop-split-right"
+                  class:pane-drop-active={activeDropZone === 'split-right'}
+                  ondragover={(e) => paneDragOver(e, 'split-right')}
+                  ondragleave={() => paneDragLeave('split-right')}
+                  ondrop={(e) => paneDrop(e, 'split-right')}
+                >
+                  <span class="pane-drop-label">{t('pane.drop.splitRight')}</span>
+                </div>
+              {/if}
+            {/if}
           </div>
         </div>
 
@@ -597,7 +688,7 @@ let paletteOpen = $state(false);
           >
             <TabBar paneId="pane-2" />
 
-            <div class="flex-1 min-h-0 overflow-hidden">
+            <div class="flex-1 min-h-0 overflow-hidden relative">
               {#if tabsStore.getPaneActiveTab('pane-2')}
                 {@const fileName2 = tabsStore.getPaneActiveTab('pane-2')?.fileName ?? ''}
                 {@const lower2 = fileName2.toLowerCase()}
@@ -626,6 +717,21 @@ let paletteOpen = $state(false);
                   <div class="text-center">
                     <p style="font-size: 0.95rem;">{t('app.openFile')}</p>
                   </div>
+                </div>
+              {/if}
+
+              <!-- Sidebar-file drop overlay (open in pane-2) -->
+              {#if uiStore.sidebarFileDragActive}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div
+                  class="pane-drop-zone pane-drop-main"
+                  class:pane-drop-active={activeDropZone === 'pane-2'}
+                  style="right: 0;"
+                  ondragover={(e) => paneDragOver(e, 'pane-2')}
+                  ondragleave={() => paneDragLeave('pane-2')}
+                  ondrop={(e) => paneDrop(e, 'pane-2')}
+                >
+                  <span class="pane-drop-label">{t('pane.drop.openHere')}</span>
                 </div>
               {/if}
             </div>
@@ -877,6 +983,89 @@ let paletteOpen = $state(false);
   }
   .panel-resize-handle:hover {
     background: var(--novelist-accent);
+  }
+
+  .sidebar-edge {
+    position: relative;
+    flex-shrink: 0;
+    width: 8px;
+    display: flex;
+    align-items: stretch;
+  }
+  .sidebar-edge .panel-resize-handle {
+    width: 4px;
+    margin-left: 4px;
+  }
+  .sidebar-toggle-handle,
+  .sidebar-reopen-handle {
+    position: absolute;
+    top: 50%;
+    z-index: 70;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 42px;
+    padding: 0;
+    border: 1px solid var(--novelist-border-subtle, var(--novelist-border));
+    background: var(--novelist-bg);
+    color: var(--novelist-text-tertiary, var(--novelist-text-secondary));
+    cursor: pointer;
+    transform: translateY(-50%);
+    transition: color 120ms, border-color 120ms, background 120ms;
+  }
+  .sidebar-toggle-handle {
+    right: -9px;
+    border-radius: 0 5px 5px 0;
+  }
+  .sidebar-reopen-handle {
+    left: 0;
+    border-left: none;
+    border-radius: 0 5px 5px 0;
+  }
+  .sidebar-toggle-handle:hover,
+  .sidebar-reopen-handle:hover {
+    color: var(--novelist-accent);
+    border-color: var(--novelist-accent);
+    background: var(--novelist-sidebar-hover);
+  }
+
+  /* Pane drop overlays — only rendered while a sidebar file drag is in flight. */
+  .pane-drop-zone {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+    background: transparent;
+    border: 2px dashed transparent;
+    border-radius: 6px;
+    transition: background 120ms, border-color 120ms;
+  }
+  .pane-drop-split-right {
+    left: auto;
+    right: 0;
+    width: 30%;
+  }
+  .pane-drop-active {
+    background: color-mix(in srgb, var(--novelist-accent) 12%, transparent);
+    border-color: var(--novelist-accent);
+  }
+  .pane-drop-label {
+    color: var(--novelist-text-secondary);
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+    opacity: 0;
+    transition: opacity 120ms;
+    pointer-events: none;
+  }
+  .pane-drop-active .pane-drop-label {
+    opacity: 1;
+    color: var(--novelist-accent);
   }
 
 </style>

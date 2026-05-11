@@ -37,6 +37,7 @@ const PROJECT = '/proj';
 
 describe('tabsStore.tryRenameAfterSave — placeholder + H1 gating', () => {
   beforeEach(() => {
+    localStorage.clear();
     tabsStore.closeAll();
     vi.clearAllMocks();
     (commands.listDirectory as any).mockResolvedValue({ status: 'ok', data: [] });

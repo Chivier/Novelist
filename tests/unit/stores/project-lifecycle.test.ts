@@ -16,7 +16,7 @@ vi.mock('$lib/ipc/commands', () => ({
 vi.mock('$lib/stores/settings.svelte', () => ({
   settingsStore: {
     effective: {
-      view: { sort_mode: 'numeric-asc', show_hidden_files: false },
+      view: { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: false },
       new_file: { template: '', detect_from_folder: true, auto_rename_from_h1: true, default_dir: null, last_used_dir: null },
       plugins: { enabled: {} },
       is_project_scoped: false,
@@ -34,6 +34,7 @@ function entry(name: string, isDir: boolean, path = `/proj/${name}`) {
 }
 
 beforeEach(() => {
+  localStorage.clear();
   projectStore.close();
   vi.clearAllMocks();
 });
@@ -69,6 +70,11 @@ describe('[contract] projectStore.setProject / close / enterSingleFileMode', () 
 
   it('name falls back to the dir basename when no config provides one', () => {
     projectStore.setProject('/Users/x/NovelProject', null, []);
+    expect(projectStore.name).toBe('NovelProject');
+  });
+
+  it('name falls back to the Windows dir basename when no config provides one', () => {
+    projectStore.setProject('C:\\Users\\x\\NovelProject', null, []);
     expect(projectStore.name).toBe('NovelProject');
   });
 
@@ -176,6 +182,26 @@ describe('[contract] projectStore.refreshFolder', () => {
     await projectStore.refreshFolder('/proj/sub');
 
     expect(commands.listDirectory).not.toHaveBeenCalled();
+  });
+
+  it('refreshLoadedFolders refreshes root plus already-loaded folders', async () => {
+    projectStore.setProject('/proj', null, [entry('sub', true)]);
+    (commands.listDirectory as any).mockResolvedValueOnce({
+      status: 'ok',
+      data: [entry('a.md', false, '/proj/sub/a.md')],
+    });
+    await projectStore.expandFolder('/proj/sub');
+
+    (commands.listDirectory as any).mockResolvedValue({
+      status: 'ok',
+      data: [],
+    });
+    vi.clearAllMocks();
+
+    await projectStore.refreshLoadedFolders();
+
+    expect(commands.listDirectory).toHaveBeenCalledWith('/proj', false);
+    expect(commands.listDirectory).toHaveBeenCalledWith('/proj/sub', false);
   });
 
   it('no-ops on unknown path (not in tree)', async () => {

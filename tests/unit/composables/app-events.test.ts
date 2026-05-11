@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 /**
  * [contract] wireAppEvents — subscribes to open-file / file-changed /
@@ -34,9 +34,11 @@ const { hoisted } = vi.hoisted(() => {
   };
 
   const projectState = {
+    dirPath: null as string | null,
     isOpen: false,
     enterSingleFileMode: vi.fn(() => { projectState.isOpen = true; }),
     refreshFolder: vi.fn(async (_p: string) => {}),
+    refreshLoadedFolders: vi.fn(async () => {}),
   };
 
   const uiState = { sidebarVisible: true };
@@ -81,8 +83,10 @@ vi.mock('$lib/stores/tabs.svelte', () => ({
 vi.mock('$lib/stores/project.svelte', () => ({
   projectStore: {
     get isOpen() { return hoisted.projectState.isOpen; },
+    get dirPath() { return hoisted.projectState.dirPath; },
     enterSingleFileMode: () => hoisted.projectState.enterSingleFileMode(),
     refreshFolder: (p: string) => hoisted.projectState.refreshFolder(p),
+    refreshLoadedFolders: () => hoisted.projectState.refreshLoadedFolders(),
   },
 }));
 
@@ -94,6 +98,8 @@ vi.mock('$lib/stores/ui.svelte', () => ({
 }));
 
 import { wireAppEvents, type AppEventContext } from '$lib/composables/app-events.svelte';
+
+const activeTeardowns: Array<() => void> = [];
 
 beforeEach(() => {
   hoisted.listeners.clear();
@@ -110,8 +116,14 @@ beforeEach(() => {
   hoisted.tabsState.updatePath.mockReset();
   hoisted.projectState.enterSingleFileMode.mockClear();
   hoisted.projectState.refreshFolder.mockReset().mockResolvedValue(undefined);
+  hoisted.projectState.refreshLoadedFolders.mockReset().mockResolvedValue(undefined);
+  hoisted.projectState.dirPath = null;
   hoisted.projectState.isOpen = false;
   hoisted.uiState.sidebarVisible = true;
+});
+
+afterEach(() => {
+  for (const teardown of activeTeardowns.splice(0)) teardown();
 });
 
 function defaultCtx(): AppEventContext {
@@ -126,6 +138,7 @@ function defaultCtx(): AppEventContext {
 async function wire(ctx = defaultCtx()) {
   hoisted.invoke.mockResolvedValue([]);
   const teardown = wireAppEvents(ctx);
+  activeTeardowns.push(teardown);
   // Let the pending-files drain + listen() promises resolve.
   await Promise.resolve();
   await Promise.resolve();
@@ -133,11 +146,18 @@ async function wire(ctx = defaultCtx()) {
   return { ctx, teardown };
 }
 
+async function flushAsyncWork() {
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve();
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 describe('[contract] wireAppEvents — listener setup', () => {
   it('subscribes to the expected events', async () => {
     await wire();
     const names = hoisted.listen.mock.calls.map((c: any) => c[0]).sort();
-    expect(names).toEqual(['cli-open', 'file-changed', 'file-renamed', 'open-file', 'recent-projects-updated']);
+    expect(names).toEqual(['cli-open', 'directory-changed', 'file-changed', 'file-renamed', 'open-file', 'recent-projects-updated']);
   });
 
   it('registers a drag-drop handler on the current window', async () => {
@@ -150,10 +170,10 @@ describe('[contract] wireAppEvents — listener setup', () => {
     const { teardown } = await wire();
     const removeSpy = vi.spyOn(window, 'removeEventListener');
     teardown();
-    // Five listen()s succeeded (open-file, file-changed, file-renamed,
+    // Six listen()s succeeded (open-file, file-changed, file-renamed,
     // recent-projects-updated, onDragDropEvent) — unlisten was called for
     // each except the pending-files drain (which uses invoke).
-    expect(hoisted.unlisten).toHaveBeenCalledTimes(6);
+    expect(hoisted.unlisten).toHaveBeenCalledTimes(7);
     expect(removeSpy).toHaveBeenCalledWith('novelist-goto-line', expect.any(Function));
     removeSpy.mockRestore();
   });
@@ -170,8 +190,8 @@ describe('[contract] pending-files drain', () => {
       return Promise.resolve(undefined);
     });
     hoisted.readFile.mockResolvedValue({ status: 'ok', data: 'content' });
-    wireAppEvents(defaultCtx());
-    await new Promise((r) => setTimeout(r, 0));
+    activeTeardowns.push(wireAppEvents(defaultCtx()));
+    await flushAsyncWork();
     expect(hoisted.tabsState.openTab).toHaveBeenCalledTimes(2);
     expect(hoisted.tabsState.openTab).toHaveBeenCalledWith('/proj/a.md', 'content');
     expect(hoisted.tabsState.openTab).toHaveBeenCalledWith('/tmp/x.txt', 'content');
@@ -184,16 +204,16 @@ describe('[contract] pending-files drain', () => {
       return Promise.resolve(undefined);
     });
     const ctx = defaultCtx();
-    wireAppEvents(ctx);
-    await new Promise((r) => setTimeout(r, 0));
+    activeTeardowns.push(wireAppEvents(ctx));
+    await flushAsyncWork();
     expect(ctx.onOpenProjectInThisWindow).toHaveBeenCalledWith('/work/novel');
   });
 
   it('swallows errors from the get_pending_* commands', async () => {
     hoisted.invoke.mockRejectedValue(new Error('unknown command'));
     // Must not throw.
-    expect(() => wireAppEvents(defaultCtx())).not.toThrow();
-    await new Promise((r) => setTimeout(r, 0));
+    expect(() => activeTeardowns.push(wireAppEvents(defaultCtx()))).not.toThrow();
+    await flushAsyncWork();
   });
 });
 
@@ -264,6 +284,13 @@ describe('[contract] file-changed event', () => {
     expect(hoisted.projectState.refreshFolder).toHaveBeenCalledWith('/proj/sub');
   });
 
+  it('refreshes Windows parent folders', async () => {
+    hoisted.tabsState.findByPath.mockReturnValue(null);
+    await wire();
+    await hoisted.listeners.get('file-changed')!({ payload: { path: 'C:\\proj\\sub\\x.md' } });
+    expect(hoisted.projectState.refreshFolder).toHaveBeenCalledWith('C:\\proj\\sub');
+  });
+
   it('does not refresh when the path has no directory component', async () => {
     hoisted.tabsState.findByPath.mockReturnValue(null);
     await wire();
@@ -288,6 +315,14 @@ describe('[contract] file-renamed event', () => {
       payload: { old_path: '/a', new_path: 'bare' },
     });
     expect(hoisted.projectState.refreshFolder).not.toHaveBeenCalled();
+  });
+});
+
+describe('[contract] directory-changed event', () => {
+  it('refreshes the changed directory payload', async () => {
+    await wire();
+    await hoisted.listeners.get('directory-changed')!({ payload: { path: '/proj/sub' } });
+    expect(hoisted.projectState.refreshFolder).toHaveBeenCalledWith('/proj/sub');
   });
 });
 

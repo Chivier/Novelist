@@ -184,6 +184,7 @@ template = "Chapter {N}"
             Some(ViewConfig {
                 sort_mode: Some("name-desc".into()),
                 show_hidden_files: Some(true),
+                wrap_file_names: None,
             }),
             None,
             None,
@@ -266,6 +267,7 @@ auto_save_minutes = 7
             Some(ViewConfig {
                 sort_mode: Some("mtime-desc".into()),
                 show_hidden_files: None,
+                wrap_file_names: Some(true),
             }),
             None,
             None,
@@ -278,5 +280,6 @@ auto_save_minutes = 7
         assert_eq!(config.writing.daily_goal, 1234);
         assert_eq!(config.writing.auto_save_minutes, 7);
         assert_eq!(config.view.sort_mode.as_deref(), Some("mtime-desc"));
+        assert_eq!(config.view.wrap_file_names, Some(true));
     }
 }

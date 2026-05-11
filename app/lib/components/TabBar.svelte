@@ -2,6 +2,7 @@
   import { tabsStore } from '$lib/stores/tabs.svelte';
   import { t } from '$lib/i18n';
   import EditorShareMenu from './EditorShareMenu.svelte';
+  import { SIDEBAR_PATH_MIME, hasSidebarPath, openPathInPane } from '$lib/services/pane-drop';
 
   interface Props {
     paneId?: string;
@@ -38,18 +39,29 @@
   }
 
   function handleDragOver(e: DragEvent) {
-    if (e.dataTransfer?.types.includes('novelist/tab-id')) {
+    const types = e.dataTransfer?.types;
+    if (types?.includes('novelist/tab-id') || hasSidebarPath(types)) {
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
     }
   }
 
   function handleDrop(e: DragEvent) {
-    e.preventDefault();
-    const tabId = e.dataTransfer?.getData('novelist/tab-id');
-    const sourcePaneId = e.dataTransfer?.getData('novelist/source-pane');
-    if (tabId && sourcePaneId && sourcePaneId !== effectivePaneId) {
-      tabsStore.moveTabToPane(tabId, effectivePaneId);
+    if (!e.dataTransfer) return;
+    const types = e.dataTransfer.types;
+    if (hasSidebarPath(types)) {
+      e.preventDefault();
+      const path = e.dataTransfer.getData(SIDEBAR_PATH_MIME);
+      if (path) void openPathInPane(effectivePaneId, path);
+      return;
+    }
+    if (types.includes('novelist/tab-id')) {
+      e.preventDefault();
+      const tabId = e.dataTransfer.getData('novelist/tab-id');
+      const sourcePaneId = e.dataTransfer.getData('novelist/source-pane');
+      if (tabId && sourcePaneId && sourcePaneId !== effectivePaneId) {
+        tabsStore.moveTabToPane(tabId, effectivePaneId);
+      }
     }
   }
 </script>

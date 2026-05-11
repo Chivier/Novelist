@@ -54,6 +54,13 @@ class UiStore {
   editorSettings = $state<EditorSettings>(loadSettings());
   zoomLevel = $state(parseFloat(localStorage.getItem('novelist-zoom') || '1'));
 
+  /**
+   * True while a draggable sidebar file (NOT a folder) is in flight. Used to
+   * show pane drop overlays in App.svelte. Set in Sidebar.handleDragStart,
+   * cleared on the global window dragend handler.
+   */
+  sidebarFileDragActive = $state(false);
+
   // Theme
   themeId = $state(loadThemeId());
   currentTheme = $state<Theme>(resolveTheme(loadThemeId()));

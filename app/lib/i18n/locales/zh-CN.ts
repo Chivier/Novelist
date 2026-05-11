@@ -6,6 +6,8 @@ export const zhCN: TranslationMap = {
   'app.subtitle': '为小说家打造的桌面写作工具',
   'app.openFolder': '打开文件夹开始写作',
   'app.openFile': '在此面板打开文件',
+  'pane.drop.openHere': '在此面板打开',
+  'pane.drop.splitRight': '右侧分屏打开',
 
   // --- Welcome ---
   'welcome.recentProjects': '最近项目',
@@ -407,6 +409,8 @@ export const zhCN: TranslationMap = {
 
   'settings.highlightMatches': '高亮匹配词',
   'settings.renderImages': '渲染图片预览',
+  'settings.sidebar.wrapFileNames': '侧边栏文件名换行',
+  'settings.sidebar.wrapFileNamesHint': '长文件名显示为多行，而不是截断成省略号。',
   'settings.on': '开',
   'settings.off': '关',
 

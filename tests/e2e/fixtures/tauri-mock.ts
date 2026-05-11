@@ -72,6 +72,7 @@ export function buildTauriMockScript(config: TauriMockConfig): string {
           view: {
             sort_mode: pick('sort_mode', 'numeric-asc'),
             show_hidden_files: pick('show_hidden_files', false),
+            wrap_file_names: pick('wrap_file_names', false),
           },
           new_file: {
             template: pickNF('template', 'Untitled {N}'),
