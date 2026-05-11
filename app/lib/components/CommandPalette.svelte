@@ -162,11 +162,18 @@
   }
 
   .shortcut {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--novelist-text-secondary, #888);
     background: rgba(255, 255, 255, 0.08);
     padding: 2px 6px;
     border-radius: 3px;
-    font-family: monospace;
+    /* Apple shortcut symbols (⇧⌘⌥⌃) render poorly in the default monospace
+       stacks on macOS — they get the system fallback at a smaller weight
+       than the surrounding letter and look washed out. Use the UI font
+       (which has hand-tuned glyphs for these) and a slightly heavier
+       weight so the modifiers stay legible next to the letter. */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-weight: 500;
+    letter-spacing: 0.02em;
   }
 </style>
