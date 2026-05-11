@@ -421,10 +421,7 @@ mod tests {
     fn test_refresh_dir_for_file_path() {
         let root = PathBuf::from("/tmp/novelist");
         let file = root.join("sub").join("a.md");
-        assert_eq!(
-            refresh_dir_for_path(&file, &root),
-            Some(root.join("sub"))
-        );
+        assert_eq!(refresh_dir_for_path(&file, &root), Some(root.join("sub")));
     }
 
     #[test]
