@@ -6,12 +6,28 @@ describe('parseTemplate', () => {
     const t = parseTemplate('Untitled {N}');
     expect(t).toEqual({
       raw: 'Untitled {N}',
+      hasNumberSlot: true,
       prefix: 'Untitled ',
       suffix: '',
       hasTitleSlot: false,
       titleSlotPosition: null,
       forceStyle: null,
     });
+  });
+  it('parses {title} alone as a title-only template', () => {
+    const t = parseTemplate('{title}');
+    expect(t).toEqual({
+      raw: '{title}',
+      hasNumberSlot: false,
+      prefix: '',
+      suffix: '',
+      hasTitleSlot: true,
+      titleSlotPosition: null,
+      forceStyle: null,
+    });
+  });
+  it('rejects a template with no slot at all', () => {
+    expect(parseTemplate('no number')).toBeNull();
   });
   it('parses 第{N}章', () => {
     const t = parseTemplate('第{N}章');
@@ -233,6 +249,43 @@ describe('inferNextName', () => {
       expect(inferNextName(['260508_Untitled 1.md', '260508_Untitled 2.md'], t))
         .toBe('260508_Untitled 3.md');
     });
+  });
+
+  describe('title-only template', () => {
+    it('empty folder renders Untitled.md', () => {
+      const t = parseTemplate('{title}')!;
+      expect(inferNextName([], t)).toBe('Untitled.md');
+    });
+    it('bumps the suffix on collision', () => {
+      const t = parseTemplate('{title}')!;
+      expect(inferNextName(['Untitled.md'], t)).toBe('Untitled 2.md');
+      expect(inferNextName(['Untitled.md', 'Untitled 2.md'], t))
+        .toBe('Untitled 3.md');
+    });
+    it('honors literal text around the title slot', () => {
+      const t = parseTemplate('draft-{title}')!;
+      expect(inferNextName([], t)).toBe('draft-Untitled.md');
+    });
+  });
+});
+
+describe('renderTemplate — title-only template', () => {
+  it('renders the H1 directly when title is non-empty', () => {
+    const t = parseTemplate('{title}')!;
+    expect(renderTemplate(t, 0, { kind: 'arabic', width: 1 }, '开篇'))
+      .toBe('开篇.md');
+  });
+  it('falls back to Untitled.md when title is empty', () => {
+    const t = parseTemplate('{title}')!;
+    expect(renderTemplate(t, 0, { kind: 'arabic', width: 1 }, null))
+      .toBe('Untitled.md');
+  });
+});
+
+describe('renameFromH1 — title-only template', () => {
+  it('replaces a bare Untitled.md with the sanitized H1', () => {
+    expect(renameFromH1('Untitled.md', '第一章 开端', []))
+      .toBe('第一章 开端.md');
   });
 });
 

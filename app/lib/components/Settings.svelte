@@ -205,6 +205,7 @@
   //   {rN}      — Roman: I, II, III …
   //   {title}   — optional slot, filled with "Untitled" until an H1 lands
   const NEW_FILE_PRESETS = [
+    '{title}',
     '第{N}章-{title}',
     '第{N}章',
     '第{CN}章',
