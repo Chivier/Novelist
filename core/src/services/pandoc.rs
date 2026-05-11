@@ -89,6 +89,56 @@ pub async fn resolve_with_settings() -> Option<(String, String)> {
     resolve_pandoc(g.pandoc_path.as_deref()).await
 }
 
+/// Run pandoc export. Honors the user's `pandoc_path` override.
+pub async fn run_pandoc(
+    input_path: &Path,
+    output_path: &Path,
+    format: &str,
+    extra_args: &[String],
+) -> Result<String, AppError> {
+    let bin = match resolve_with_settings().await {
+        Some((b, _)) => b,
+        None => {
+            return Err(AppError::Custom(
+                "Pandoc not found. Install Pandoc from https://pandoc.org/installing.html or set the binary path in Settings → Editor → Pandoc."
+                    .to_string(),
+            ));
+        }
+    };
+    let mut cmd = Command::new(&bin);
+    cmd.arg(input_path);
+    cmd.arg("-o").arg(output_path);
+
+    match format {
+        "html" => {
+            cmd.arg("-t").arg("html5").arg("--standalone");
+        }
+        "pdf" => { /* pandoc auto-detects PDF engine */ }
+        "docx" => {
+            cmd.arg("-t").arg("docx");
+        }
+        "epub" => {
+            cmd.arg("-t").arg("epub");
+        }
+        _ => {
+            cmd.arg("-t").arg(format);
+        }
+    }
+
+    for arg in extra_args {
+        cmd.arg(arg);
+    }
+
+    let output = cmd.output().await?;
+
+    if output.status.success() {
+        Ok(format!("Export complete: {}", output_path.display()))
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        Err(AppError::Custom(format!("Pandoc error: {}", stderr)))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -122,7 +172,7 @@ mod tests {
             version.to_lowercase().contains("pandoc"),
             "version line should mention pandoc: {version}"
         );
-        eprintln!("resolve_pandoc(None) → {path} ({version})");
+        eprintln!("resolve_pandoc(None) -> {path} ({version})");
     }
 
     #[tokio::test]
@@ -197,62 +247,10 @@ mod tests {
     async fn truly_missing_pandoc_returns_none() {
         // Hard to truly remove pandoc from the test environment; instead
         // exercise the negative path of `probe()` directly via an
-        // override we know doesn't exist, AND simulate "no pandoc on
-        // PATH" by relying on the bogus override falling through to
-        // PATH/common probing. Where we can't simulate (pandoc IS
-        // reachable), assert the structural property: the bad override
-        // alone never resolves to itself.
+        // override we know doesn't exist. Where pandoc is reachable, this
+        // still asserts the important property: the bogus binary alone
+        // never resolves.
         let bogus_only = probe("totally-nonexistent-pandoc-xyz").await;
         assert!(bogus_only.is_none(), "probe of a fake binary must be None");
-    }
-}
-
-/// Run pandoc export. Honors the user's `pandoc_path` override.
-pub async fn run_pandoc(
-    input_path: &Path,
-    output_path: &Path,
-    format: &str,
-    extra_args: &[String],
-) -> Result<String, AppError> {
-    let bin = match resolve_with_settings().await {
-        Some((b, _)) => b,
-        None => {
-            return Err(AppError::Custom(
-                "Pandoc not found. Install Pandoc from https://pandoc.org/installing.html or set the binary path in Settings → Editor → Pandoc."
-                    .to_string(),
-            ));
-        }
-    };
-    let mut cmd = Command::new(&bin);
-    cmd.arg(input_path);
-    cmd.arg("-o").arg(output_path);
-
-    match format {
-        "html" => {
-            cmd.arg("-t").arg("html5").arg("--standalone");
-        }
-        "pdf" => { /* pandoc auto-detects PDF engine */ }
-        "docx" => {
-            cmd.arg("-t").arg("docx");
-        }
-        "epub" => {
-            cmd.arg("-t").arg("epub");
-        }
-        _ => {
-            cmd.arg("-t").arg(format);
-        }
-    }
-
-    for arg in extra_args {
-        cmd.arg(arg);
-    }
-
-    let output = cmd.output().await?;
-
-    if output.status.success() {
-        Ok(format!("Export complete: {}", output_path.display()))
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        Err(AppError::Custom(format!("Pandoc error: {}", stderr)))
     }
 }
