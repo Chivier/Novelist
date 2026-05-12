@@ -78,7 +78,7 @@ describe('tabsStore.tryRenameAfterSave — placeholder + H1 gating', () => {
     );
   });
 
-  it('does not double-rename: once the file is no longer a placeholder, future saves are no-ops', async () => {
+  it('chains renames: after first Path A rename, subsequent H1 changes flow through Path B', async () => {
     tabsStore.openTab(`${PROJECT}/Untitled 1.md`, '', { justCreated: true });
     const id = tabsStore.activeTabId!;
 
@@ -87,11 +87,17 @@ describe('tabsStore.tryRenameAfterSave — placeholder + H1 gating', () => {
     const renamedTab = tabsStore.tabs.find(t => t.id === id);
     expect(renamedTab?.filePath).toBe(`${PROJECT}/Title A.md`);
 
-    // A subsequent save must NOT auto-rename again — `Title A.md` no longer
-    // matches `isPlaceholder()`, so the gate naturally closes.
+    // With ongoing H1 sync (v0.2.5+) a subsequent H1 change continues to
+    // drive the filename via Path B. v0.2.4 stopped after the first rename;
+    // see spec 2026-05-12-h1-filename-ongoing-sync-design.md.
     (commands.renameItem as any).mockClear();
-    await tabsStore.tryRenameAfterSave(`${PROJECT}/Title A.md`, '# Different Title');
-    expect(commands.renameItem).not.toHaveBeenCalled();
+    const finalPath = await tabsStore.tryRenameAfterSave(`${PROJECT}/Title A.md`, '# Different Title');
+    expect(finalPath).toBe(`${PROJECT}/Different Title.md`);
+    expect(commands.renameItem).toHaveBeenCalledWith(
+      `${PROJECT}/Title A.md`,
+      'Different Title.md',
+      true,
+    );
   });
 
   it('no-ops when the save contains no H1 yet (rename deferred until the user titles it)', async () => {
@@ -121,10 +127,11 @@ describe('tabsStore.tryRenameAfterSave — placeholder + H1 gating', () => {
   });
 
   it('runs even when the tab is clean — Editor.saveCurrentFile relies on this for Cmd+S on clean tabs', async () => {
-    // Open a placeholder tab and immediately mark it saved (no writeFile). This
-    // simulates a file that's been autosaved already, where the user then
-    // presses Cmd+S to confirm — the filename should still update.
-    tabsStore.openTab(`${PROJECT}/Untitled 1.md`, '# 开篇');
+    // Open a placeholder tab with no content yet (no H1 seeded into anchor),
+    // then mark it saved. This simulates a file that's been autosaved already
+    // (with no H1), where the user then types a title, and Cmd+S fires on a
+    // clean tab — the filename should still update.
+    tabsStore.openTab(`${PROJECT}/Untitled 1.md`, '');
     const id = tabsStore.activeTabId!;
     tabsStore.markSaved(id);
     const tab = tabsStore.tabs.find(t => t.id === id);
