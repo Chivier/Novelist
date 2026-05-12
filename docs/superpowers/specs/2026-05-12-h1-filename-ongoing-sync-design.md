@@ -139,7 +139,12 @@ Setting key `settings.editor.newFile.autoRenameHint`:
 - **zh-CN (was):** corresponding zh string
 - **zh-CN (new):** `"保存时让文件名跟随 H1 标题。手动重命名文件即可脱离同步。"`
 
-Label key unchanged.
+Label key `settings.editor.newFile.autoRename` also gets a tightened
+phrasing — the v0.2.4 wording ("Auto-rename placeholder files from H1")
+implies one-shot behavior and becomes misleading under Path B:
+
+- **en:** `"Sync filename with H1 on save"`
+- **zh-CN:** `"保存时让文件名跟随 H1 标题"`
 
 ## Testing
 
