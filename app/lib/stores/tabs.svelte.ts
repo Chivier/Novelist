@@ -223,8 +223,7 @@ class TabsStore {
     // is possible; we update every matching tab via `updatePath` after rename.
     const tab = this.findByPath(filePath);
     const oldH1 = tab?.lastSyncedH1 ?? '';
-    const newH1Raw = extractFirstH1(content);
-    const newH1 = newH1Raw ?? '';
+    const newH1 = extractFirstH1(content) ?? '';
 
     if (newH1 === oldH1) return filePath; // no change
 
@@ -241,9 +240,10 @@ class TabsStore {
       const list = await commands.listDirectory(parentDir, null);
       const siblings = list.status === 'ok' ? list.data.map(e => e.name) : [];
       const newName = renameFromH1(fileName, newH1, siblings);
-      if (!newName || newName === fileName) {
-        // Couldn't compute a rename, but we DID observe an H1; record it so
-        // Path B can pick up future changes.
+      if (!newName) {
+        // `renameFromH1` returned null (sanitized H1 empty or computed name
+        // would equal current). We DID observe an H1; record it so Path B
+        // can pick up future changes.
         this.setLastSyncedH1ByPath(filePath, newH1);
         return filePath;
       }

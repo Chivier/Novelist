@@ -187,4 +187,27 @@ describe('tabsStore.tryRenameAfterSave — Path B (ongoing H1 sync)', () => {
     expect(next).toBe(`${PROJECT}/第1章-开篇.md`);
     expect(commands.renameItem).not.toHaveBeenCalled();
   });
+
+  it('keeps the old anchor when renameItem fails so the next save can retry', async () => {
+    tabsStore.openTab(`${PROJECT}/第1章-开篇.md`, '# 开篇\n\nbody');
+    const id = tabsStore.activeTabId!;
+
+    // First save: filesystem rename fails (e.g. permission denied).
+    (commands.renameItem as any).mockResolvedValueOnce({ status: 'error', error: 'EACCES' });
+    const failPath = await tabsStore.tryRenameAfterSave(
+      `${PROJECT}/第1章-开篇.md`,
+      '# 序幕',
+    );
+    expect(failPath).toBe(`${PROJECT}/第1章-开篇.md`);
+
+    // Anchor is unchanged — still "开篇" — so the next save with the same H1
+    // attempts the rename again rather than silently giving up.
+    expect(tabsStore.tabs.find(t => t.id === id)?.lastSyncedH1).toBe('开篇');
+
+    const retryPath = await tabsStore.tryRenameAfterSave(
+      `${PROJECT}/第1章-开篇.md`,
+      '# 序幕',
+    );
+    expect(retryPath).toBe(`${PROJECT}/第1章-序幕.md`);
+  });
 });
