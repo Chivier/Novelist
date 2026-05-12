@@ -450,14 +450,56 @@ export function setWysiwygRenderImages(enabled: boolean) { _renderImages = enabl
  * Full-document scan is acceptable: WYSIWYG is only enabled for docs
  * < 5000 lines, and Image nodes are rare (typically 0-20 per doc).
  */
+/**
+ * Tracks the line number containing the cursor when that line has an Image
+ * node — used to suppress block-image rendering so the user can edit the
+ * markdown `![alt](url)` source (e.g. fix a broken path).
+ *
+ * Pointer-driven transactions (`select.pointer`) are filtered out so the
+ * height map doesn't shift between mousedown and mouseup; the next
+ * non-pointer transaction (keyboard nav, typing, focus) flips the state.
+ */
+export function computeCursorImageLine(state: EditorState): number | null {
+  if (state.selection.ranges.length === 0) return null;
+  const head = state.selection.main.head;
+  const line = state.doc.lineAt(head);
+  let found = false;
+  syntaxTree(state).iterate({
+    from: line.from,
+    to: line.to,
+    enter(node) {
+      if (node.name === 'Image') { found = true; return false; }
+    },
+  });
+  return found ? line.number : null;
+}
+
+export const cursorImageLineField = StateField.define<number | null>({
+  // Initial state: render all images. The user has to explicitly move the
+  // cursor onto an image line (via keyboard) for the widget to collapse —
+  // avoids hiding the first image on doc-open when cursor defaults to pos 0.
+  create() { return null; },
+  update(value, tr) {
+    if (tr.isUserEvent('select.pointer')) return value;
+    if (tr.docChanged || tr.selection || syntaxTree(tr.state) !== syntaxTree(tr.startState)) {
+      return computeCursorImageLine(tr.state);
+    }
+    return value;
+  },
+});
+
 function buildImageBlockDecos(state: EditorState): DecorationSet {
   if (!_renderImages) return Decoration.none;
   const decos: Range<Decoration>[] = [];
   const projectDir = _projectDir;
+  const skipLine = state.field(cursorImageLineField, false);
 
   syntaxTree(state).iterate({
     enter(node) {
       if (node.name !== 'Image') return;
+
+      const line = state.doc.lineAt(node.from);
+      if (skipLine != null && line.number === skipLine) return;
 
       let imgUrl = '';
       let imgAlt = '';
@@ -476,7 +518,6 @@ function buildImageBlockDecos(state: EditorState): DecorationSet {
       }
 
       if (imgUrl) {
-        const line = state.doc.lineAt(node.from);
         decos.push(Decoration.replace({
           widget: new ImageWidget(imgUrl, imgAlt, projectDir),
           block: true,
@@ -497,8 +538,12 @@ const imageBlockDecoField = StateField.define<DecorationSet>({
     if (syntaxTree(tr.state) !== syntaxTree(tr.startState)) {
       return buildImageBlockDecos(tr.state);
     }
-    // No selection-based rebuild — toggling block decorations on cursor
-    // change causes height-map oscillation (see buildImageBlockDecos).
+    // Rebuild when the cursor enters/leaves an image line. Pointer events
+    // are filtered upstream in cursorImageLineField to avoid mousedown/
+    // mouseup height-map shift.
+    if (tr.state.field(cursorImageLineField) !== tr.startState.field(cursorImageLineField)) {
+      return buildImageBlockDecos(tr.state);
+    }
     return value;
   },
   provide: f => EditorView.decorations.from(f),
@@ -1023,6 +1068,7 @@ class WysiwygPluginClass {
 }
 
 export const wysiwygPlugin: Extension = [
+  cursorImageLineField,
   imageBlockDecoField,
   ViewPlugin.fromClass(WysiwygPluginClass, {
     decorations: (v) => v.decorations,
