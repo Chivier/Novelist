@@ -413,3 +413,42 @@ function bumpStemUntilFree(newName: string, siblings: string[], currentName: str
   }
   return newName; // give up; caller handles error
 }
+
+/**
+ * Path B of ongoing H1→filename sync. Compute the new filename when a tab's
+ * H1 has changed from `oldH1` to `newH1` and the file is already past the
+ * placeholder→title transition (Path A in tabsStore.tryRenameAfterSave).
+ *
+ * Returns null when:
+ * - either side sanitizes to empty (no anchor to act on)
+ * - old and new sanitize to the same stem (nothing to do)
+ * - the sanitized old H1 is not present in the current filename stem
+ *   (i.e. the user manually renamed the file — sync auto-detaches)
+ *
+ * On a hit, the rightmost occurrence of sanitized old H1 inside the stem is
+ * replaced with sanitized new H1 (lastIndexOf — title slot is conventionally
+ * at the end of the stem). Resulting collisions with `siblings` get bumped
+ * via the existing `bumpStemUntilFree` ` 2`/` 3`/… scheme.
+ */
+export function applyH1Substitution(
+  currentName: string,
+  oldH1: string,
+  newH1: string,
+  siblings: string[],
+): string | null {
+  const sanitizedOld = sanitizeFilenameStem(oldH1);
+  const sanitizedNew = sanitizeFilenameStem(newH1);
+  if (sanitizedOld.length === 0) return null;
+  if (sanitizedNew.length === 0) return null;
+  if (sanitizedOld === sanitizedNew) return null;
+
+  const stem = currentName.replace(/\.md$/, '');
+  const idx = stem.lastIndexOf(sanitizedOld);
+  if (idx === -1) return null;
+
+  const newStem = stem.slice(0, idx) + sanitizedNew + stem.slice(idx + sanitizedOld.length);
+  const newName = `${newStem}.md`;
+  if (newName === currentName) return null;
+
+  return bumpStemUntilFree(newName, siblings, currentName);
+}
