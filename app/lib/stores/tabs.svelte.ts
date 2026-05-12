@@ -432,7 +432,14 @@ class TabsStore {
     }
   }
 
-  /** Update a tab's file path (used by Save As to re-point a scratch file). */
+  /**
+   * Update a tab's file path (used by Save As to re-point a scratch file).
+   *
+   * Intentionally does NOT reset `lastSyncedH1`. The H1→filename sync's
+   * Path B (see `tryRenameAfterSave`) detects "old anchor not in new
+   * filename" and self-detaches, which is exactly the correct behavior
+   * after a manual rename / Save As.
+   */
   updateFilePath(id: string, newPath: string) {
     for (const pane of this.panes) {
       const tab = pane.tabs.find(t => t.id === id);
