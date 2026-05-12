@@ -5,6 +5,14 @@ All notable changes to Novelist will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Filename now follows the H1 heading on every save (was first-save only).
+  Manually renaming a file detaches the sync. See spec
+  `docs/superpowers/specs/2026-05-12-h1-filename-ongoing-sync-design.md`.
+
 ## [0.2.4] - 2026-05-11
 
 Major release adding **image hosting** and **publishing** — Novelist
