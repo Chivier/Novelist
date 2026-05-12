@@ -43,7 +43,7 @@ describe('applyH1Substitution', () => {
     );
   });
 
-  it('preserves the .md extension casing and does not touch directories', () => {
+  it('replaces the whole stem when old H1 is the entire stem (no prefix)', () => {
     expect(applyH1Substitution('开篇.md', '开篇', '序幕', [])).toBe('序幕.md');
   });
 });

@@ -448,7 +448,8 @@ export function applyH1Substitution(
 
   const newStem = stem.slice(0, idx) + sanitizedNew + stem.slice(idx + sanitizedOld.length);
   const newName = `${newStem}.md`;
-  if (newName === currentName) return null;
+  // (no `newName === currentName` guard needed — earlier guards ensure
+  // sanitizedOld !== sanitizedNew and idx >= 0, so the stem must differ.)
 
   return bumpStemUntilFree(newName, siblings, currentName);
 }
