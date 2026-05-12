@@ -25,6 +25,16 @@ interface TabState {
    * we confirm no external consumers depend on it.
    */
   justCreated: boolean;
+  /**
+   * Last H1 we successfully synchronized into the filename (or seeded from
+   * disk content at open time). Drives the ongoing H1→filename sync in
+   * `tryRenameAfterSave` — see spec 2026-05-12-h1-filename-ongoing-sync-design.md.
+   *
+   * Empty string means "the file currently has no H1, and that is also what
+   * the filename reflects". `null` means "not initialized yet" (treated the
+   * same as empty by the sync algorithm).
+   */
+  lastSyncedH1: string | null;
 }
 
 interface OpenTabOptions {
@@ -246,6 +256,7 @@ class TabsStore {
       cursorPosition: 0,
       version: 0,
       justCreated: options.justCreated === true,
+      lastSyncedH1: extractFirstH1(content) ?? '',
     });
     pane.activeTabId = id;
   }
@@ -269,6 +280,7 @@ class TabsStore {
       cursorPosition: 0,
       version: 0,
       justCreated: options.justCreated === true,
+      lastSyncedH1: extractFirstH1(content) ?? '',
     });
     pane.activeTabId = id;
   }
@@ -448,6 +460,10 @@ class TabsStore {
         tab.content = newContent;
         tab.isDirty = false;
         tab.version += 1;
+        // External-edit policy: refresh anchor silently so the next save
+        // doesn't see a stale `lastSyncedH1` and try to rename based on
+        // someone else's edit. See spec §"Edge cases".
+        tab.lastSyncedH1 = extractFirstH1(newContent) ?? '';
         // Clear saved editor state so the tab gets a fresh state with new content
         savedEditorStates.delete(id);
         return;
