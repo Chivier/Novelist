@@ -225,12 +225,13 @@ class TabsStore {
     const oldH1 = tab?.lastSyncedH1 ?? '';
     const newH1 = extractFirstH1(content) ?? '';
 
-    if (newH1 === oldH1) return filePath; // no change
-
     const fileName = pathBasename(filePath) || filePath;
     const parentDir = pathDirname(filePath) || filePath;
 
     // -------- Path A: placeholder → titled (existing behavior) --------
+    // Run this before the `newH1 === oldH1` fast path. A placeholder file
+    // opened from disk may already have its H1 seeded into `lastSyncedH1`,
+    // but the filename still needs its first H1-driven rename on Cmd+S.
     if (isPlaceholder(fileName)) {
       if (newH1.trim().length === 0) {
         // No H1 yet; nothing to do. Don't update anchor either — let next
@@ -258,6 +259,8 @@ class TabsStore {
       await commands.broadcastFileRenamed(filePath, newPath).catch(() => {});
       return newPath;
     }
+
+    if (newH1 === oldH1) return filePath; // no change
 
     // -------- Path B: ongoing sync --------
     // If we have no anchor (e.g. tab opened before this feature, or file

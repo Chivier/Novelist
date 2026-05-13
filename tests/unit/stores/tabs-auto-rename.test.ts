@@ -78,6 +78,22 @@ describe('tabsStore.tryRenameAfterSave — placeholder + H1 gating', () => {
     );
   });
 
+  it('renames a placeholder file whose H1 was already present when opened from disk', async () => {
+    tabsStore.openTab(`${PROJECT}/Untitled 5.md`, '# 第二章\n\n正文');
+
+    const newPath = await tabsStore.tryRenameAfterSave(
+      `${PROJECT}/Untitled 5.md`,
+      '# 第二章\n\n正文',
+    );
+
+    expect(newPath).toBe(`${PROJECT}/第二章.md`);
+    expect(commands.renameItem).toHaveBeenCalledWith(
+      `${PROJECT}/Untitled 5.md`,
+      '第二章.md',
+      true,
+    );
+  });
+
   it('chains renames: after first Path A rename, subsequent H1 changes flow through Path B', async () => {
     tabsStore.openTab(`${PROJECT}/Untitled 1.md`, '', { justCreated: true });
     const id = tabsStore.activeTabId!;
