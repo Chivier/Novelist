@@ -6,6 +6,16 @@
   font-weight: 400;
   font-display: swap;
   src: url("./assets/fonts/LXGWWenKaiScreen-Regular.woff2") format("woff2");
+  unicode-range:
+    U+2E80-2EFF,
+    U+3000-303F,
+    U+31C0-31EF,
+    U+3400-4DBF,
+    U+4E00-9FFF,
+    U+F900-FAFF,
+    U+FE30-FE4F,
+    U+FF00-FFEF,
+    U+20000-2FA1F;
 }
 
 :root {
