@@ -2,10 +2,11 @@ import { commands } from '$lib/ipc/commands';
 import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { confirmUnsavedChanges } from '$lib/composables/unsaved-prompt.svelte';
 import { isScratchFile, nextScratchDisplayName } from '$lib/utils/scratch';
-import { isPlaceholder, renameFromH1 } from '$lib/utils/placeholder';
+import { isPlaceholder, renameFromH1, applyH1Substitution } from '$lib/utils/placeholder';
 import { extractFirstH1 } from '$lib/utils/h1';
 import { newFileSettings } from '$lib/stores/new-file-settings.svelte';
 import { t } from '$lib/i18n';
+import { pathBasename, pathDirname } from '$lib/utils/path';
 import type { EditorView } from '@codemirror/view';
 
 interface TabState {
@@ -18,19 +19,26 @@ interface TabState {
   cursorPosition: number;
   version: number;
   /**
-   * True for tabs that were created this session via "New File" / "New Scratch
-   * File" / template "new-file". Gates H1-driven auto-rename in
-   * `tryRenameAfterSave` so that opening an existing file whose name happens
-   * to match a placeholder pattern (e.g. `第1章.md` the user created manually)
-   * does NOT get silently renamed on Cmd+S. Cleared after a successful
-   * auto-rename (one-shot); stays true across no-op saves so the rename can
-   * still fire once the user actually types an H1.
+   * Deprecated since v0.2.4 — see spec 2026-05-07-v0.2.4-rename-and-macros.md.
+   * Field retained so existing call sites and IPC mocks compile; no longer
+   * read by `tryRenameAfterSave`. Slated for removal after v0.2.5 once
+   * we confirm no external consumers depend on it.
    */
   justCreated: boolean;
+  /**
+   * Last H1 we successfully synchronized into the filename (or seeded from
+   * disk content at open time). Drives the ongoing H1→filename sync in
+   * `tryRenameAfterSave` — see spec 2026-05-12-h1-filename-ongoing-sync-design.md.
+   *
+   * Empty string means "the file currently has no H1, and that is also what
+   * the filename reflects". `null` means "not initialized yet" (treated the
+   * same as empty by the sync algorithm).
+   */
+  lastSyncedH1: string | null;
 }
 
 interface OpenTabOptions {
-  /** Opt-in flag for the H1 auto-rename pipeline. See TabState.justCreated. */
+  /** Deprecated since v0.2.4 — kept for call-site compatibility. */
   justCreated?: boolean;
 }
 
@@ -177,7 +185,7 @@ class TabsStore {
 
   /** Update filePath and fileName for ALL tabs across ALL panes that match `oldPath`. */
   updatePath(oldPath: string, newPath: string) {
-    const newName = newPath.split('/').pop() || newPath;
+    const newName = pathBasename(newPath) || newPath;
     for (const pane of this.panes) {
       for (const tab of pane.tabs) {
         if (tab.filePath === oldPath) {
@@ -189,36 +197,94 @@ class TabsStore {
   }
 
   /**
-   * Post-write hook: if the file is a placeholder and its content has an H1,
-   * rename the file to match. Returns the new path (== old path if no rename).
-   * Safe to call after every successful writeFile.
+   * Post-write hook: keep the filename in sync with the file's H1 heading.
+   * Returns the new path (== old path if no rename). Safe to call after every
+   * successful writeFile — both manual Cmd+S and auto-save funnel here.
    *
-   * Gated on the tab's `justCreated` flag — only fires for tabs created this
-   * session via New File / New Scratch / template new-file. Opening an
-   * existing file whose name happens to match a placeholder pattern (e.g.
-   * a `第1章.md` the user created in Finder) must NOT be auto-renamed, since
-   * the user explicitly chose that name. See the TabState.justCreated doc.
+   * Two paths, gated by `auto_rename_from_h1`:
+   *
+   *  Path A — placeholder first-time rename (v0.2.4 behavior, unchanged):
+   *    File still matches `isPlaceholder()` and has a non-empty H1.
+   *    Uses `renameFromH1`.
+   *
+   *  Path B — ongoing sync (v0.2.5+):
+   *    File is past the placeholder stage; we compare the just-saved H1
+   *    against the per-tab `lastSyncedH1`. If changed and the old H1 still
+   *    appears in the current filename, swap that substring for the new H1.
+   *    Manually renamed files have no anchor to find, so sync auto-detaches.
+   *
+   * See spec `docs/superpowers/specs/2026-05-12-h1-filename-ongoing-sync-design.md`.
    */
   async tryRenameAfterSave(filePath: string, content: string): Promise<string> {
     if (!newFileSettings.autoRenameFromH1) return filePath;
+    if (isScratchFile(filePath)) return filePath;
 
+    // Find the tab so we can read/update `lastSyncedH1`. Save-from-another-pane
+    // is possible; we update every matching tab via `updatePath` after rename.
     const tab = this.findByPath(filePath);
-    if (!tab || !tab.justCreated) return filePath;
+    const oldH1 = tab?.lastSyncedH1 ?? '';
+    const newH1 = extractFirstH1(content) ?? '';
 
-    const fileName = filePath.split('/').pop() || filePath;
-    if (!isPlaceholder(fileName)) return filePath;
-    const h1 = extractFirstH1(content);
-    if (!h1 || h1.trim().length === 0) return filePath;
+    const fileName = pathBasename(filePath) || filePath;
+    const parentDir = pathDirname(filePath) || filePath;
 
-    const lastSlash = filePath.lastIndexOf('/');
-    const parentDir = lastSlash > 0 ? filePath.slice(0, lastSlash) : filePath;
+    // -------- Path A: placeholder → titled (existing behavior) --------
+    // Run this before the `newH1 === oldH1` fast path. A placeholder file
+    // opened from disk may already have its H1 seeded into `lastSyncedH1`,
+    // but the filename still needs its first H1-driven rename on Cmd+S.
+    if (isPlaceholder(fileName)) {
+      if (newH1.trim().length === 0) {
+        // No H1 yet; nothing to do. Don't update anchor either — let next
+        // save with a real H1 fall through here again.
+        return filePath;
+      }
+      const list = await commands.listDirectory(parentDir, null);
+      const siblings = list.status === 'ok' ? list.data.map(e => e.name) : [];
+      const newName = renameFromH1(fileName, newH1, siblings);
+      if (!newName) {
+        // `renameFromH1` returned null (sanitized H1 empty or computed name
+        // would equal current). We DID observe an H1; record it so Path B
+        // can pick up future changes.
+        this.setLastSyncedH1ByPath(filePath, newH1);
+        return filePath;
+      }
+      const result = await commands.renameItem(filePath, newName, true);
+      if (result.status !== 'ok') {
+        console.warn('Auto-rename failed:', result.error);
+        return filePath;
+      }
+      const newPath = result.data;
+      this.updatePath(filePath, newPath);
+      this.setLastSyncedH1ByPath(newPath, newH1);
+      await commands.broadcastFileRenamed(filePath, newPath).catch(() => {});
+      return newPath;
+    }
 
-    // Re-list to get current siblings for collision check
+    if (newH1 === oldH1) return filePath; // no change
+
+    // -------- Path B: ongoing sync --------
+    // If we have no anchor (e.g. tab opened before this feature, or file
+    // opened from disk with no H1), adopt the current H1 silently so the
+    // next *change* has something to compare against.
+    if (oldH1.length === 0) {
+      this.setLastSyncedH1ByPath(filePath, newH1);
+      return filePath;
+    }
+    // User emptied the H1 — keep filename, do NOT update anchor (so retyping
+    // the same H1 short-circuits via `newH1 === oldH1`).
+    if (newH1.trim().length === 0) {
+      return filePath;
+    }
+
     const list = await commands.listDirectory(parentDir, null);
     const siblings = list.status === 'ok' ? list.data.map(e => e.name) : [];
-
-    const newName = renameFromH1(fileName, h1, siblings);
-    if (!newName || newName === fileName) return filePath;
+    const newName = applyH1Substitution(fileName, oldH1, newH1, siblings);
+    if (!newName) {
+      // Manual-rename detach OR sanitize-equal. Update anchor so we don't
+      // keep retrying the same comparison every save.
+      this.setLastSyncedH1ByPath(filePath, newH1);
+      return filePath;
+    }
 
     const result = await commands.renameItem(filePath, newName, true);
     if (result.status !== 'ok') {
@@ -227,18 +293,18 @@ class TabsStore {
     }
     const newPath = result.data;
     this.updatePath(filePath, newPath);
-    // Consume the one-shot: after a successful rename the tab is no longer
-    // a freshly-created placeholder. Future saves go through the normal path.
+    this.setLastSyncedH1ByPath(newPath, newH1);
+    await commands.broadcastFileRenamed(filePath, newPath).catch(() => {});
+    return newPath;
+  }
+
+  /** Internal helper: update `lastSyncedH1` on every tab matching `filePath`. */
+  private setLastSyncedH1ByPath(filePath: string, h1: string) {
     for (const pane of this.panes) {
-      for (const t of pane.tabs) {
-        if (t.filePath === newPath) t.justCreated = false;
+      for (const tab of pane.tabs) {
+        if (tab.filePath === filePath) tab.lastSyncedH1 = h1;
       }
     }
-
-    // Broadcast to other windows so their tabs/sidebar can update.
-    await commands.broadcastFileRenamed(filePath, newPath).catch(() => {});
-
-    return newPath;
   }
 
   openTab(filePath: string, content: string, options: OpenTabOptions = {}) {
@@ -246,7 +312,7 @@ class TabsStore {
     const existing = pane.tabs.find(t => t.filePath === filePath);
     if (existing) { pane.activeTabId = existing.id; return; }
 
-    const rawName = filePath.split('/').pop() || filePath;
+    const rawName = pathBasename(filePath) || filePath;
     const fileName = isScratchFile(filePath) ? nextScratchDisplayName() : rawName;
     const id = crypto.randomUUID();
     pane.tabs.push({
@@ -259,6 +325,7 @@ class TabsStore {
       cursorPosition: 0,
       version: 0,
       justCreated: options.justCreated === true,
+      lastSyncedH1: extractFirstH1(content) ?? '',
     });
     pane.activeTabId = id;
   }
@@ -270,7 +337,7 @@ class TabsStore {
     const existing = pane.tabs.find(t => t.filePath === filePath);
     if (existing) { pane.activeTabId = existing.id; return; }
 
-    const fileName = filePath.split('/').pop() || filePath;
+    const fileName = pathBasename(filePath) || filePath;
     const id = crypto.randomUUID();
     pane.tabs.push({
       id,
@@ -282,6 +349,7 @@ class TabsStore {
       cursorPosition: 0,
       version: 0,
       justCreated: options.justCreated === true,
+      lastSyncedH1: extractFirstH1(content) ?? '',
     });
     pane.activeTabId = id;
   }
@@ -433,13 +501,20 @@ class TabsStore {
     }
   }
 
-  /** Update a tab's file path (used by Save As to re-point a scratch file). */
+  /**
+   * Update a tab's file path (used by Save As to re-point a scratch file).
+   *
+   * Intentionally does NOT reset `lastSyncedH1`. The H1→filename sync's
+   * Path B (see `tryRenameAfterSave`) detects "old anchor not in new
+   * filename" and self-detaches, which is exactly the correct behavior
+   * after a manual rename / Save As.
+   */
   updateFilePath(id: string, newPath: string) {
     for (const pane of this.panes) {
       const tab = pane.tabs.find(t => t.id === id);
       if (tab) {
         tab.filePath = newPath;
-        tab.fileName = newPath.split('/').pop() || newPath;
+        tab.fileName = pathBasename(newPath) || newPath;
         return;
       }
     }
@@ -461,6 +536,10 @@ class TabsStore {
         tab.content = newContent;
         tab.isDirty = false;
         tab.version += 1;
+        // External-edit policy: refresh anchor silently so the next save
+        // doesn't see a stale `lastSyncedH1` and try to rename based on
+        // someone else's edit. See spec §"Edge cases".
+        tab.lastSyncedH1 = extractFirstH1(newContent) ?? '';
         // Clear saved editor state so the tab gets a fresh state with new content
         savedEditorStates.delete(id);
         return;

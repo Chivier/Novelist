@@ -242,6 +242,25 @@ describe('[contract] createNewFileInProject', () => {
     expect(h.settingsState.recordLastUsedDir).not.toHaveBeenCalled();
     expect(h.tabsState.openTab).not.toHaveBeenCalled();
   });
+
+  it('resolves {date:fmt} macros in the template before numbering', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 4, 7, 14, 8, 32));
+    try {
+      h.projectState.dirPath = '/proj';
+      h.newFileState.template = '{date:YYMMDD}-{N}';
+      h.newFileState.detectFromFolder = true;
+      h.cmd.listDirectory.mockResolvedValue({ status: 'ok', data: [] });
+      h.cmd.createFile.mockResolvedValue({ status: 'ok', data: '/proj/260507-1.md' });
+      h.cmd.readFile.mockResolvedValue({ status: 'ok', data: '' });
+      await createNewFileInProject();
+      expect(h.cmd.createFile).toHaveBeenCalledWith('/proj', '260507-1.md');
+    } finally {
+      // Restore template for subsequent tests
+      h.newFileState.template = 'Chapter {N}';
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('[contract] executeTemplate — insert mode', () => {

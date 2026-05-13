@@ -417,7 +417,7 @@
 }
 
 .cm-slash-menu-label {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--novelist-text, #333);
   line-height: 1.3;
@@ -432,7 +432,7 @@
 .cm-slash-menu-empty {
   padding: 12px;
   text-align: center;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--novelist-text-secondary, #888);
 }
 
@@ -453,7 +453,7 @@
   padding: 6px 12px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--novelist-text, #333);
   transition: background 80ms ease;
 }

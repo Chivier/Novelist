@@ -8,6 +8,7 @@ import { extensionStore } from '$lib/stores/extensions.svelte';
 import { aiTalkSessions } from '$lib/components/ai-talk/sessions.svelte';
 import { aiAgentSessions } from '$lib/components/ai-agent/sessions.svelte';
 import * as fmt from '$lib/editor/formatting';
+import { i18n, t as tFn, tIn } from '$lib/i18n';
 
 /**
  * Bundle of App.svelte-local references the command handlers need.
@@ -42,71 +43,120 @@ export type AppCommandContext = {
 export function registerAppCommands(ctx: AppCommandContext) {
   const { t, getActiveEditorView } = ctx;
 
-  commandRegistry.register({ id: 'new-window', label: t('command.newWindow'), shortcut: 'Cmd+Shift+N', handler: ctx.openNewWindow });
-  commandRegistry.register({ id: 'toggle-sidebar', label: t('command.toggleSidebar'), shortcut: shortcutsStore.get('toggle-sidebar'), handler: () => uiStore.toggleSidebar() });
-  commandRegistry.register({ id: 'toggle-outline', label: t('command.toggleOutline'), shortcut: shortcutsStore.get('toggle-outline'), handler: () => uiStore.toggleOutline() });
-  commandRegistry.register({ id: 'toggle-zen', label: t('command.toggleZen'), shortcut: shortcutsStore.get('toggle-zen'), handler: () => uiStore.toggleZen() });
-  commandRegistry.register({ id: 'toggle-draft', label: t('command.toggleDraft'), shortcut: shortcutsStore.get('toggle-draft'), handler: () => uiStore.toggleDraft() });
-  commandRegistry.register({ id: 'toggle-snapshot', label: t('command.toggleSnapshot'), shortcut: shortcutsStore.get('toggle-snapshot'), handler: () => uiStore.toggleSnapshot() });
-  commandRegistry.register({ id: 'toggle-stats', label: t('command.toggleStats'), shortcut: shortcutsStore.get('toggle-stats'), handler: () => uiStore.toggleStats() });
-  commandRegistry.register({ id: 'toggle-template', label: t('command.toggleTemplate'), shortcut: shortcutsStore.get('toggle-template'), handler: () => uiStore.toggleTemplate() });
-  commandRegistry.register({ id: 'save-current-as-template', label: t('command.saveCurrentAsTemplate'), shortcut: shortcutsStore.get('save-current-as-template'), handler: ctx.saveCurrentFileAsTemplate });
-  commandRegistry.register({ id: 'command-palette', label: t('command.commandPalette'), shortcut: shortcutsStore.get('command-palette'), handler: ctx.togglePalette });
-  commandRegistry.register({ id: 'move-file', label: t('command.moveFile'), shortcut: shortcutsStore.get('move-file'), handler: () => {
+  /**
+   * Register a palette command resolved from an i18n key. Always
+   * populates `secondaryLabel` with the alternate-language string so
+   * users can search via either Chinese or English regardless of
+   * current locale. Falls back to a plain `label` when no key is
+   * available.
+   */
+  function reg(opts: {
+    id: string;
+    labelKey?: string;
+    label?: string;
+    shortcut?: string;
+    handler: () => void;
+  }) {
+    let label: string;
+    let secondaryLabelFn: (() => string | undefined) | undefined;
+    if (opts.labelKey) {
+      const key = opts.labelKey;
+      label = tFn(key);
+      // Resolved lazily at palette render time so the alternate-locale
+      // chunk has time to finish preloading after app boot.
+      secondaryLabelFn = () => {
+        const otherLocale = i18n.locale === 'zh-CN' ? 'en' : 'zh-CN';
+        const alt = tIn(otherLocale, key);
+        if (alt && alt !== label && alt !== key) return alt;
+        return undefined;
+      };
+    } else {
+      label = opts.label ?? opts.id;
+    }
+    commandRegistry.register({
+      id: opts.id,
+      label,
+      secondaryLabelFn,
+      shortcut: opts.shortcut,
+      handler: opts.handler,
+    });
+  }
+  // Suppress unused-variable lint for `t` — kept on `ctx` for any
+  // future register call that wants the active-locale label only.
+  void t;
+
+  reg({ id: 'new-window', labelKey: 'command.newWindow', shortcut: 'Cmd+Shift+N', handler: ctx.openNewWindow });
+  reg({ id: 'toggle-sidebar', labelKey: 'command.toggleSidebar', shortcut: shortcutsStore.get('toggle-sidebar'), handler: () => uiStore.toggleSidebar() });
+  reg({ id: 'toggle-outline', labelKey: 'command.toggleOutline', shortcut: shortcutsStore.get('toggle-outline'), handler: () => uiStore.toggleOutline() });
+  reg({ id: 'toggle-zen', labelKey: 'command.toggleZen', shortcut: shortcutsStore.get('toggle-zen'), handler: () => uiStore.toggleZen() });
+  reg({ id: 'toggle-draft', labelKey: 'command.toggleDraft', shortcut: shortcutsStore.get('toggle-draft'), handler: () => uiStore.toggleDraft() });
+  reg({ id: 'toggle-snapshot', labelKey: 'command.toggleSnapshot', shortcut: shortcutsStore.get('toggle-snapshot'), handler: () => uiStore.toggleSnapshot() });
+  reg({ id: 'toggle-stats', labelKey: 'command.toggleStats', shortcut: shortcutsStore.get('toggle-stats'), handler: () => uiStore.toggleStats() });
+  reg({ id: 'toggle-template', labelKey: 'command.toggleTemplate', shortcut: shortcutsStore.get('toggle-template'), handler: () => uiStore.toggleTemplate() });
+  reg({ id: 'save-current-as-template', labelKey: 'command.saveCurrentAsTemplate', shortcut: shortcutsStore.get('save-current-as-template'), handler: ctx.saveCurrentFileAsTemplate });
+  reg({ id: 'command-palette', labelKey: 'command.commandPalette', shortcut: shortcutsStore.get('command-palette'), handler: ctx.togglePalette });
+  reg({ id: 'move-file', labelKey: 'command.moveFile', shortcut: shortcutsStore.get('move-file'), handler: () => {
     if (tabsStore.activeTab && projectStore.dirPath) ctx.openMovePalette();
   }});
-  commandRegistry.register({ id: 'project-search', label: t('command.projectSearch'), shortcut: 'Cmd+Shift+F', handler: ctx.toggleProjectSearch });
-  commandRegistry.register({ id: 'toggle-split', label: t('command.toggleSplit'), shortcut: shortcutsStore.get('toggle-split'), handler: () => tabsStore.toggleSplit() });
-  commandRegistry.register({ id: 'new-file', label: t('command.newFile'), shortcut: shortcutsStore.get('new-file'), handler: () => {
+  reg({ id: 'project-search', labelKey: 'command.projectSearch', shortcut: 'Cmd+Shift+F', handler: ctx.toggleProjectSearch });
+  reg({
+    id: 'image-host.upload-all',
+    labelKey: 'command.imageHostUploadAll',
+    handler: () => {
+      void uploadAllLocalImagesCommand(getActiveEditorView());
+    },
+  });
+  reg({ id: 'toggle-split', labelKey: 'command.toggleSplit', shortcut: shortcutsStore.get('toggle-split'), handler: () => tabsStore.toggleSplit() });
+  reg({ id: 'new-file', labelKey: 'command.newFile', shortcut: shortcutsStore.get('new-file'), handler: () => {
     projectStore.dirPath ? ctx.handleNewFile() : ctx.handleNewScratchFile();
   }});
-  commandRegistry.register({ id: 'new-project', label: t('command.newProject'), handler: ctx.openNewProjectDialog });
-  commandRegistry.register({ id: 'switch-project', label: t('command.switchProject'), handler: ctx.requestProjectSwitcher });
-  commandRegistry.register({ id: 'open-directory', label: t('command.openDirectory'), shortcut: shortcutsStore.get('open-directory'), handler: ctx.handleOpenDirectory });
-  commandRegistry.register({ id: 'export-project', label: t('command.exportProject'), shortcut: shortcutsStore.get('export-project'), handler: ctx.openExportDialog });
-  commandRegistry.register({ id: 'close-tab', label: t('command.closeTab'), shortcut: shortcutsStore.get('close-tab'), handler: ctx.handleCloseTab });
-  commandRegistry.register({ id: 'rename-file', label: t('command.renameFile'), shortcut: shortcutsStore.get('rename-file'), handler: ctx.renameCurrentFile });
-  commandRegistry.register({ id: 'open-settings', label: t('command.openSettings'), shortcut: shortcutsStore.get('open-settings'), handler: () => uiStore.toggleSettings() });
-  commandRegistry.register({ id: 'go-to-line', label: t('command.goToLine'), shortcut: shortcutsStore.get('go-to-line'), handler: ctx.handleGoToLine });
-  commandRegistry.register({ id: 'toggle-mindmap', label: t('command.toggleMindmap'), shortcut: shortcutsStore.get('toggle-mindmap'), handler: ctx.toggleMindmapOverlay });
+  reg({ id: 'new-project', labelKey: 'command.newProject', handler: ctx.openNewProjectDialog });
+  reg({ id: 'switch-project', labelKey: 'command.switchProject', handler: ctx.requestProjectSwitcher });
+  reg({ id: 'open-directory', labelKey: 'command.openDirectory', shortcut: shortcutsStore.get('open-directory'), handler: ctx.handleOpenDirectory });
+  reg({ id: 'export-project', labelKey: 'command.exportProject', shortcut: shortcutsStore.get('export-project'), handler: ctx.openExportDialog });
+  reg({ id: 'close-tab', labelKey: 'command.closeTab', shortcut: shortcutsStore.get('close-tab'), handler: ctx.handleCloseTab });
+  reg({ id: 'rename-file', labelKey: 'command.renameFile', shortcut: shortcutsStore.get('rename-file'), handler: ctx.renameCurrentFile });
+  reg({ id: 'open-settings', labelKey: 'command.openSettings', shortcut: shortcutsStore.get('open-settings'), handler: () => uiStore.toggleSettings() });
+  reg({ id: 'go-to-line', labelKey: 'command.goToLine', shortcut: shortcutsStore.get('go-to-line'), handler: ctx.handleGoToLine });
+  reg({ id: 'toggle-mindmap', labelKey: 'command.toggleMindmap', shortcut: shortcutsStore.get('toggle-mindmap'), handler: ctx.toggleMindmapOverlay });
 
   // AI panels — toggle the right-side panel; session helpers open the
   // panel first, then perform the action. Save-chat dispatches a DOM
   // event the active panel listens for (keeps the save flow inside the
   // Impl component so its status toast fires as usual).
-  commandRegistry.register({
+  reg({
     id: 'toggle-ai-talk',
-    label: t('command.toggleAiTalk'),
+    labelKey: 'command.toggleAiTalk',
     shortcut: shortcutsStore.get('toggle-ai-talk'),
     handler: () => extensionStore.togglePanel('ai-talk'),
   });
-  commandRegistry.register({
+  reg({
     id: 'toggle-ai-agent',
-    label: t('command.toggleAiAgent'),
+    labelKey: 'command.toggleAiAgent',
     shortcut: shortcutsStore.get('toggle-ai-agent'),
     handler: () => extensionStore.togglePanel('ai-agent'),
   });
-  commandRegistry.register({
+  reg({
     id: 'ai-talk-new-session',
-    label: t('command.aiTalkNewSession'),
+    labelKey: 'command.aiTalkNewSession',
     shortcut: shortcutsStore.get('ai-talk-new-session'),
     handler: () => {
       if (extensionStore.activePanelId !== 'ai-talk') extensionStore.openPanel('ai-talk');
       aiTalkSessions.create();
     },
   });
-  commandRegistry.register({
+  reg({
     id: 'ai-agent-new-session',
-    label: t('command.aiAgentNewSession'),
+    labelKey: 'command.aiAgentNewSession',
     shortcut: shortcutsStore.get('ai-agent-new-session'),
     handler: () => {
       if (extensionStore.activePanelId !== 'ai-agent') extensionStore.openPanel('ai-agent');
       aiAgentSessions.create();
     },
   });
-  commandRegistry.register({
+  reg({
     id: 'ai-talk-save-chat',
-    label: t('command.aiTalkSaveChat'),
+    labelKey: 'command.aiTalkSaveChat',
     shortcut: shortcutsStore.get('ai-talk-save-chat'),
     handler: () => {
       // Delegate to the panel so its save-status toast fires.
@@ -115,27 +165,27 @@ export function registerAppCommands(ctx: AppCommandContext) {
   });
 
   // Editor formatting commands
-  commandRegistry.register({ id: 'editor-bold', label: t('command.bold'), shortcut: shortcutsStore.get('editor-bold'), handler: () => {
+  reg({ id: 'editor-bold', labelKey: 'command.bold', shortcut: shortcutsStore.get('editor-bold'), handler: () => {
     const view = getActiveEditorView(); if (view) fmt.toggleWrap(view, '**');
   }});
-  commandRegistry.register({ id: 'editor-italic', label: t('command.italic'), shortcut: shortcutsStore.get('editor-italic'), handler: () => {
+  reg({ id: 'editor-italic', labelKey: 'command.italic', shortcut: shortcutsStore.get('editor-italic'), handler: () => {
     const view = getActiveEditorView(); if (view) fmt.toggleWrap(view, '*');
   }});
-  commandRegistry.register({ id: 'editor-link', label: t('command.insertLink'), shortcut: shortcutsStore.get('editor-link'), handler: () => {
+  reg({ id: 'editor-link', labelKey: 'command.insertLink', shortcut: shortcutsStore.get('editor-link'), handler: () => {
     const view = getActiveEditorView(); if (view) fmt.wrapSelection(view, '[', '](url)');
   }});
-  commandRegistry.register({ id: 'editor-heading', label: t('command.toggleHeading'), shortcut: shortcutsStore.get('editor-heading'), handler: () => {
+  reg({ id: 'editor-heading', labelKey: 'command.toggleHeading', shortcut: shortcutsStore.get('editor-heading'), handler: () => {
     const view = getActiveEditorView(); if (view) fmt.toggleLinePrefix(view, '#');
   }});
-  commandRegistry.register({ id: 'editor-code-inline', label: t('command.inlineCode'), shortcut: shortcutsStore.get('editor-code-inline'), handler: () => {
+  reg({ id: 'editor-code-inline', labelKey: 'command.inlineCode', shortcut: shortcutsStore.get('editor-code-inline'), handler: () => {
     const view = getActiveEditorView(); if (view) fmt.toggleWrap(view, '`');
   }});
-  commandRegistry.register({ id: 'editor-strikethrough', label: t('command.strikethrough'), shortcut: shortcutsStore.get('editor-strikethrough'), handler: () => {
+  reg({ id: 'editor-strikethrough', labelKey: 'command.strikethrough', shortcut: shortcutsStore.get('editor-strikethrough'), handler: () => {
     const view = getActiveEditorView(); if (view) fmt.toggleWrap(view, '~~');
   }});
 
   // Chinese text tools
-  commandRegistry.register({ id: 'chinese-s2t', label: t('command.simplifiedToTraditional'), handler: async () => {
+  reg({ id: 'chinese-s2t', labelKey: 'command.simplifiedToTraditional', handler: async () => {
     const view = getActiveEditorView();
     if (!view) return;
     const { from, to } = view.state.selection.main;
@@ -151,7 +201,7 @@ export function registerAppCommands(ctx: AppCommandContext) {
       });
     }
   }});
-  commandRegistry.register({ id: 'chinese-t2s', label: t('command.traditionalToSimplified'), handler: async () => {
+  reg({ id: 'chinese-t2s', labelKey: 'command.traditionalToSimplified', handler: async () => {
     const view = getActiveEditorView();
     if (!view) return;
     const { from, to } = view.state.selection.main;
@@ -167,7 +217,7 @@ export function registerAppCommands(ctx: AppCommandContext) {
       });
     }
   }});
-  commandRegistry.register({ id: 'chinese-pinyin', label: t('command.generatePinyin'), handler: async () => {
+  reg({ id: 'chinese-pinyin', labelKey: 'command.generatePinyin', handler: async () => {
     const view = getActiveEditorView();
     if (!view) return;
     const { from, to } = view.state.selection.main;
@@ -179,7 +229,7 @@ export function registerAppCommands(ctx: AppCommandContext) {
   }});
 
   // Rich/plain text copy
-  commandRegistry.register({ id: 'copy-rich-text', label: t('command.copyRichText'), handler: async () => {
+  reg({ id: 'copy-rich-text', labelKey: 'command.copyRichText', handler: async () => {
     const view = getActiveEditorView();
     if (!view) return;
     const { from, to } = view.state.selection.main;
@@ -197,7 +247,7 @@ export function registerAppCommands(ctx: AppCommandContext) {
       await navigator.clipboard.writeText(text);
     }
   }});
-  commandRegistry.register({ id: 'copy-plain-text', label: t('command.copyPlainText'), handler: async () => {
+  reg({ id: 'copy-plain-text', labelKey: 'command.copyPlainText', handler: async () => {
     const view = getActiveEditorView();
     if (!view) return;
     const { from, to } = view.state.selection.main;
@@ -208,27 +258,83 @@ export function registerAppCommands(ctx: AppCommandContext) {
   }});
 
   // Diagnostics
-  commandRegistry.register({ id: 'run-benchmark', label: t('command.runBenchmark'), handler: async () => {
+  reg({ id: 'run-benchmark', labelKey: 'command.runBenchmark', handler: async () => {
     const { runBenchmark } = await import('$lib/utils/benchmark');
     const result = await runBenchmark(150000);
     alert(result);
   }});
-  commandRegistry.register({ id: 'run-release-benchmark', label: t('command.runReleaseBenchmark'), handler: async () => {
-    const { runReleaseBenchmark } = await import('$lib/utils/benchmark');
-    const result = await runReleaseBenchmark();
-    alert(result);
-  }});
-  commandRegistry.register({ id: 'run-scroll-test', label: t('command.runScrollTest'), handler: async () => {
+  reg({ id: 'run-scroll-test', labelKey: 'command.runScrollTest', handler: async () => {
     const { runScrollEditTest } = await import('$lib/utils/scroll-edit-test');
     const result = await runScrollEditTest();
     alert(result);
   }});
-  commandRegistry.register({ id: 'check-for-updates', label: t('command.checkForUpdates'), handler: async () => {
+  reg({ id: 'check-for-updates', labelKey: 'command.checkForUpdates', handler: async () => {
     const { checkForUpdates } = await import('$lib/updater');
     checkForUpdates(false);
   }});
-  commandRegistry.register({ id: 'install-cli-shim', label: t('command.installCliShim'), handler: async () => {
+  reg({ id: 'install-cli-shim', labelKey: 'command.installCliShim', handler: async () => {
     const { runInstallCliShim } = await import('$lib/services/cli-shim');
     await runInstallCliShim(t);
   }});
+}
+
+/**
+ * Find every local image reference in the active document, upload each
+ * to the active host, and apply URL replacements in a single CodeMirror
+ * transaction. Surfaces a summary toast via the `image-host-toast`
+ * window event (consumed by `App.svelte` to render).
+ */
+async function uploadAllLocalImagesCommand(view: EditorView | null): Promise<void> {
+  if (!view) return;
+  const docText = view.state.doc.toString();
+  const docPath = tabsStore.activeTab?.filePath ?? null;
+  const docDir = docPath ? docPath.split('/').slice(0, -1).join('/') : (projectStore.dirPath ?? '');
+  if (!docDir) {
+    window.dispatchEvent(new CustomEvent('image-host-toast', {
+      detail: { kind: 'error', message: 'Open a saved file before running upload-all.' },
+    }));
+    return;
+  }
+  try {
+    const { uploadAllInDocument } = await import('$lib/services/image-host');
+    const report = await uploadAllInDocument(docText, docDir);
+    if (report.successes.length === 0 && report.failures.length === 0) {
+      window.dispatchEvent(new CustomEvent('image-host-toast', {
+        detail: { kind: 'info', message: 'No local images to upload.' },
+      }));
+      return;
+    }
+    // Build one transaction with every replacement.
+    const changes: Array<{ from: number; to: number; insert: string }> = [];
+    for (const { original, url } of report.successes) {
+      // Find every occurrence of the original ref in the doc text and
+      // replace just the URL portion of each `![alt](original)` match.
+      const re = new RegExp(`!\\[([^\\]]*)\\]\\(${escapeRegExp(original)}(\\s+"[^"]*")?\\)`, 'g');
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(docText)) !== null) {
+        const matchStart = m.index;
+        const oldSrcStart = matchStart + 2 + m[1].length + 2;
+        const oldSrcEnd = oldSrcStart + original.length;
+        changes.push({ from: oldSrcStart, to: oldSrcEnd, insert: url });
+      }
+    }
+    if (changes.length > 0) {
+      view.dispatch({ changes });
+    }
+    const total = report.successes.length + report.failures.length;
+    const msg = report.failures.length === 0
+      ? `Uploaded ${report.successes.length} image(s).`
+      : `${report.successes.length}/${total} uploaded; ${report.failures.length} failed.`;
+    window.dispatchEvent(new CustomEvent('image-host-toast', {
+      detail: { kind: report.failures.length === 0 ? 'success' : 'warn', message: msg },
+    }));
+  } catch (e) {
+    window.dispatchEvent(new CustomEvent('image-host-toast', {
+      detail: { kind: 'error', message: e instanceof Error ? e.message : String(e) },
+    }));
+  }
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

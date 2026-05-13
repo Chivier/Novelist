@@ -38,9 +38,16 @@ Image rendering uses `Decoration.replace({block: true, widget})` via a
   produces one height-map entry. The old approach (3 decorations: widget +
   line class + inline replace) created misaligned height-map entries causing
   `posAtCoords` click offsets proportional to image height.
-- **Block decorations must NOT toggle on cursor position**: Toggling changes
-  the height map between mousedown/mouseup, causing infinite cursor
-  oscillation.
+- **Cursor-line toggle is allowed, but pointer events must be filtered**:
+  The image widget collapses when the cursor enters its line (so the user
+  can edit `![alt](url)` source — e.g. fix a broken path). Implemented via
+  `cursorImageLineField`. The earlier rule "must NOT toggle on cursor
+  position" was rooted in a real regression: toggling during a click
+  (`select.pointer` events) shifts the height map between mousedown and
+  mouseup, causing infinite cursor oscillation. The current implementation
+  filters out `select.pointer` transactions, so the widget only collapses
+  on keyboard nav / typing / focus events — never mid-click. Initial state
+  is `null` so doc-open with cursor at pos 0 doesn't hide the first image.
 - **Block decorations must be provided via StateField**: Only
   `StateField.provide(f => EditorView.decorations.from(f))` makes CM6
   account for block widget heights in its height map. `ViewPlugin`

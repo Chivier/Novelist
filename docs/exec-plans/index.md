@@ -10,6 +10,8 @@ been captured in design docs.
 
 - [2026-04-12 memory optimization](active/2026-04-12-memory-optimization.md)
 - [2026-05-06 image hosting (v0.2.4)](active/2026-05-06-image-host.md)
+- [2026-05-06 publishing (v0.2.4)](active/2026-05-06-publish.md)
+- [2026-05-07 rename UX & filename macros (v0.2.4)](active/2026-05-07-v0.2.4-rename-and-macros.md)
 
 ## Completed Archive
 

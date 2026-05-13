@@ -2,9 +2,13 @@ import type { FileEntry, ProjectConfig } from '$lib/ipc/commands';
 import { commands } from '$lib/ipc/commands';
 import type { SortMode } from '$lib/utils/file-sort';
 import { settingsStore } from '$lib/stores/settings.svelte';
+import { pathBasename } from '$lib/utils/path';
 
 const VALID_SORT_MODES: readonly SortMode[] = [
-  'name-asc', 'name-desc', 'numeric-asc', 'numeric-desc', 'mtime-asc', 'mtime-desc',
+  'name-asc', 'name-desc',
+  'numeric-asc', 'numeric-desc',
+  'mtime-asc', 'mtime-desc',
+  'ctime-asc', 'ctime-desc',
 ];
 
 function coerceSortMode(value: string): SortMode {
@@ -54,6 +58,10 @@ class ProjectStore {
     return settingsStore.effective.view.show_hidden_files;
   }
 
+  get wrapFileNames(): boolean {
+    return settingsStore.effective.view.wrap_file_names;
+  }
+
   get isOpen() { return this.dirPath !== null || this.singleFileMode; }
 
   /** Persists to the current scope (project file if open, global otherwise). */
@@ -64,8 +72,7 @@ class ProjectStore {
   get name() {
     if (this.config) return this.config.project.name;
     if (this.dirPath) {
-      const parts = this.dirPath.split('/');
-      return parts[parts.length - 1] || 'Untitled';
+      return pathBasename(this.dirPath) || 'Untitled';
     }
     return 'No Project';
   }
@@ -157,6 +164,26 @@ class ProjectStore {
       }
       return toNode(e);
     });
+  }
+
+  /** Re-fetch the root plus all folders whose children have already been loaded. */
+  async refreshLoadedFolders(): Promise<void> {
+    if (!this.dirPath) return;
+    const paths = new Set<string>();
+    function walk(nodes: FileNode[]) {
+      for (const n of nodes) {
+        if (!n.is_dir) continue;
+        if (n.children !== undefined) {
+          paths.add(n.path);
+          walk(n.children);
+        }
+      }
+    }
+    walk(this.files);
+    for (const path of paths) {
+      await this.refreshFolder(path);
+    }
+    await this.refreshFolder(this.dirPath);
   }
 }
 

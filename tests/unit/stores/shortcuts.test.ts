@@ -136,17 +136,17 @@ describe('matchesShortcut — macOS Option+digit/letter (e.code fallback)', () =
   });
 });
 
-describe('right-panel default shortcut scheme (Cmd+Alt+<digit>)', () => {
-  // Regression trap: the right-panel toggles intentionally share a single
-  // modifier combo (`Cmd+Alt+1..5`) with the digit matching the button's
-  // vertical position. If anyone casually reassigns these to letter keys,
-  // the test below will catch it and the PR reviewer can double-check
-  // against the reasoning note in shortcuts.svelte.ts.
+describe('right-panel default shortcut scheme', () => {
+  // The right-panel toggles share a modifier combo with the digit matching
+  // the button's vertical position. v0.2.4 switched 1..4 to Cmd+Shift for
+  // ergonomics; toggle-template remains on Cmd+Alt+5 to avoid the macOS
+  // Cmd+Shift+5 (screenshot toolbar) collision. See note in
+  // shortcuts.svelte.ts.
   const expected: Record<string, string> = {
-    'toggle-outline': 'Cmd+Alt+1',
-    'toggle-draft': 'Cmd+Alt+2',
-    'toggle-snapshot': 'Cmd+Alt+3',
-    'toggle-stats': 'Cmd+Alt+4',
+    'toggle-outline': 'Cmd+Shift+1',
+    'toggle-draft': 'Cmd+Shift+2',
+    'toggle-snapshot': 'Cmd+Shift+3',
+    'toggle-stats': 'Cmd+Shift+4',
     'toggle-template': 'Cmd+Alt+5',
   };
 

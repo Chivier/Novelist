@@ -19,7 +19,7 @@ import {
 } from '$lib/ipc/commands';
 
 const DEFAULT_EFFECTIVE: EffectiveSettings = {
-  view: { sort_mode: 'numeric-asc', show_hidden_files: false },
+  view: { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: false },
   new_file: {
     template: '第{N}章-{title}',
     detect_from_folder: true,
@@ -36,7 +36,11 @@ class SettingsStore {
   private dirPath = $state<string | null>(null);
 
   get isProjectScoped(): boolean {
-    return this.dirPath !== null;
+    return this.effective.is_project_scoped;
+  }
+
+  private get canWriteProjectSettings(): boolean {
+    return this.dirPath !== null && this.effective.is_project_scoped;
   }
 
   /** Load effective settings for the given scope. `null` = global/scratch mode. */
@@ -93,7 +97,7 @@ class SettingsStore {
     if (legacySort && !hasView) {
       const res = await commands.writeProjectSettings(
         dirPath,
-        { sort_mode: legacySort, show_hidden_files: null },
+        { sort_mode: legacySort, show_hidden_files: null, wrap_file_names: null },
         null,
         null
       );
@@ -141,9 +145,11 @@ class SettingsStore {
     const next: ViewConfig = {
       sort_mode: patch.sort_mode ?? current.sort_mode,
       show_hidden_files: patch.show_hidden_files ?? current.show_hidden_files,
+      wrap_file_names: patch.wrap_file_names ?? current.wrap_file_names,
     };
-    const res = this.dirPath
-      ? await commands.writeProjectSettings(this.dirPath, next, null, null)
+    const dirPath = this.canWriteProjectSettings ? this.dirPath : null;
+    const res = dirPath
+      ? await commands.writeProjectSettings(dirPath, next, null, null)
       : await commands.writeGlobalSettings(next, null, null);
     if (res.status !== 'ok') {
       console.error('[settings] writeView failed:', res.error);
@@ -154,6 +160,7 @@ class SettingsStore {
       view: {
         sort_mode: next.sort_mode ?? DEFAULT_EFFECTIVE.view.sort_mode,
         show_hidden_files: next.show_hidden_files ?? DEFAULT_EFFECTIVE.view.show_hidden_files,
+        wrap_file_names: next.wrap_file_names ?? DEFAULT_EFFECTIVE.view.wrap_file_names,
       },
     };
   }
@@ -165,8 +172,9 @@ class SettingsStore {
       detect_from_folder: patch.detect_from_folder ?? current.detect_from_folder,
       auto_rename_from_h1: patch.auto_rename_from_h1 ?? current.auto_rename_from_h1,
     };
-    const res = this.dirPath
-      ? await commands.writeProjectSettings(this.dirPath, null, next, null)
+    const dirPath = this.canWriteProjectSettings ? this.dirPath : null;
+    const res = dirPath
+      ? await commands.writeProjectSettings(dirPath, null, next, null)
       : await commands.writeGlobalSettings(null, next, null);
     if (res.status !== 'ok') {
       console.error('[settings] writeNewFile failed:', res.error);
@@ -222,7 +230,8 @@ class SettingsStore {
    * Scratch mode: update the global map.
    */
   async writePluginEnabled(pluginId: string, enabled: boolean): Promise<void> {
-    if (!this.dirPath) {
+    const dirPath = this.canWriteProjectSettings ? this.dirPath : null;
+    if (!dirPath) {
       // Global mode — write full map.
       const nextMap: Record<string, boolean> = {
         ...this.effective.plugins.enabled,
@@ -244,7 +253,7 @@ class SettingsStore {
     const globalRes = await commands.getGlobalSettings();
     const globalMap: Record<string, boolean> =
       globalRes.status === 'ok' ? globalRes.data.plugins?.enabled ?? {} : {};
-    const projectCfg = await commands.readProjectConfig(this.dirPath);
+    const projectCfg = await commands.readProjectConfig(dirPath);
     const currentOverrides: Record<string, boolean> =
       projectCfg.status === 'ok' ? projectCfg.data.plugins?.enabled ?? {} : {};
 
@@ -256,7 +265,7 @@ class SettingsStore {
       nextOverrides[pluginId] = enabled;
     }
     const res = await commands.writeProjectSettings(
-      this.dirPath,
+      dirPath,
       null,
       null,
       { enabled: nextOverrides }
@@ -275,20 +284,21 @@ class SettingsStore {
 
   /** Project-only: reset a plugin's override so it inherits the global default. */
   async resetPluginOverride(pluginId: string): Promise<void> {
-    if (!this.dirPath) return;
-    const projectCfg = await commands.readProjectConfig(this.dirPath);
+    const dirPath = this.canWriteProjectSettings ? this.dirPath : null;
+    if (!dirPath) return;
+    const projectCfg = await commands.readProjectConfig(dirPath);
     const current: Record<string, boolean> =
       projectCfg.status === 'ok' ? projectCfg.data.plugins?.enabled ?? {} : {};
     if (!(pluginId in current)) return;
     const next = { ...current };
     delete next[pluginId];
-    const res = await commands.writeProjectSettings(this.dirPath, null, null, { enabled: next });
+    const res = await commands.writeProjectSettings(dirPath, null, null, { enabled: next });
     if (res.status !== 'ok') {
       console.error('[settings] resetPluginOverride failed:', res.error);
       return;
     }
     // Refresh resolved state from backend so the UI reflects the inherited value.
-    await this.load(this.dirPath);
+    await this.load(dirPath);
   }
 
   /**
@@ -300,6 +310,7 @@ class SettingsStore {
     const v: ViewConfig = {
       sort_mode: this.effective.view.sort_mode,
       show_hidden_files: this.effective.view.show_hidden_files,
+      wrap_file_names: this.effective.view.wrap_file_names,
     };
     const n: NewFileConfig = {
       template: this.effective.new_file.template,

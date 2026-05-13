@@ -12,6 +12,16 @@
   import type { Locale } from '$lib/i18n';
   import { newFileSettings } from '$lib/stores/new-file-settings.svelte';
   import { parseTemplate, inferNextName } from '$lib/utils/placeholder';
+  import { makeTemplateContext, resolveBody } from '$lib/utils/template-tokens';
+  import SettingsImageHostsPanel from './SettingsImageHostsPanel.svelte';
+  import SettingsPublishPanel from './SettingsPublishPanel.svelte';
+  import MacroHint from './MacroHint.svelte';
+  import {
+    SETTINGS_SEARCH_INDEX,
+    filterSettingsIndex,
+    groupBySection,
+    type SearchableSetting,
+  } from '$lib/utils/settings-search';
 
   interface Props {
     onClose: () => void;
@@ -21,6 +31,50 @@
 
   let activeSection = $state<string>('editor');
   let pluginSettingsComponents = $state<Record<string, import('svelte').Component>>({});
+
+  // --- Settings search (v0.2.4) ---
+  let searchQuery = $state('');
+  // Plugin-defined settings panels expose their own labels, so include them
+  // in the search index dynamically. Non-localized for now (plugin labels are
+  // raw strings already chosen by the plugin author).
+  let dynamicIndex = $derived.by<SearchableSetting[]>(() => {
+    const pluginEntries: SearchableSetting[] = pluginSettings.list().map(entry => {
+      const sectionId = `plugin:${entry.pluginId}`;
+      const label = entry.labelKey ? t(entry.labelKey) : (entry.label ?? entry.pluginId);
+      return {
+        id: sectionId,
+        sectionId,
+        sectionLabelKey: 'settings.plugins.section.pluginSettings',
+        labelKey: '__plugin__',
+        keywords: [label, entry.pluginId],
+      };
+    });
+    return [...SETTINGS_SEARCH_INDEX, ...pluginEntries];
+  });
+  let searchResults = $derived.by<SearchableSetting[]>(() =>
+    filterSettingsIndex(dynamicIndex, searchQuery, (k) =>
+      // The synthetic plugin label key is replaced by its first keyword
+      // (the plugin label) for matching purposes.
+      k === '__plugin__' ? '' : t(k),
+    ),
+  );
+  let groupedResults = $derived.by(() => groupBySection(searchResults));
+
+  function jumpToResult(item: SearchableSetting) {
+    activeSection = item.sectionId;
+    searchQuery = '';
+    if (item.anchor) {
+      // Wait one frame so the {#if activeSection === ...} block has rendered.
+      requestAnimationFrame(() => {
+        const el = document.querySelector(`[data-testid="${item.anchor}"]`);
+        if (el && 'scrollIntoView' in el) {
+          (el as HTMLElement).scrollIntoView({ block: 'center', behavior: 'smooth' });
+          (el as HTMLElement).classList.add('settings-search-flash');
+          setTimeout(() => (el as HTMLElement).classList.remove('settings-search-flash'), 1400);
+        }
+      });
+    }
+  }
 
   async function ensurePluginSettingsLoaded(pluginId: string) {
     if (pluginSettingsComponents[pluginId]) return;
@@ -52,16 +106,13 @@
   ];
   const fontSizeOptions = [13, 14, 15, 16, 17, 18, 20, 22, 24];
   const lineHeightOptions = [1.4, 1.5, 1.6, 1.8, 2.0, 2.2];
-  const maxWidthOptions = [
-    { label: '600px (Narrow)', value: 600 },
-    { label: '680px', value: 680 },
-    { label: '720px (Default)', value: 720 },
-    { label: '800px', value: 800 },
-    { label: '900px (Wide)', value: 900 },
-    { label: '100% (Full)', value: 9999 },
-  ];
 
   let settings = $derived(uiStore.editorSettings);
+
+  function setEditorMaxWidth(value: number) {
+    const next = Math.max(480, Math.min(9999, Math.round(value)));
+    uiStore.updateEditorSettings({ maxWidth: next });
+  }
 
   // Theme options: system + builtins + custom (imported)
   let customThemes = $state(loadCustomThemes());
@@ -154,6 +205,7 @@
   //   {rN}      — Roman: I, II, III …
   //   {title}   — optional slot, filled with "Untitled" until an H1 lands
   const NEW_FILE_PRESETS = [
+    '{title}',
     '第{N}章-{title}',
     '第{N}章',
     '第{CN}章',
@@ -163,13 +215,18 @@
     '{N}-{title}',
     '{2N}-{title}',
     '{3N}-{title}',
+    '{date:YYMMDD}-{N}',
+    '{date:YYYYMMDD}-{title}',
   ];
 
   let newFileTemplateInput = $state(newFileSettings.template);
   let newFileTemplateError = $state<string | null>(null);
 
   let newFileTemplatePreview = $derived.by<string>(() => {
-    const tmpl = parseTemplate(newFileTemplateInput);
+    // Resolve macros first (matches createNewFileInProject), then number-infer.
+    const macroCtx = makeTemplateContext({ projectDir: projectStore.dirPath });
+    const resolvedRaw = resolveBody(newFileTemplateInput, macroCtx);
+    const tmpl = parseTemplate(resolvedRaw);
     if (!tmpl) return '';
     const names: string[] = [];
     const folder: string[] = [];
@@ -548,39 +605,85 @@
   <div
     class="rounded-lg shadow-xl w-full flex"
     data-testid="settings-dialog"
-    style="max-width: 650px; background: var(--novelist-bg); color: var(--novelist-text); border: 1px solid var(--novelist-border); height: 520px;"
+    style="max-width: 680px; background: var(--novelist-bg); color: var(--novelist-text); border: 1px solid var(--novelist-border); height: 520px;"
     onclick={(e) => e.stopPropagation()}
   >
     <!-- Left nav -->
-    <div class="shrink-0 flex flex-col py-3" style="width: 140px; border-right: 1px solid var(--novelist-border); background: var(--novelist-bg-secondary); border-radius: 8px 0 0 8px;">
-      {#each [
-        { id: 'editor', label: t('settings.editor') },
-        { id: 'theme', label: t('settings.theme') },
-        { id: 'shortcuts', label: t('settings.shortcuts') },
-        { id: 'templates', label: t('settings.templates') },
-        { id: 'plugins', label: t('settings.plugins') },
-        { id: 'sync', label: t('settings.sync') },
-      ] as section}
-        <button
-          class="text-left px-4 py-2 text-sm cursor-pointer"
-          data-testid="settings-section-{section.id}"
-          style="background: {activeSection === section.id ? 'var(--novelist-sidebar-active)' : 'transparent'}; color: {activeSection === section.id ? 'var(--novelist-accent)' : 'var(--novelist-text)'}; border: none; font-weight: {activeSection === section.id ? '600' : '400'};"
-          onclick={() => activeSection = section.id}
-        >{section.label}</button>
-      {/each}
+    <div class="shrink-0 flex flex-col py-3" style="width: 160px; border-right: 1px solid var(--novelist-border); background: var(--novelist-bg-secondary); border-radius: 8px 0 0 8px;">
+      <div class="px-3 mb-2">
+        <input
+          type="search"
+          data-testid="settings-search-input"
+          bind:value={searchQuery}
+          placeholder={t('settings.search.placeholder')}
+          class="w-full px-2 py-1 text-xs rounded"
+          style="background: var(--novelist-input-bg, var(--novelist-bg)); color: var(--novelist-text); border: 1px solid var(--novelist-border);"
+          onkeydown={(e) => {
+            if (e.key === 'Enter' && searchResults.length > 0) {
+              e.preventDefault();
+              jumpToResult(searchResults[0]);
+            } else if (e.key === 'Escape') {
+              searchQuery = '';
+            }
+          }}
+        />
+      </div>
 
-      {#if pluginSettings.list().length > 0}
-        <div class="mt-2 px-4 py-1 text-[10px] uppercase tracking-wide" style="color: var(--novelist-text-secondary); opacity: 0.7;">{t('settings.plugins.section.pluginSettings')}</div>
-        {#each pluginSettings.list() as entry}
-          {@const sectionId = `plugin:${entry.pluginId}`}
-          {@const localizedLabel = entry.labelKey ? t(entry.labelKey) : (entry.label ?? entry.pluginId)}
+      {#if searchQuery.trim().length === 0}
+        {#each [
+          { id: 'editor', label: t('settings.editor') },
+          { id: 'theme', label: t('settings.theme') },
+          { id: 'shortcuts', label: t('settings.shortcuts') },
+          { id: 'templates', label: t('settings.templates') },
+          { id: 'plugins', label: t('settings.plugins') },
+          { id: 'image-hosts', label: t('settings.imageHosts') },
+          { id: 'publish', label: t('settings.publish') },
+          { id: 'sync', label: t('settings.sync') },
+        ] as section}
           <button
             class="text-left px-4 py-2 text-sm cursor-pointer"
-            data-testid="settings-section-{sectionId}"
-            style="background: {activeSection === sectionId ? 'var(--novelist-sidebar-active)' : 'transparent'}; color: {activeSection === sectionId ? 'var(--novelist-accent)' : 'var(--novelist-text)'}; border: none; font-weight: {activeSection === sectionId ? '600' : '400'};"
-            onclick={() => activeSection = sectionId}
-          >{localizedLabel}</button>
+            data-testid="settings-section-{section.id}"
+            style="background: {activeSection === section.id ? 'var(--novelist-sidebar-active)' : 'transparent'}; color: {activeSection === section.id ? 'var(--novelist-accent)' : 'var(--novelist-text)'}; border: none; font-weight: {activeSection === section.id ? '600' : '400'};"
+            onclick={() => activeSection = section.id}
+          >{section.label}</button>
         {/each}
+
+        {#if pluginSettings.list().length > 0}
+          <div class="mt-2 px-4 py-1 text-[10px] uppercase tracking-wide" style="color: var(--novelist-text-secondary); opacity: 0.7;">{t('settings.plugins.section.pluginSettings')}</div>
+          {#each pluginSettings.list() as entry}
+            {@const sectionId = `plugin:${entry.pluginId}`}
+            {@const localizedLabel = entry.labelKey ? t(entry.labelKey) : (entry.label ?? entry.pluginId)}
+            <button
+              class="text-left px-4 py-2 text-sm cursor-pointer"
+              data-testid="settings-section-{sectionId}"
+              style="background: {activeSection === sectionId ? 'var(--novelist-sidebar-active)' : 'transparent'}; color: {activeSection === sectionId ? 'var(--novelist-accent)' : 'var(--novelist-text)'}; border: none; font-weight: {activeSection === sectionId ? '600' : '400'};"
+              onclick={() => activeSection = sectionId}
+            >{localizedLabel}</button>
+          {/each}
+        {/if}
+      {:else}
+        <!-- Search results: flat list grouped by section -->
+        <div class="overflow-y-auto" data-testid="settings-search-results">
+          {#if searchResults.length === 0}
+            <div class="px-4 py-3 text-xs" style="color: var(--novelist-text-secondary);">
+              {t('settings.search.noResults')}
+            </div>
+          {:else}
+            {#each groupedResults as group (group.sectionId)}
+              <div class="px-4 py-1 text-[10px] uppercase tracking-wide" style="color: var(--novelist-text-secondary); opacity: 0.7;">
+                {t(group.sectionLabelKey)}
+              </div>
+              {#each group.items as item (item.id)}
+                <button
+                  class="text-left px-4 py-1.5 text-xs cursor-pointer w-full"
+                  data-testid="settings-search-result-{item.id}"
+                  style="background: transparent; color: var(--novelist-text); border: none;"
+                  onclick={() => jumpToResult(item)}
+                >{item.labelKey === '__plugin__' ? (item.keywords?.[0] ?? item.id) : t(item.labelKey)}</button>
+              {/each}
+            {/each}
+          {/if}
+        </div>
       {/if}
 
       <div class="flex-1"></div>
@@ -635,9 +738,28 @@
 
         <div class="flex items-center justify-between mb-3">
           <label for="settings-width" class="text-sm">{t('settings.width')}</label>
-          <select id="settings-width" class="text-sm px-2 py-1 rounded cursor-pointer" style="background: var(--novelist-bg-secondary); color: var(--novelist-text); border: 1px solid var(--novelist-border);" value={settings.maxWidth} onchange={(e) => uiStore.updateEditorSettings({ maxWidth: Number((e.target as HTMLSelectElement).value) })}>
-            {#each maxWidthOptions as opt}<option value={opt.value}>{opt.label}</option>{/each}
-          </select>
+          <div class="flex items-center gap-2" style="min-width: 220px;">
+            <input
+              id="settings-width"
+              type="range"
+              min="480"
+              max="1600"
+              step="20"
+              value={Math.min(settings.maxWidth, 1600)}
+              oninput={(e) => setEditorMaxWidth(Number((e.target as HTMLInputElement).value))}
+              style="width: 130px; accent-color: var(--novelist-accent);"
+            />
+            <input
+              type="number"
+              min="480"
+              max="9999"
+              step="20"
+              value={settings.maxWidth}
+              oninput={(e) => setEditorMaxWidth(Number((e.target as HTMLInputElement).value))}
+              class="text-sm px-2 py-1 rounded"
+              style="width: 76px; background: var(--novelist-bg-secondary); color: var(--novelist-text); border: 1px solid var(--novelist-border);"
+            />
+          </div>
         </div>
 
         <div class="flex items-center justify-between mb-3">
@@ -681,6 +803,22 @@
           >{settings.renderImages ? t('settings.on') : t('settings.off')}</button>
         </div>
 
+        <label class="flex items-start gap-2 mb-3">
+          <input
+            type="checkbox"
+            class="mt-1 shrink-0"
+            data-testid="settings-sidebar-wrap-filenames"
+            checked={settingsStore.effective.view.wrap_file_names}
+            onchange={(e) => settingsStore.writeView({ wrap_file_names: e.currentTarget.checked })}
+          />
+          <div>
+            <div class="text-sm">{t('settings.sidebar.wrapFileNames')}</div>
+            <div class="text-xs" style="color: var(--novelist-text-secondary);">
+              {t('settings.sidebar.wrapFileNamesHint')}
+            </div>
+          </div>
+        </label>
+
         <div class="mt-4 rounded p-3 text-sm" style="background: var(--novelist-bg-secondary); font-family: {settings.fontFamily}; font-size: {settings.fontSize}px; line-height: {settings.lineHeight}; border: 1px solid var(--novelist-border);">
           The quick brown fox jumps over the lazy dog.<br/>
           落霞与孤鹜齐飞，秋水共长天一色。
@@ -694,12 +832,13 @@
           <label class="flex items-start gap-2 mb-4">
             <input
               type="checkbox"
+              class="mt-1 shrink-0"
               data-testid="settings-newfile-detect"
               checked={newFileSettings.detectFromFolder}
               onchange={(e) => newFileSettings.setDetectFromFolder(e.currentTarget.checked)}
             />
             <div>
-              <div>{t('settings.editor.newFile.detectFromFolder')}</div>
+              <div class="text-sm">{t('settings.editor.newFile.detectFromFolder')}</div>
               <div class="text-xs" style="color: var(--novelist-text-secondary);">
                 {t('settings.editor.newFile.detectFromFolderHint')}
               </div>
@@ -707,7 +846,10 @@
           </label>
 
           <div class="mb-4">
-            <div class="text-sm mb-1">{t('settings.editor.newFile.template')}</div>
+            <div class="text-sm mb-1 flex items-center gap-2">
+              <span>{t('settings.editor.newFile.template')}</span>
+              <MacroHint />
+            </div>
             <div class="flex gap-2 items-center">
               <input
                 type="text"
@@ -744,12 +886,13 @@
           <label class="flex items-start gap-2">
             <input
               type="checkbox"
+              class="mt-1 shrink-0"
               data-testid="settings-newfile-autorename"
               checked={newFileSettings.autoRenameFromH1}
               onchange={(e) => newFileSettings.setAutoRenameFromH1(e.currentTarget.checked)}
             />
             <div>
-              <div>{t('settings.editor.newFile.autoRename')}</div>
+              <div class="text-sm">{t('settings.editor.newFile.autoRename')}</div>
               <div class="text-xs" style="color: var(--novelist-text-secondary);">
                 {t('settings.editor.newFile.autoRenameHint')}
               </div>
@@ -1131,6 +1274,10 @@
             <p class="text-xs mt-1" style="color: var(--novelist-text-secondary);">{t('settings.plugins.aiSuggestion')}</p>
           </div>
         {/if}
+      {:else if activeSection === 'image-hosts'}
+        <SettingsImageHostsPanel />
+      {:else if activeSection === 'publish'}
+        <SettingsPublishPanel />
       {:else if activeSection === 'sync'}
         <h3 class="text-xs font-semibold uppercase tracking-wide mb-4" style="color: var(--novelist-text-secondary);">{t('settings.sync.webdav')}</h3>
 
@@ -1274,6 +1421,20 @@
 </div>
 
 <style>
+:global(.settings-search-flash) {
+  animation: settings-search-flash 1.4s ease-out;
+}
+@keyframes settings-search-flash {
+  0%, 25% {
+    background: color-mix(in srgb, var(--novelist-accent) 22%, transparent);
+    border-radius: 6px;
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--novelist-accent) 18%, transparent);
+  }
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
 .plugin-add-btn {
   display: flex;
   align-items: center;

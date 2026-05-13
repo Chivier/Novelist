@@ -22,6 +22,11 @@ pub struct ProjectConfig {
     /// Per-plugin enable flags (deltas from the global default map).
     #[serde(default, skip_serializing_if = "is_default_plugins")]
     pub plugins: PluginsConfig,
+    /// Per-project override for which image host is active. Credentials
+    /// stay in global settings — only the pointer to a configured host
+    /// can be overridden here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_image_host_id: Option<String>,
 }
 
 fn is_default_view(v: &ViewConfig) -> bool {
@@ -140,6 +145,7 @@ name = "Minimal"
             view: Default::default(),
             new_file: Default::default(),
             plugins: Default::default(),
+            active_image_host_id: None,
         };
 
         let serialized = toml::to_string(&config).unwrap();
@@ -198,6 +204,7 @@ name = "With Overlay"
 [view]
 sort_mode = "numeric-asc"
 show_hidden_files = true
+wrap_file_names = true
 
 [new_file]
 template = "第{N}章"
@@ -209,6 +216,7 @@ enabled = { mindmap = false }
         let config: ProjectConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.view.sort_mode.as_deref(), Some("numeric-asc"));
         assert_eq!(config.view.show_hidden_files, Some(true));
+        assert_eq!(config.view.wrap_file_names, Some(true));
         assert_eq!(config.new_file.template.as_deref(), Some("第{N}章"));
         assert_eq!(config.new_file.auto_rename_from_h1, Some(false));
         // detect_from_folder is None (not in TOML) — correct
@@ -219,6 +227,7 @@ enabled = { mindmap = false }
         let serialized = toml::to_string(&config).unwrap();
         let back: ProjectConfig = toml::from_str(&serialized).unwrap();
         assert_eq!(back.view.show_hidden_files, Some(true));
+        assert_eq!(back.view.wrap_file_names, Some(true));
         assert_eq!(back.new_file.template.as_deref(), Some("第{N}章"));
         assert_eq!(back.plugins.enabled.get("mindmap"), Some(&false));
     }
@@ -237,6 +246,7 @@ enabled = { mindmap = false }
             view: Default::default(),
             new_file: Default::default(),
             plugins: Default::default(),
+            active_image_host_id: None,
         };
         let serialized = toml::to_string(&config).unwrap();
         assert!(

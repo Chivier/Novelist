@@ -5,11 +5,15 @@
   import { projectStore, type FileNode } from '$lib/stores/project.svelte';
   import { settingsStore } from '$lib/stores/settings.svelte';
   import { tabsStore } from '$lib/stores/tabs.svelte';
+  import { uiStore } from '$lib/stores/ui.svelte';
   import { extensionStore } from '$lib/stores/extensions.svelte';
   import { t } from '$lib/i18n';
   import { confirmUnsavedChanges } from '$lib/composables/unsaved-prompt.svelte';
   import FileTreeNode from '$lib/components/FileTreeNode.svelte';
   import { compareByMode, type SortMode } from '$lib/utils/file-sort';
+  import { proposeNewFileName } from '$lib/services/new-file';
+  import { SIDEBAR_PATH_MIME } from '$lib/services/pane-drop';
+  import { pathBasename, pathDirname, pathStartsWithChild } from '$lib/utils/path';
 
   // --- Project switcher popup (Notion-style) ---
   let switcherOpen = $state(false);
@@ -24,6 +28,8 @@
     { id: 'name-desc', labelKey: 'sidebar.sort.nameDesc' },
     { id: 'mtime-desc', labelKey: 'sidebar.sort.mtimeDesc' },
     { id: 'mtime-asc', labelKey: 'sidebar.sort.mtimeAsc' },
+    { id: 'ctime-desc', labelKey: 'sidebar.sort.ctimeDesc' },
+    { id: 'ctime-asc', labelKey: 'sidebar.sort.ctimeAsc' },
   ];
 
   function selectSort(mode: SortMode) {
@@ -125,7 +131,7 @@
     const files = filesResult.status === 'ok' ? filesResult.data : [];
     projectStore.setProject(dirPath, config, files);
     tabsStore.closeAll();
-    const name = config?.project?.name || dirPath.split('/').pop() || 'Untitled';
+    const name = config?.project?.name || pathBasename(dirPath) || 'Untitled';
     await commands.addRecentProject(dirPath, name);
     const watchResult = await commands.startFileWatcher(dirPath);
     if (watchResult.status !== 'ok') console.error('Failed to start file watcher:', watchResult.error);
@@ -183,7 +189,7 @@
     const files = filesResult.status === 'ok' ? filesResult.data : [];
     projectStore.setProject(dirPath, config, files);
     tabsStore.closeAll();
-    const name = config?.project?.name || dirPath.split('/').pop() || 'Untitled';
+    const name = config?.project?.name || pathBasename(dirPath) || 'Untitled';
     await commands.addRecentProject(dirPath, name);
     const watchResult = await commands.startFileWatcher(dirPath);
     if (watchResult.status !== 'ok') {
@@ -226,10 +232,15 @@
   let newItemName = $state('');
   let newItemInput = $state<HTMLInputElement | null>(null);
 
-  function startCreateFile() {
+  async function startCreateFile() {
     creatingFile = true;
     creatingFolder = false;
-    newItemName = 'untitled.md';
+    // Seed the inline input with the smart name from settings
+    // (date/time macros + {N} numbering inferred from siblings) so the
+    // sidebar "+" matches Cmd+N's naming, instead of always "untitled.md".
+    newItemName = projectStore.dirPath
+      ? await proposeNewFileName(projectStore.dirPath)
+      : 'untitled.md';
     // Focus after DOM update
     requestAnimationFrame(() => {
       if (newItemInput) {
@@ -297,7 +308,8 @@
   async function createFileAt(targetDir: string, ext: string = '.md') {
     closeContextMenu();
     closeViewMenu();
-    const result = await commands.createFile(targetDir, `untitled${ext}`);
+    const proposedName = await proposeNewFileName(targetDir, ext === '.md' ? undefined : ext);
+    const result = await commands.createFile(targetDir, proposedName);
     if (result.status !== 'ok') {
       console.error('Failed to create file:', result.error);
       return;
@@ -410,7 +422,6 @@
   let contextMenu = $state<{ x: number; y: number; entry: FileNode } | null>(null);
   let renaming = $state<FileNode | null>(null);
   let renameValue = $state('');
-  let renameInput = $state<HTMLInputElement | null>(null);
 
   function handleContextMenu(e: MouseEvent, entry: FileNode) {
     e.preventDefault();
@@ -426,13 +437,6 @@
     closeContextMenu();
     renaming = entry;
     renameValue = entry.name;
-    requestAnimationFrame(() => {
-      if (renameInput) {
-        renameInput.focus();
-        const dotIdx = entry.name.lastIndexOf('.');
-        renameInput.setSelectionRange(0, entry.is_dir ? entry.name.length : (dotIdx > 0 ? dotIdx : entry.name.length));
-      }
-    });
   }
 
   async function confirmRename() {
@@ -440,17 +444,24 @@
       cancelRename();
       return;
     }
+    const oldPath = renaming.path;
+    const oldParent = pathDirname(oldPath);
     const result = await commands.renameItem(renaming.path, renameValue.trim(), null);
     if (result.status === 'ok') {
-      // Update any open tab referencing the old path
-      const tab = tabsStore.findByPath(renaming.path);
-      if (tab) {
-        // Close old tab and reopen with new path
-        const content = tab.content;
-        tabsStore.closeTab(tab.id);
-        tabsStore.openTab(result.data, content);
+      const newPath = result.data;
+      // Update any open tabs referencing the renamed file/folder.
+      for (const pane of tabsStore.panes) {
+        for (const tab of pane.tabs) {
+          if (tab.filePath === oldPath) {
+            tabsStore.updateFilePath(tab.id, newPath);
+          } else if (pathStartsWithChild(tab.filePath, oldPath)) {
+            tabsStore.updateFilePath(tab.id, newPath + tab.filePath.slice(oldPath.length));
+          }
+        }
       }
-      await refreshFiles();
+      const newParent = pathDirname(newPath);
+      if (oldParent) await projectStore.refreshFolder(oldParent);
+      if (newParent && newParent !== oldParent) await projectStore.refreshFolder(newParent);
     } else {
       console.error('Failed to rename:', result.error);
     }
@@ -535,7 +546,12 @@
     if (!e.dataTransfer) return;
     draggedNode = node;
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('application/x-novelist-path', node.path);
+    e.dataTransfer.setData(SIDEBAR_PATH_MIME, node.path);
+    e.dataTransfer.setData('text/plain', node.path);
+    // Files (not folders) light up pane drop overlays in App.svelte.
+    if (!node.is_dir && isTextFile(node.name)) {
+      uiStore.sidebarFileDragActive = true;
+    }
   }
 
   function handleDragEnd() {
@@ -545,6 +561,7 @@
     }
     draggedNode = null;
     rootDragOver = false;
+    uiStore.sidebarFileDragActive = false;
   }
 
   function clearAllDragOverFlags(nodes: FileNode[]) {
@@ -556,7 +573,7 @@
 
   function isDescendant(source: FileNode, targetPath: string): boolean {
     if (!source.is_dir) return false;
-    return targetPath === source.path || targetPath.startsWith(source.path + '/');
+    return targetPath === source.path || pathStartsWithChild(targetPath, source.path);
   }
 
   function handleDragOverFolder(e: DragEvent, target: FileNode) {
@@ -584,8 +601,8 @@
     if (isDescendant(source, target.path)) return;
     if (source.path === target.path) return;
 
-    const parentPath = source.path.slice(0, source.path.lastIndexOf('/'));
-    if (parentPath === target.path) return; // no-op: already in that folder
+    const parentPath = pathDirname(source.path);
+    if (!parentPath || parentPath === target.path) return; // no-op: already in that folder
 
     const result = await commands.moveItem(source.path, target.path);
     if (result.status !== 'ok') {
@@ -599,7 +616,7 @@
       for (const tab of pane.tabs) {
         if (tab.filePath === source.path) {
           tabsStore.updateFilePath(tab.id, newPath);
-        } else if (tab.filePath.startsWith(source.path + '/')) {
+        } else if (pathStartsWithChild(tab.filePath, source.path)) {
           tabsStore.updateFilePath(tab.id, newPath + tab.filePath.slice(source.path.length));
         }
       }
@@ -619,8 +636,8 @@
       return;
     }
     if (!draggedNode || !projectStore.dirPath) return;
-    const parentPath = draggedNode.path.slice(0, draggedNode.path.lastIndexOf('/'));
-    if (parentPath === projectStore.dirPath) {
+    const parentPath = pathDirname(draggedNode.path);
+    if (!parentPath || parentPath === projectStore.dirPath) {
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
       return;
     }
@@ -637,8 +654,8 @@
     const source = draggedNode;
     draggedNode = null;
     if (!source || !projectStore.dirPath) return;
-    const parentPath = source.path.slice(0, source.path.lastIndexOf('/'));
-    if (parentPath === projectStore.dirPath) return;
+    const parentPath = pathDirname(source.path);
+    if (!parentPath || parentPath === projectStore.dirPath) return;
 
     const result = await commands.moveItem(source.path, projectStore.dirPath);
     if (result.status !== 'ok') {
@@ -648,7 +665,7 @@
     const newPath = result.data;
     for (const pane of tabsStore.panes) {
       for (const tab of pane.tabs) {
-        if (tab.filePath === source.path || tab.filePath.startsWith(source.path + '/')) {
+        if (tab.filePath === source.path || pathStartsWithChild(tab.filePath, source.path)) {
           const rest = tab.filePath.slice(source.path.length);
           tabsStore.updateFilePath(tab.id, newPath + rest);
         }
@@ -750,30 +767,23 @@
       {/if}
 
       {#each sortedFiles as entry (entry.path)}
-        {#if renaming && renaming.path === entry.path}
-          <div class="sidebar-input-row">
-            <input
-              bind:this={renameInput}
-              bind:value={renameValue}
-              onkeydown={handleRenameKeydown}
-              onblur={confirmRename}
-              class="sidebar-input"
-              data-testid="sidebar-input"
-            />
-          </div>
-        {:else}
-          <FileTreeNode
-            node={entry}
-            depth={0}
-            onContextMenu={handleContextMenu}
-            onFileOpen={openFile}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOverFolder}
-            onDragLeave={handleDragLeaveFolder}
-            onDrop={handleDropOnFolder}
-            {isTextFile}
-          />
-        {/if}
+        <FileTreeNode
+          node={entry}
+          depth={0}
+          onContextMenu={handleContextMenu}
+          onFileOpen={openFile}
+          onRenameRequest={startRename}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOverFolder}
+          onDragLeave={handleDragLeaveFolder}
+          onDrop={handleDropOnFolder}
+          {isTextFile}
+          renamingPath={renaming?.path ?? null}
+          {renameValue}
+          onRenameInput={(value) => { renameValue = value; }}
+          onRenameKeydown={handleRenameKeydown}
+          onRenameBlur={confirmRename}
+        />
       {/each}
     </div>
 
@@ -781,7 +791,7 @@
     <div class="sidebar-bottom" style="position: relative;">
       <button class="sidebar-switch-btn" data-testid="sidebar-switch-btn" onclick={toggleSwitcher} title={t('sidebar.switchProject')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 4h4l2 2h6v7H2z"/></svg>
-        <span>{projectStore.dirPath?.split('/').pop() ?? 'Project'}</span>
+        <span>{projectStore.dirPath ? (pathBasename(projectStore.dirPath) || 'Project') : 'Project'}</span>
         <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: auto; opacity: 0.5;"><path d="{switcherOpen ? 'M4 10l4-4 4 4' : 'M4 6l4 4 4-4'}"/></svg>
       </button>
 

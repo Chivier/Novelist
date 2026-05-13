@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { compareByMode, type SortMode } from '$lib/utils/file-sort';
 
-interface F { name: string; is_dir: boolean; mtime?: number; }
+interface F { name: string; is_dir: boolean; mtime?: number; ctime?: number; }
 
 const sortNames = (files: F[], mode: SortMode): string[] =>
   [...files].sort((a, b) => compareByMode(a, b, mode)).map(f => f.name);
@@ -34,12 +34,24 @@ describe('compareByMode — numeric-asc', () => {
   it('orders chinese chapters numerically', () => {
     expect(sortNames(
       [
+        { name: '第十一章.md', is_dir: false },
+        { name: '第九章.md', is_dir: false },
         { name: '第十章.md', is_dir: false },
         { name: '第二章.md', is_dir: false },
         { name: '第一章.md', is_dir: false },
       ],
       'numeric-asc'
-    )).toEqual(['第一章.md', '第二章.md', '第十章.md']);
+    )).toEqual(['第一章.md', '第二章.md', '第九章.md', '第十章.md', '第十一章.md']);
+  });
+  it('extracts the leftmost CJK numeral run instead of parsing the whole Chinese stem', () => {
+    expect(sortNames(
+      [
+        { name: '第十章终稿.md', is_dir: false },
+        { name: '第二章终稿.md', is_dir: false },
+        { name: '第一章终稿.md', is_dir: false },
+      ],
+      'numeric-asc'
+    )).toEqual(['第一章终稿.md', '第二章终稿.md', '第十章终稿.md']);
   });
   it('orders arabic prefixes numerically', () => {
     expect(sortNames(
@@ -91,5 +103,35 @@ describe('compareByMode — mtime-desc', () => {
       ],
       'mtime-desc'
     )).toEqual(['new', 'old']);
+  });
+});
+
+describe('compareByMode — ctime', () => {
+  it('ctime-desc puts the most recently created file first', () => {
+    expect(sortNames(
+      [
+        { name: 'old', is_dir: false, ctime: 100, mtime: 500 },
+        { name: 'new', is_dir: false, ctime: 200, mtime: 300 },
+      ],
+      'ctime-desc'
+    )).toEqual(['new', 'old']);
+  });
+  it('ctime-asc puts the oldest creation date first', () => {
+    expect(sortNames(
+      [
+        { name: 'new', is_dir: false, ctime: 200 },
+        { name: 'old', is_dir: false, ctime: 100 },
+      ],
+      'ctime-asc'
+    )).toEqual(['old', 'new']);
+  });
+  it('falls back to mtime when ctime is missing on the filesystem', () => {
+    expect(sortNames(
+      [
+        { name: 'mtime-only-old', is_dir: false, mtime: 100 },
+        { name: 'mtime-only-new', is_dir: false, mtime: 200 },
+      ],
+      'ctime-desc'
+    )).toEqual(['mtime-only-new', 'mtime-only-old']);
   });
 });

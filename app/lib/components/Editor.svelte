@@ -18,6 +18,7 @@
   import { extractHeadings, type HeadingItem } from '$lib/editor/outline';
   import { setWysiwygProjectDir, setWysiwygRenderImages } from '$lib/editor/wysiwyg';
   import { setSlashCommandI18n } from '$lib/editor/slash-commands';
+  import { pathBasename, pathDirname, pathJoin } from '$lib/utils/path';
 
   interface Props {
     paneId?: string;
@@ -117,7 +118,7 @@
     recoveryAvailable = true;
     recoveryContent = draftContent;
     recoveryFilePath = filePath;
-    recoveryFileName = filePath.split('/').pop() ?? filePath;
+    recoveryFileName = pathBasename(filePath) || filePath;
   }
 
   /** User chose to recover the draft from the banner. */
@@ -315,9 +316,21 @@
   async function saveCurrentFile() {
     if (isSaving) return;
     const tab = getActiveTab();
-    if (!tab || !tab.isDirty || !view) return;
+    if (!tab || !view) return;
 
     const content = view.state.doc.toString();
+
+    // Cmd+S on a clean tab: nothing to write, but the user may have just
+    // typed an H1 then triggered autosave (or come back to a placeholder
+    // file from disk). Still run the H1-driven rename check so the
+    // filename gets a chance to catch up. See spec
+    // 2026-05-07-v0.2.4-rename-and-macros.md.
+    if (!tab.isDirty) {
+      if (!isScratchFile(tab.filePath)) {
+        await tabsStore.tryRenameAfterSave(tab.filePath, content);
+      }
+      return;
+    }
 
     isSaving = true;
     try {
@@ -375,9 +388,9 @@
   /** Save As / Rename: prompt user for a new file name and location. */
   async function saveAsRename(tab: { id: string; filePath: string; fileName: string }, content: string) {
     // Default to project dir if available, otherwise the file's own dir
-    const defaultDir = projectStore.dirPath || tab.filePath.replace(/\/[^/]+$/, '');
+    const defaultDir = projectStore.dirPath || pathDirname(tab.filePath);
     const savePath = await saveDialog({
-      defaultPath: `${defaultDir}/untitled.md`,
+      defaultPath: pathJoin(defaultDir, 'untitled.md'),
       filters: [{ name: 'Text files', extensions: ['md', 'markdown', 'txt', 'json', 'jsonl', 'csv'] }],
     });
     if (!savePath) return;
@@ -453,17 +466,16 @@
     // Create chunks directory and write files
     const tab = getActiveTab();
     const baseName = tab?.fileName?.replace(/\.md$/, '') ?? 'split';
-    const chunksDir = `${projectStore.dirPath}/${baseName}-chunks`;
-
     const mkdirResult = await commands.createDirectory(projectStore.dirPath, `${baseName}-chunks`);
     if (mkdirResult.status !== 'ok') {
       console.error('Failed to create chunks directory:', mkdirResult.error);
       return;
     }
+    const chunksDir = mkdirResult.data;
 
     for (const chunk of chunks) {
       await commands.createFile(chunksDir, `${chunk.name}.md`);
-      await commands.writeFile(`${chunksDir}/${chunk.name}.md`, chunk.content);
+      await commands.writeFile(pathJoin(chunksDir, `${chunk.name}.md`), chunk.content);
     }
 
     // Refresh file tree

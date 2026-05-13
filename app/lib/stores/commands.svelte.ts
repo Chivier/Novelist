@@ -1,8 +1,30 @@
 interface Command {
   id: string;
   label: string;
+  /**
+   * Optional alternate-language label rendered as a small subscript in
+   * the command palette and matched alongside `label` when the user
+   * searches. Lets a Chinese-locale user find a command by typing its
+   * English name (or vice versa) without switching locale.
+   *
+   * May be set directly OR resolved lazily via `secondaryLabelFn` —
+   * the latter lets us look up the alternate-locale translation only
+   * when the palette renders, after both locale chunks have loaded.
+   */
+  secondaryLabel?: string;
+  secondaryLabelFn?: () => string | undefined;
   shortcut?: string;
   handler: () => void;
+}
+
+/** Resolve a command's secondary label, preferring the lazy fn when set. */
+export function getSecondaryLabel(c: Command): string | undefined {
+  if (c.secondaryLabelFn) {
+    const v = c.secondaryLabelFn();
+    if (v && v !== c.label) return v;
+    return undefined;
+  }
+  return c.secondaryLabel;
 }
 
 /**
@@ -39,7 +61,12 @@ class CommandRegistry {
   search(query: string): Command[] {
     if (!query.trim()) return this.commands;
     const q = query.toLowerCase();
-    return this.commands.filter(c => c.label.toLowerCase().includes(q));
+    return this.commands.filter(c => {
+      if (c.label.toLowerCase().includes(q)) return true;
+      const sec = getSecondaryLabel(c);
+      if (sec && sec.toLowerCase().includes(q)) return true;
+      return false;
+    });
   }
 
   /**

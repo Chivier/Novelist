@@ -18,6 +18,7 @@ ships.
 | Export | Implemented | Pandoc-backed HTML, PDF, DOCX, EPUB. |
 | Sync and snapshots | Partial/active | Snapshot and WebDAV plumbing exist; reliability and UX need release-grade validation. |
 | Image hosting | Draft (v0.2.4) | See [2026-05-06-image-host.md](2026-05-06-image-host.md). Qiniu / Aliyun OSS / S3 / R2 / imgur / sm.ms / Custom. |
+| Publishing | Draft (v0.2.4) | See [2026-05-06-publish.md](2026-05-06-publish.md). Ghost / WordPress / WP.com / Medium. |
 | New-user onboarding | Draft | See [new-user-onboarding.md](new-user-onboarding.md). |
 
 ## Specs
@@ -25,3 +26,5 @@ ships.
 - [New-user onboarding](new-user-onboarding.md)
 - [Competitive analysis](competitive-analysis.md)
 - [Image hosting (v0.2.4)](2026-05-06-image-host.md)
+- [Publishing (v0.2.4)](2026-05-06-publish.md)
+- [File renaming & filename macros (v0.2.4)](2026-05-07-v0.2.4-rename-and-macros.md)

@@ -3,13 +3,22 @@ import { sanitizeFilenameStem } from './filename';
 
 export interface Template {
   raw: string;
-  /** Literal text before the number placeholder */
+  /** True when the template contains a `{N}` (or variant) placeholder. */
+  hasNumberSlot: boolean;
+  /**
+   * Literal text before the number placeholder when `hasNumberSlot` is true,
+   * or before the title placeholder otherwise. Empty when the slot is the
+   * very first thing in the template.
+   */
   prefix: string;
-  /** Literal text after the number placeholder (may include "{title}") */
+  /**
+   * Literal text after the number placeholder (may include "{title}") when
+   * `hasNumberSlot` is true, or after the title placeholder otherwise.
+   */
   suffix: string;
-  /** True if the suffix contains "{title}" */
+  /** True if the template contains "{title}". */
   hasTitleSlot: boolean;
-  /** Where the title slot lives relative to the number; null when no slot */
+  /** Where the title slot lives relative to the number; null when no slot or no number. */
   titleSlotPosition: 'after' | null;
   /**
    * Explicit style override extracted from the placeholder syntax:
@@ -17,6 +26,8 @@ export interface Template {
    *   - `{2N}`/`{3N}` → `{ kind: 'arabic', width: 2|3 }` (zero-padded)
    *   - `{CN}`        → `{ kind: 'chinese-lower' }` (一, 二, 三, ...)
    *   - `{rN}`        → `{ kind: 'roman-upper' }`
+   *
+   * Always null when `hasNumberSlot` is false.
    */
   forceStyle: NumberStyle | null;
 }
@@ -42,30 +53,63 @@ function tokenToStyle(token: string | undefined): NumberStyle | null {
 
 /**
  * Parse a user-facing template string into a descriptor.
- * Templates must contain exactly one number placeholder (see PLACEHOLDER_TOKEN_RE);
- * may optionally contain {title}. Returns null on validation failure.
+ *
+ * A template must contain at least one of `{N}` (or variant) and `{title}`,
+ * each appearing at most once. Both `第{N}章-{title}` and `{title}` are
+ * valid; bare literal strings without any slot are rejected so that the
+ * setting can't silently produce filename collisions.
  */
+/** Single-token regex (no /g) for whole-string validity testing. */
+const PLACEHOLDER_TOKEN_RE_SINGLE = /^\{(?:\d+|C|r)?N\}$/;
+
 export function parseTemplate(raw: string): Template | null {
   if (raw.length === 0) return null;
   const numMatches = Array.from(raw.matchAll(PLACEHOLDER_TOKEN_RE));
-  if (numMatches.length !== 1) return null;
+  if (numMatches.length > 1) return null;
   const titleMatches = raw.match(/\{title\}/g) ?? [];
   if (titleMatches.length > 1) return null;
+  if (numMatches.length === 0 && titleMatches.length === 0) return null;
 
-  const match = numMatches[0];
-  const idx = match.index!;
-  const tokenLen = match[0].length;
-  const prefix = raw.slice(0, idx);
-  const suffix = raw.slice(idx + tokenLen);
-  const forceStyle = tokenToStyle(match[1]);
+  // Reject typos like `{cN}`, `{Title}`, `{tile}` — any brace-delimited
+  // token in the raw template that isn't a recognized placeholder must
+  // not be silently treated as literal text. Macros (e.g. `{date:YYMMDD}`)
+  // are already resolved upstream of parseTemplate.
+  const allBraceTokens = raw.match(/\{[^{}]*\}/g) ?? [];
+  for (const tok of allBraceTokens) {
+    if (tok === '{title}') continue;
+    if (PLACEHOLDER_TOKEN_RE_SINGLE.test(tok)) continue;
+    return null;
+  }
 
+  if (numMatches.length === 1) {
+    const match = numMatches[0];
+    const idx = match.index!;
+    const tokenLen = match[0].length;
+    const prefix = raw.slice(0, idx);
+    const suffix = raw.slice(idx + tokenLen);
+    const forceStyle = tokenToStyle(match[1]);
+
+    return {
+      raw,
+      hasNumberSlot: true,
+      prefix,
+      suffix,
+      hasTitleSlot: titleMatches.length === 1,
+      titleSlotPosition: titleMatches.length === 1 ? 'after' : null,
+      forceStyle,
+    };
+  }
+
+  // Title-only template — no `{N}` slot.
+  const titleIdx = raw.indexOf('{title}');
   return {
     raw,
-    prefix,
-    suffix,
-    hasTitleSlot: titleMatches.length === 1,
-    titleSlotPosition: titleMatches.length === 1 ? 'after' : null,
-    forceStyle,
+    hasNumberSlot: false,
+    prefix: raw.slice(0, titleIdx),
+    suffix: raw.slice(titleIdx + '{title}'.length),
+    hasTitleSlot: true,
+    titleSlotPosition: null,
+    forceStyle: null,
   };
 }
 
@@ -91,8 +135,14 @@ export function renderTemplate(
   style: NumberStyle,
   title: string | null
 ): string {
-  const numStr = formatNumber(value, style);
   const sanitized = title ? sanitizeFilenameStem(title) : '';
+
+  if (!template.hasNumberSlot) {
+    const fill = sanitized.length > 0 ? sanitized : 'Untitled';
+    return `${template.prefix}${fill}${template.suffix}.md`;
+  }
+
+  const numStr = formatNumber(value, style);
 
   if (template.hasTitleSlot) {
     const fill = sanitized.length > 0 ? sanitized : 'Untitled';
@@ -123,12 +173,19 @@ export function renderTemplate(
  * (number + decoration only, no user-supplied title).
  */
 const PLACEHOLDER_PATTERNS: RegExp[] = [
+  // Title-only template (`{title}`) renders as `Untitled.md`, then
+  // `Untitled 2.md`, `Untitled 3.md`, ... on collision.
+  /^Untitled\.md$/,
   /^Untitled \d+\.md$/,
   /^第([\u4e00-\u9fff\d]+)章\.md$/,
   /^Chapter \d+\.md$/,
   /^Ch\.?\d+\.md$/,
   /^Part \d+\.md$/,
   /^\d+[-_. ]Untitled\.md$/,
+  // Date-prefixed Untitled with counter: `260508_Untitled 1.md`,
+  // `20260508-Untitled 12.md`, etc. The date portion belongs to the user;
+  // H1 auto-rename must replace the "Untitled N" portion only.
+  /^\d+[-_. ]Untitled \d+\.md$/,
   // Legacy: pre-v0.1.x timestamp-scratch naming. Kept so existing files in
   // user folders auto-rename on first save. Remove after v0.3.x.
   /^novelist_scratch_\d+\.md$/,
@@ -178,7 +235,11 @@ function familyMatcher(template: Template): RegExp {
   return new RegExp(`^${escapePrefix}([\\d\\u4e00-\\u9fff]+)${escapeSuffix}\\.md$`);
 }
 
-function detectFamily(filenames: string[], template: Template): FamilyMatch | null {
+function detectFamily(
+  filenames: string[],
+  template: Template,
+  maxValue?: number,
+): FamilyMatch | null {
   const re = familyMatcher(template);
   interface Match { value: number; style: NumberStyle; }
   const matches: Match[] = [];
@@ -188,7 +249,9 @@ function detectFamily(filenames: string[], template: Template): FamilyMatch | nu
     const stem = f.replace(/\.md$/, '');
     if (SKIP_TITLES.has(stem)) continue;
     const parsed = parseNumber(m[1]);
-    if (parsed) matches.push({ value: parsed.value, style: parsed.style });
+    if (!parsed) continue;
+    if (maxValue !== undefined && parsed.value > maxValue) continue;
+    matches.push({ value: parsed.value, style: parsed.style });
   }
   if (matches.length === 0) return null;
   // Dominant style = most common; tie-break by first occurrence
@@ -219,20 +282,42 @@ function detectFamily(filenames: string[], template: Template): FamilyMatch | nu
  * - Empty folder or nothing matches → render default template at N=1 with its natural style.
  * - Collision resolution: bump the number until free.
  */
-export function inferNextName(folderFiles: string[], userDefaultTemplate: Template): string {
-  const candidates: FamilyMatch[] = [];
+/**
+ * Plausibility cap for builtin family detection. Generic builtins like
+ * `{N}_{title}` would otherwise mis-interpret a date prefix like `260508` as a
+ * 260508-th chapter, then "increment" it to 260509 — producing files that
+ * advance by date instead of by N. The cap (chosen well above any plausible
+ * chapter count) keeps date-prefixed user templates working while still
+ * letting the builtins kick in for novels with hundreds or low thousands of
+ * chapters. The user's own template is never subject to this cap.
+ */
+const BUILTIN_FAMILY_MAX_VALUE = 9999;
 
-  // Built-in families: threshold 2
+export function inferNextName(folderFiles: string[], userDefaultTemplate: Template): string {
+  // Title-only template: render once with placeholder "Untitled" and bump
+  // on collision using the same suffix scheme as H1 rename.
+  if (!userDefaultTemplate.hasNumberSlot) {
+    const baseName = renderTemplate(userDefaultTemplate, 0, { kind: 'arabic', width: 1 }, null);
+    return bumpStemUntilFree(baseName, folderFiles, '');
+  }
+
+  // User default: threshold 1, no plausibility cap (trusts user intent).
+  const userMatch = detectFamily(folderFiles, userDefaultTemplate);
+  if (userMatch && userMatch.numbers.length >= 1) {
+    const next = Math.max(...userMatch.numbers) + 1;
+    const style = userMatch.template.forceStyle ?? userMatch.style;
+    return bumpUntilFree(userMatch.template, next, style, folderFiles);
+  }
+
+  // Builtin families: threshold 2, plausibility cap to avoid treating date
+  // prefixes as chapter numbers.
+  const candidates: FamilyMatch[] = [];
   for (const tmplStr of BUILTIN_TEMPLATES) {
     const tmpl = parseTemplate(tmplStr);
     if (!tmpl) continue;
-    const m = detectFamily(folderFiles, tmpl);
+    const m = detectFamily(folderFiles, tmpl, BUILTIN_FAMILY_MAX_VALUE);
     if (m && m.numbers.length >= 2) candidates.push(m);
   }
-
-  // User default: threshold 1
-  const userMatch = detectFamily(folderFiles, userDefaultTemplate);
-  if (userMatch && userMatch.numbers.length >= 1) candidates.push(userMatch);
 
   if (candidates.length === 0) {
     // No recognizable pattern → render user default at N=1
@@ -294,10 +379,16 @@ export function renameFromH1(currentName: string, h1: string, siblings: string[]
 
 /** Map a known placeholder filename + sanitized H1 → new filename. */
 function computeNewNameForPlaceholder(currentName: string, h1Stem: string): string {
+  // Bare Untitled.md (from a title-only template): replace whole stem
+  if (/^Untitled\.md$/.test(currentName)) return `${h1Stem}.md`;
   // Untitled N: replace whole stem
   if (/^Untitled \d+\.md$/.test(currentName)) return `${h1Stem}.md`;
   // legacy scratch: replace whole stem
   if (/^novelist_scratch_\d+\.md$/.test(currentName)) return `${h1Stem}.md`;
+  // {date}<sep>Untitled <N>: keep the date prefix, drop the "Untitled N"
+  // suffix. e.g. `260508_Untitled 3.md` + `开篇` → `260508_开篇.md`.
+  const datedSlotMatch = /^(\d+[-_. ])Untitled \d+\.md$/.exec(currentName);
+  if (datedSlotMatch) return `${datedSlotMatch[1]}${h1Stem}.md`;
   // {N}<sep>Untitled with title slot: substitute "Untitled" with H1
   const slotMatch = /^(\d+[-_. ])Untitled\.md$/.exec(currentName);
   if (slotMatch) return `${slotMatch[1]}${h1Stem}.md`;
@@ -321,4 +412,44 @@ function bumpStemUntilFree(newName: string, siblings: string[], currentName: str
     n++;
   }
   return newName; // give up; caller handles error
+}
+
+/**
+ * Path B of ongoing H1→filename sync. Compute the new filename when a tab's
+ * H1 has changed from `oldH1` to `newH1` and the file is already past the
+ * placeholder→title transition (Path A in tabsStore.tryRenameAfterSave).
+ *
+ * Returns null when:
+ * - either side sanitizes to empty (no anchor to act on)
+ * - old and new sanitize to the same stem (nothing to do)
+ * - the sanitized old H1 is not present in the current filename stem
+ *   (i.e. the user manually renamed the file — sync auto-detaches)
+ *
+ * On a hit, the rightmost occurrence of sanitized old H1 inside the stem is
+ * replaced with sanitized new H1 (lastIndexOf — title slot is conventionally
+ * at the end of the stem). Resulting collisions with `siblings` get bumped
+ * via the existing `bumpStemUntilFree` ` 2`/` 3`/… scheme.
+ */
+export function applyH1Substitution(
+  currentName: string,
+  oldH1: string,
+  newH1: string,
+  siblings: string[],
+): string | null {
+  const sanitizedOld = sanitizeFilenameStem(oldH1);
+  const sanitizedNew = sanitizeFilenameStem(newH1);
+  if (sanitizedOld.length === 0) return null;
+  if (sanitizedNew.length === 0) return null;
+  if (sanitizedOld === sanitizedNew) return null;
+
+  const stem = currentName.replace(/\.md$/, '');
+  const idx = stem.lastIndexOf(sanitizedOld);
+  if (idx === -1) return null;
+
+  const newStem = stem.slice(0, idx) + sanitizedNew + stem.slice(idx + sanitizedOld.length);
+  const newName = `${newStem}.md`;
+  // (no `newName === currentName` guard needed — earlier guards ensure
+  // sanitizedOld !== sanitizedNew and idx >= 0, so the stem must differ.)
+
+  return bumpStemUntilFree(newName, siblings, currentName);
 }

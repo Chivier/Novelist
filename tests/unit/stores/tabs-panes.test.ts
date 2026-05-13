@@ -37,6 +37,7 @@ import {
 import { commands } from '$lib/ipc/commands';
 
 beforeEach(() => {
+  localStorage.clear();
   tabsStore.closeAll();
   vi.clearAllMocks();
   (commands.registerWriteIgnore as any).mockResolvedValue({ status: 'ok', data: null });

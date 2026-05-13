@@ -5,6 +5,208 @@ All notable changes to Novelist will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Filename now follows the H1 heading on every save (was first-save only).
+  Manually renaming a file detaches the sync. See spec
+  `docs/superpowers/specs/2026-05-12-h1-filename-ongoing-sync-design.md`.
+
+## [0.2.4] - 2026-05-11
+
+Major release adding **image hosting** and **publishing** — Novelist
+can now upload images to your CDN of choice and push the active
+Markdown document to your blog with one click.
+
+本次 v0.2.4 主版本新增两套核心功能：图床上传与一键发布。可以把 Markdown
+中的本地图片自动上传到你常用的图床（七牛、阿里云 OSS、S3、R2、imgur、
+sm.ms 或自定义 HTTP 接口），并直接发布到 Ghost / WordPress / Medium。
+
+### Added — Image hosting
+
+- **Six built-in image-host providers** plus a minimal Custom HTTP
+  endpoint:
+  - **Qiniu Kodo** — HMAC-SHA1 upload-token, multipart POST
+  - **Aliyun OSS** — HMAC-SHA1 header signature, virtual-hosted PUT
+  - **Amazon S3** — manual SigV4 path-style PUT (works with Cloudflare
+    R2 and MinIO via endpoint override)
+  - **imgur** — Client-ID Bearer
+  - **sm.ms** — optional API token, with `image_repeated` dedup
+  - **Custom** — multipart POST with optional Bearer; response URL
+    read from `url` or `data.url`
+- **Settings → Image Hosts panel** — list, add/edit/delete, set active
+  default, per-host Test button (uploads a 1×1 PNG to verify
+  credentials without saving anything noisy)
+- **Image context menu** — right-click any inline image with a local
+  path → "Upload to host" replaces the Markdown URL in place
+- **Upload all local images** — palette command iterates the
+  document's image references, uploads each sequentially, applies all
+  URL replacements in one CodeMirror transaction, and reports
+  partial-failure status via toast
+- **Optional auto-on-paste / auto-on-drop** — off by default. When
+  enabled in settings, every pasted or dropped image immediately
+  uploads to the active host
+- **Date-prefixed object keys** for bucket-style hosts —
+  `{yyyy}/{mm}/{dd}/{8-char-blake3}-{sanitized-name}.{ext}` keeps the
+  remote bucket organized and collision-free
+- **Plaintext credentials in global settings only** — per-project
+  overrides are limited to the active-host pointer, so credentials
+  never leak into project files that might end up in git
+
+### Added — Publishing
+
+- **Four publish platforms**, each as a self-contained adapter:
+  - **Ghost** — Admin API key signed as 5-min HS256 JWT, posts via
+    `?source=html` so we send HTML and Ghost converts to Lexical
+    server-side
+  - **WordPress (self-hosted)** — Application Passwords (HTTP Basic),
+    full REST tag-name → ID resolution with auto-create, raw-body
+    media upload
+  - **WordPress.com** — OAuth2 personal access token (Bearer), same
+    REST shape with `/sites/<id>` prefix
+  - **Medium** — legacy Integration Token Bearer; native Markdown
+    body, max-3 tag cap. *Note: Medium removed the Integration Token
+    UI in late 2024; the API still accepts pre-existing tokens but
+    new users typically cannot generate one.*
+- **Editor share menu** — top-right share button with dropdown:
+  *Upload Local Images to…* + one *Publish to <channel>* entry per
+  configured channel (mweb-style, single discoverable entry point)
+- **Publish dialog** with mweb-shaped fields: title (auto-prefilled
+  from the document's H1), tags (chip input), excerpt, slug
+  (auto-generated kebab-case), per-platform status dropdown, drag-drop
+  cover image. Inline error on failure with retry; success banner with
+  "Open in browser" action.
+- **Pre-publish image upload** — local images in the body are uploaded
+  to the publish target's own media endpoint and rewritten in the
+  submitted body. No third-party CDN required for publishing. (If the
+  user prefers their image host instead, they run *Upload Local Images
+  to…* explicitly first.)
+- **Settings → Publish panel** — per-channel CRUD, manual-paste auth
+  for all four platforms, Test button does a 1×1 PNG smoke check.
+- **Pandoc Markdown → HTML conversion** — used by Ghost / WordPress /
+  WordPress.com; Medium consumes Markdown natively.
+- **No update tracking** — every publish creates a new post.
+  Re-publishing an edited document creates duplicates the user prunes
+  manually on the platform side. (Front-matter ID writeback is
+  intentionally out of scope for v0.2.4.)
+
+### Added — UX polish
+
+- **Bilingual command palette** — Cmd+Shift+P now shows the
+  active-locale label large with the alternate-locale label as a small
+  subscript below; the search matcher hits both. Lets a Chinese-locale
+  user find "Toggle Outline" by typing either *outline* or *大纲*.
+- **Double-click to rename** in the file tree — double-clicking a file
+  row in the sidebar opens inline rename. Folder double-click still
+  toggles expansion. Rename input now renders inline under the
+  renamed node (previously rendered at the top of the sidebar).
+- **Right-side panel shortcuts moved to Cmd+Shift+1/2/3/4** — outline,
+  draft, snapshot, stats. Easier chord than Cmd+Alt. Note: macOS users
+  may need to disable system screenshot shortcuts (Cmd+Shift+3/4) for
+  4-position behavior. Toggle-template stays on Cmd+Alt+5 (Cmd+Shift+5
+  is the macOS screenshot toolbar).
+- **Drag files from the sidebar into a pane or split-right zone** —
+  while dragging a leaf node the editor area shows two drop overlays
+  (the active pane + a right-edge "split right" gutter); dropping
+  opens the file in that pane. Tab bars accept the same payload.
+- **Wrap long file names** — new Settings → Editor toggle keeps long
+  file names on multiple lines instead of truncating to an ellipsis.
+- **Edge-mounted sidebar toggle** — collapse/reopen the sidebar from a
+  small ◁ / ▷ button on the resize handle, in addition to the
+  existing keyboard shortcut.
+- **Editor max-width is a slider + numeric input** (480–9999px)
+  instead of a fixed dropdown.
+- **Filename macros for new files** — `{yyyy}`, `{mm}`, `{dd}`,
+  `{HH}`, `{MM}`, `{ss}` are expanded in the new-file template,
+  with live previews under the setting.
+- **Searchable Settings dialog** — top filter narrows visible panels
+  and rows by label, hint, or keyword (Chinese aliases included).
+- **Publish dialog polish** — paste-from-clipboard, Ghost tag
+  autocomplete, redesigned pill-grid tag picker, native clipboard
+  read, Test button that actually hits the platform, edit button +
+  secret-reveal in the credential rows, fully localized.
+- **`{title}`-only filename template** — new-file template now
+  accepts `{title}` without a `{N}` counter slot (renders
+  `Untitled.md` initially, then `Untitled 2.md`, `Untitled 3.md`
+  on collision; H1 auto-rename replaces the whole stem). Typo
+  tokens like `{cN}` or `{Title}` are still rejected so a misspelt
+  placeholder doesn't silently become literal text.
+- **Sort sidebar by creation time** — Sidebar view menu adds
+  *Created (newest)* / *创建时间（最新）* and *Created (oldest)* /
+  *创建时间（最早）* alongside the existing modified-time options.
+  Filesystems that don't expose birth time fall back to mtime.
+- **Command-palette shortcut chip uses the UI font** so Apple
+  shortcut symbols (⇧⌘⌥⌃) render with the same stroke weight as
+  the letter next to them.
+- **Settings checkbox rows align with the first text line** —
+  the wrap-filenames, detect-from-folder, and auto-rename rows
+  in Settings → Editor previously floated their checkbox above
+  the label baseline; they now line up.
+
+### Fixed
+
+- **Numeric sidebar sort orders 第九 < 第十 < 第十一** and no
+  longer misplaces files whose Chinese number is followed by extra
+  characters like `第十章终稿.md`.
+- **In-project search is now Unicode case-insensitive** and emits
+  UTF-16 offsets, so highlights land on the right glyphs for CJK
+  and Latin-with-diacritic queries; empty queries short-circuit
+  instead of scanning the project.
+- **File watcher refreshes the right parent on rename / delete**
+  on Windows + macOS, emitting a separate `directory-changed`
+  event and polling every 15s so the sidebar doesn't keep ghost
+  rows around after a rename done in another window or by an
+  external tool. `.canvas` and `.kanban` files now open via the
+  same external open-file path as Markdown.
+- **Plain folders without `.novelist/project.toml`** stay
+  global-scoped — previously the app tried to write view settings
+  into folders it had no project file in.
+- **Save (Cmd+S) on a clean tab still runs the H1 → file-name
+  auto-rename check** when no edits since the last save introduced
+  a new H1.
+- **External links open via tauri-plugin-shell** instead of the
+  default WebKit navigation, so they actually open in the
+  system browser.
+- **Pandoc auto-discovery + user override** — no longer relies on
+  the previously-bundled Pandoc binary; falls back to PATH probing
+  with a manual override in Settings → Editor.
+
+### Security
+
+- **Template zip import** is now done via the `zip` crate (instead
+  of shelling out to `unzip`), rejects symlinks, NUL bytes,
+  path-traversal entries, and caps the archive at 2048 entries /
+  50 MiB uncompressed. Template ids are validated to
+  `[a-z0-9-]{1,96}` before they reach the filesystem.
+- **WebDAV sync** validates remote file paths before downloading —
+  absolute paths, `..` components, and dotfile-prefixed components
+  are rejected, so a hostile server can't write above the project
+  root.
+
+### Platform
+
+- **macOS bundle declares `CFBundleLocalizations` for `en` and
+  `zh-Hans`** via the newly bundled `core/Info.plist`, so Chinese
+  users get localized application menus and system dialogs.
+
+### Removed
+
+- **"Run Release Benchmark" command** — internal diagnostic, not
+  user-facing. The regular performance benchmark stays available.
+
+### Notes for developers
+
+- The `tauri-specta` codegen pipeline is currently broken upstream
+  (specta-serde rejects `skip_serializing_if` on existing
+  `ProjectConfig` fields). New IPC commands and types in v0.2.4 are
+  patched into `app/lib/ipc/commands.ts` manually. The file remains
+  `@ts-nocheck` so this is type-safe at the consumer level. A
+  follow-up release will restore auto-generation.
+- E2E coverage for the new image-host and publish UIs is deferred.
+  Rust + frontend unit coverage is comprehensive (over 1500 tests
+  total); manual smoke-testing covers the UI surfaces for v0.2.4.
+
 ## [0.2.3] - 2026-05-03
 
 Patch release. Three quality-of-life improvements that finally make

@@ -2,11 +2,9 @@ use crate::error::AppError;
 use crate::models::file_state::FileEntry;
 use serde::Serialize;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-#[cfg(test)]
-use std::path::Path;
 use walkdir::WalkDir;
 
 /// Shared state tracking the original encoding of files opened via `read_file`.
@@ -156,6 +154,46 @@ pub struct SearchMatch {
     pub line_text: String,
     pub match_start: usize,
     pub match_end: usize,
+}
+
+fn utf16_offset_at_byte(s: &str, byte_idx: usize) -> usize {
+    s.get(..byte_idx)
+        .map(|prefix| prefix.encode_utf16().count())
+        .unwrap_or_else(|| s.encode_utf16().count())
+}
+
+fn fold_with_original_byte_map(s: &str) -> (String, Vec<usize>) {
+    let mut folded = String::new();
+    let mut map = Vec::new();
+
+    for (byte_idx, ch) in s.char_indices() {
+        for folded_ch in ch.to_lowercase() {
+            let mut buf = [0u8; 4];
+            let folded_part = folded_ch.encode_utf8(&mut buf);
+            folded.push_str(folded_part);
+            map.extend(std::iter::repeat_n(byte_idx, folded_part.len()));
+        }
+    }
+    map.push(s.len());
+
+    (folded, map)
+}
+
+fn original_byte_for_folded_byte(map: &[usize], folded_byte_idx: usize) -> usize {
+    map.get(folded_byte_idx)
+        .copied()
+        .unwrap_or_else(|| map.last().copied().unwrap_or(0))
+}
+
+fn next_char_boundary(s: &str, byte_idx: usize) -> usize {
+    if byte_idx >= s.len() {
+        return s.len();
+    }
+    let mut idx = byte_idx + 1;
+    while idx < s.len() && !s.is_char_boundary(idx) {
+        idx += 1;
+    }
+    idx
 }
 
 /// Internal: read a file with encoding detection, updating the encoding state.
@@ -324,12 +362,18 @@ pub async fn list_directory(
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|d| d.as_millis() as i64);
+        let ctime = metadata
+            .created()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as i64);
         entries.push(FileEntry {
             name,
             path: entry.path().to_string_lossy().to_string(),
             is_dir: metadata.is_dir(),
             size: metadata.len(),
             mtime,
+            ctime,
         });
     }
 
@@ -686,9 +730,13 @@ pub async fn search_in_project(
     }
 
     let query_lower = query.to_lowercase();
+    if query_lower.is_empty() {
+        return Ok(Vec::new());
+    }
     let extensions = ["md", "markdown", "txt", "json", "jsonl", "csv"];
     let max_matches = 200usize;
     let mut matches = Vec::new();
+    let root_path = Path::new(&dir_path);
 
     for entry in WalkDir::new(&dir_path)
         .into_iter()
@@ -696,18 +744,19 @@ pub async fn search_in_project(
         .filter(|e| e.file_type().is_file())
     {
         let path = entry.path();
+        let relative_path = path.strip_prefix(root_path).unwrap_or(path);
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
         if !extensions.contains(&ext) {
             continue;
         }
 
         // Skip hidden directories/files
-        if path
+        if relative_path
             .components()
             .any(|c| c.as_os_str().to_string_lossy().starts_with('.'))
         {
             // Allow .novelist but skip other hidden dirs
-            let has_hidden = path.components().any(|c| {
+            let has_hidden = relative_path.components().any(|c| {
                 let s = c.as_os_str().to_string_lossy();
                 s.starts_with('.') && s != ".novelist"
             });
@@ -728,22 +777,26 @@ pub async fn search_in_project(
         };
 
         for (line_idx, line) in content.lines().enumerate() {
-            let line_lower = line.to_lowercase();
+            let (line_lower, folded_to_original) = fold_with_original_byte_map(line);
             let mut search_start = 0;
             while let Some(pos) = line_lower[search_start..].find(&query_lower) {
-                let abs_pos = search_start + pos;
+                let folded_start = search_start + pos;
+                let folded_end = folded_start + query_lower.len();
+                let original_start =
+                    original_byte_for_folded_byte(&folded_to_original, folded_start);
+                let original_end = original_byte_for_folded_byte(&folded_to_original, folded_end);
                 matches.push(SearchMatch {
                     file_path: file_path_str.clone(),
                     file_name: file_name.clone(),
                     line_number: line_idx + 1,
                     line_text: line.to_string(),
-                    match_start: abs_pos,
-                    match_end: abs_pos + query.len(),
+                    match_start: utf16_offset_at_byte(line, original_start),
+                    match_end: utf16_offset_at_byte(line, original_end),
                 });
                 if matches.len() >= max_matches {
                     return Ok(matches);
                 }
-                search_start = abs_pos + 1;
+                search_start = next_char_boundary(&line_lower, folded_start);
             }
         }
     }
@@ -938,6 +991,34 @@ mod tests {
         fs::write(&file_path, "").unwrap();
         let result = list_directory(file_path.to_string_lossy().to_string(), None).await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_search_in_project_returns_utf16_offsets() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("chapter.md"), "前缀你好 emoji🙂结尾\n").unwrap();
+
+        let matches = search_in_project(dir.path().to_string_lossy().to_string(), "你好".into())
+            .await
+            .unwrap();
+
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].match_start, 2);
+        assert_eq!(matches[0].match_end, 4);
+    }
+
+    #[tokio::test]
+    async fn test_search_in_project_is_case_insensitive_for_unicode() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("chapter.md"), "前缀Éclair\n").unwrap();
+
+        let matches = search_in_project(dir.path().to_string_lossy().to_string(), "é".into())
+            .await
+            .unwrap();
+
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].match_start, 2);
+        assert_eq!(matches[0].match_end, 3);
     }
 
     #[tokio::test]

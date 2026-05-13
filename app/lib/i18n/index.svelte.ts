@@ -27,6 +27,29 @@ class I18nStore {
     return translations[this.locale] ?? en;
   }
 
+  /**
+   * Translate `key` in a specific locale, ignoring the current active
+   * locale. Used by the command palette to resolve the alternate-language
+   * label so users can search in either language. Falls back to English
+   * when the locale's chunk is not yet loaded or the key is missing.
+   */
+  tIn(locale: Locale, key: string, params?: Record<string, string | number>): string {
+    const messages = translations[locale] ?? en;
+    let value = messages[key] ?? en[key] ?? key;
+    if (typeof value === 'object') {
+      const count = typeof params?.count === 'number' ? params.count : 0;
+      if (count === 0 && value.zero) value = value.zero;
+      else if (count === 1 && value.one) value = value.one;
+      else value = value.other;
+    }
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        value = (value as string).replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
+      }
+    }
+    return value as string;
+  }
+
   t(key: string, params?: Record<string, string | number>): string {
     let value = this.messages[key] ?? en[key] ?? key;
 
@@ -85,8 +108,19 @@ class I18nStore {
     }
     await loadLocale(this.locale);
   }
+
+  /**
+   * Preload every locale's translation chunk so bilingual lookups
+   * (e.g. the command palette's secondary-label search) succeed
+   * regardless of which locale the user started in. Fire-and-forget;
+   * the active locale is already loaded by `init()`.
+   */
+  async preloadAll(): Promise<void> {
+    await Promise.all([loadLocale('en'), loadLocale('zh-CN')]);
+  }
 }
 
 export const i18n = new I18nStore();
 export const t = i18n.t.bind(i18n);
+export const tIn = i18n.tIn.bind(i18n);
 export type { Locale };

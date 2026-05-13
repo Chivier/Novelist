@@ -19,12 +19,17 @@ use commands::claude_bridge::{
 };
 use commands::cli_shim::{cli_shim_status, install_cli_shim};
 use commands::draft::{delete_draft_note, has_draft_note, read_draft_note, write_draft_note};
-use commands::export::{check_pandoc, export_project};
+use commands::export::{check_pandoc, export_project, set_pandoc_path};
 use commands::file::{
     broadcast_file_renamed, create_directory, create_file, create_scratch_file, delete_item,
     duplicate_file, get_file_encoding, list_directory, move_item, read_file, read_image_data_uri,
     rename_item, reveal_in_file_manager, search_in_project, write_binary_file, write_file,
     EncodingState,
+};
+use commands::image_host::{
+    get_image_host_settings, read_image_bytes, set_image_host_settings, upload_image_aliyun_oss,
+    upload_image_custom, upload_image_imgur, upload_image_qiniu, upload_image_s3,
+    upload_image_smms,
 };
 use commands::menu::refresh_menu;
 use commands::plugin::{
@@ -32,6 +37,13 @@ use commands::plugin::{
     reload_plugin, scaffold_plugin, set_plugin_document_state, set_plugin_enabled, unload_plugin,
 };
 use commands::project::{detect_project, read_project_config};
+use commands::publish::{
+    convert_markdown_to_html, get_publish_settings, list_publish_tags, publish_to_ghost,
+    publish_to_medium, publish_to_wordpress_com, publish_to_wordpress_self_hosted,
+    read_clipboard_image, set_publish_settings, upload_post_image_ghost, upload_post_image_medium,
+    upload_post_image_wordpress_com, upload_post_image_wordpress_self_hosted,
+    verify_publish_channel,
+};
 use commands::recent::{
     add_recent_project, get_recent_projects, remove_recent_project, reorder_recent_projects,
     set_project_pinned,
@@ -254,6 +266,7 @@ pub fn run() {
         move_item,
         delete_item,
         check_pandoc,
+        set_pandoc_path,
         export_project,
         detect_project,
         read_project_config,
@@ -315,6 +328,29 @@ pub fn run() {
         cli_shim_status,
         install_cli_shim,
         read_image_data_uri,
+        read_image_bytes,
+        upload_image_qiniu,
+        upload_image_aliyun_oss,
+        upload_image_s3,
+        upload_image_imgur,
+        upload_image_smms,
+        upload_image_custom,
+        get_image_host_settings,
+        set_image_host_settings,
+        publish_to_ghost,
+        publish_to_wordpress_self_hosted,
+        publish_to_wordpress_com,
+        publish_to_medium,
+        upload_post_image_ghost,
+        upload_post_image_wordpress_self_hosted,
+        upload_post_image_wordpress_com,
+        upload_post_image_medium,
+        convert_markdown_to_html,
+        verify_publish_channel,
+        list_publish_tags,
+        read_clipboard_image,
+        get_publish_settings,
+        set_publish_settings,
         write_binary_file,
         reveal_in_file_manager,
         duplicate_file,
@@ -352,6 +388,7 @@ pub fn run() {
         move_item,
         delete_item,
         check_pandoc,
+        set_pandoc_path,
         export_project,
         detect_project,
         read_project_config,
@@ -413,6 +450,29 @@ pub fn run() {
         cli_shim_status,
         install_cli_shim,
         read_image_data_uri,
+        read_image_bytes,
+        upload_image_qiniu,
+        upload_image_aliyun_oss,
+        upload_image_s3,
+        upload_image_imgur,
+        upload_image_smms,
+        upload_image_custom,
+        get_image_host_settings,
+        set_image_host_settings,
+        publish_to_ghost,
+        publish_to_wordpress_self_hosted,
+        publish_to_wordpress_com,
+        publish_to_medium,
+        upload_post_image_ghost,
+        upload_post_image_wordpress_self_hosted,
+        upload_post_image_wordpress_com,
+        upload_post_image_medium,
+        convert_markdown_to_html,
+        verify_publish_channel,
+        list_publish_tags,
+        read_clipboard_image,
+        get_publish_settings,
+        set_publish_settings,
         write_binary_file,
         reveal_in_file_manager,
         duplicate_file,

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { commandRegistry } from '$lib/stores/commands.svelte';
+  import { commandRegistry, getSecondaryLabel } from '$lib/stores/commands.svelte';
   import { formatShortcut } from '$lib/stores/shortcuts.svelte';
   import { t } from '$lib/i18n';
 
@@ -47,6 +47,7 @@
     />
     <ul class="palette-list">
       {#each results as cmd, i}
+        {@const sec = getSecondaryLabel(cmd)}
         <li>
           <button
             class="palette-item"
@@ -55,7 +56,12 @@
             onclick={() => { cmd.handler(); onClose(); }}
             onmouseenter={() => { selectedIndex = i; }}
           >
-            <span>{cmd.label}</span>
+            <span class="palette-labels">
+              <span class="palette-primary">{cmd.label}</span>
+              {#if sec}
+                <span class="palette-secondary">{sec}</span>
+              {/if}
+            </span>
             {#if cmd.shortcut}
               <span class="shortcut">{formatShortcut(cmd.shortcut)}</span>
             {/if}
@@ -126,9 +132,28 @@
     border: none;
     background: transparent;
     color: var(--novelist-text, #e0e0e0);
-    font-size: 13px;
+    font-size: 14px;
     cursor: pointer;
     text-align: left;
+  }
+
+  .palette-labels {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+  .palette-primary {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .palette-secondary {
+    font-size: 10.5px;
+    color: var(--novelist-text-secondary, #888);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .palette-item:hover,
@@ -137,11 +162,18 @@
   }
 
   .shortcut {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--novelist-text-secondary, #888);
     background: rgba(255, 255, 255, 0.08);
     padding: 2px 6px;
     border-radius: 3px;
-    font-family: monospace;
+    /* Apple shortcut symbols (⇧⌘⌥⌃) render poorly in the default monospace
+       stacks on macOS — they get the system fallback at a smaller weight
+       than the surrounding letter and look washed out. Use the UI font
+       (which has hand-tuned glyphs for these) and a slightly heavier
+       weight so the modifiers stay legible next to the letter. */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-weight: 500;
+    letter-spacing: 0.02em;
   }
 </style>

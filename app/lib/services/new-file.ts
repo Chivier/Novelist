@@ -29,6 +29,39 @@ export async function createScratchFile() {
 }
 
 /**
+ * Compute the smart proposed filename for a new file in `targetDir`,
+ * applying the user's template (date/time macros + `{N}` numbering with
+ * optional sibling-aware inference). Pure naming — does not create the file.
+ *
+ * If `ext` is provided and differs from the template's extension, the
+ * resulting basename's extension is swapped (e.g. `.canvas`, `.kanban`).
+ */
+export async function proposeNewFileName(targetDir: string, ext?: string): Promise<string> {
+  const filesResult = await commands.listDirectory(targetDir, null);
+  const siblings = filesResult.status === 'ok'
+    ? filesResult.data.filter(e => !e.is_dir).map(e => e.name)
+    : [];
+
+  const macroCtx = makeTemplateContext({
+    activeFilePath: tabsStore.activeTab?.filePath ?? null,
+    projectDir: projectStore.dirPath,
+  });
+  const resolvedTemplateRaw = resolveBody(newFileSettings.template, macroCtx);
+  const userTemplate = parseTemplate(resolvedTemplateRaw) ?? parseTemplate('Untitled {N}')!;
+
+  const proposedName = newFileSettings.detectFromFolder
+    ? inferNextName(siblings, userTemplate)
+    : inferNextName([], userTemplate);
+
+  if (ext) {
+    const dot = proposedName.lastIndexOf('.');
+    const stem = dot > 0 ? proposedName.slice(0, dot) : proposedName;
+    return stem + ext;
+  }
+  return proposedName;
+}
+
+/**
  * Smart new-file creation inside the active project.
  *
  * Target folder resolves: pinned default > last-used > project root. If the
@@ -52,17 +85,7 @@ export async function createNewFileInProject() {
     targetDir = projectStore.dirPath;
   }
 
-  const filesResult = await commands.listDirectory(targetDir, null);
-  const siblings = filesResult.status === 'ok'
-    ? filesResult.data.filter(e => !e.is_dir).map(e => e.name)
-    : [];
-
-  const userTemplate = parseTemplate(newFileSettings.template) ?? parseTemplate('Untitled {N}')!;
-
-  const proposedName = newFileSettings.detectFromFolder
-    ? inferNextName(siblings, userTemplate)
-    : inferNextName([], userTemplate);
-
+  const proposedName = await proposeNewFileName(targetDir);
   const result = await commands.createFile(targetDir, proposedName);
   if (result.status !== 'ok') return;
 

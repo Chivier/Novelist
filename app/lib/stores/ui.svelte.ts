@@ -54,6 +54,13 @@ class UiStore {
   editorSettings = $state<EditorSettings>(loadSettings());
   zoomLevel = $state(parseFloat(localStorage.getItem('novelist-zoom') || '1'));
 
+  /**
+   * True while a draggable sidebar file (NOT a folder) is in flight. Used to
+   * show pane drop overlays in App.svelte. Set in Sidebar.handleDragStart,
+   * cleared on the global window dragend handler.
+   */
+  sidebarFileDragActive = $state(false);
+
   // Theme
   themeId = $state(loadThemeId());
   currentTheme = $state<Theme>(resolveTheme(loadThemeId()));
@@ -130,10 +137,52 @@ class UiStore {
 
 export const uiStore = new UiStore();
 
+/**
+ * Pure picker — given a physical pixel width, return the zoom level we want
+ * to apply on a fresh install. Exported for unit tests.
+ *
+ * physicalWidth = screen.width * devicePixelRatio. Using physical pixels
+ * avoids being fooled by OS-level logical scaling (a 4K monitor running at
+ * 2× reports `screen.width === 1920`).
+ */
+export function pickAutoZoomFromScreen(physicalWidth: number): number {
+  if (physicalWidth >= 3840) return 1.5;
+  if (physicalWidth >= 2560) return 1.25;
+  return 1.0;
+}
+
+/**
+ * One-time auto-pick of the initial zoom level on first launch. After this
+ * runs once, `novelist-zoom-auto-inited` is set and we never touch zoom
+ * again — Cmd +/- / Cmd+0 take full control.
+ *
+ * Existing users (v0.2.4 and earlier) who already have a `novelist-zoom`
+ * value get the flag written without any zoom change, so we don't override
+ * their explicit choice.
+ *
+ * Exported for unit tests; runs automatically below in the document init
+ * block. The store argument is injected so tests can supply a stub.
+ */
+export function autoInitZoomFromScreen(
+  store: { setZoom: (level: number) => void },
+  physicalWidth: number,
+): void {
+  if (localStorage.getItem('novelist-zoom-auto-inited')) return;
+  if (localStorage.getItem('novelist-zoom') !== null) {
+    localStorage.setItem('novelist-zoom-auto-inited', '1');
+    return;
+  }
+  const level = pickAutoZoomFromScreen(physicalWidth);
+  store.setZoom(level);
+  localStorage.setItem('novelist-zoom-auto-inited', '1');
+}
+
 // Apply saved settings, theme, and zoom on load
 if (typeof document !== 'undefined') {
   uiStore.applyEditorSettings();
   applyTheme(uiStore.currentTheme);
+  const physicalWidth = (window.screen?.width ?? 0) * (window.devicePixelRatio || 1);
+  autoInitZoomFromScreen(uiStore, physicalWidth);
   if (uiStore.zoomLevel !== 1) uiStore.setZoom(uiStore.zoomLevel);
 
   // Listen for system theme changes when using "system" theme

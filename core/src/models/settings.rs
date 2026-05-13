@@ -5,6 +5,8 @@
 //! "unset" apart from "explicitly false/empty". Project values override
 //! global values field-by-field during resolve.
 
+use crate::models::image_host::ImageHostSettings;
+use crate::models::publish::PublishSettings;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::HashMap;
@@ -13,6 +15,7 @@ use std::collections::HashMap;
 pub const DEFAULT_SORT_MODE: &str = "numeric-asc";
 pub const DEFAULT_TEMPLATE: &str = "第{N}章-{title}";
 pub const DEFAULT_SHOW_HIDDEN: bool = false;
+pub const DEFAULT_WRAP_FILE_NAMES: bool = false;
 pub const DEFAULT_DETECT_FROM_FOLDER: bool = true;
 pub const DEFAULT_AUTO_RENAME_FROM_H1: bool = true;
 
@@ -23,6 +26,8 @@ pub struct ViewConfig {
     pub sort_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub show_hidden_files: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wrap_file_names: Option<bool>,
 }
 
 /// New-file template preferences.
@@ -63,6 +68,20 @@ pub struct GlobalSettings {
     pub new_file: NewFileConfig,
     #[serde(default)]
     pub plugins: PluginsConfig,
+    /// Image-host providers and active-host pointer. Credentials live
+    /// here only — never in per-project settings.
+    #[serde(default)]
+    pub image_hosts: ImageHostSettings,
+    /// Publish channels (Ghost / WordPress / Medium). Credentials live
+    /// here only — same convention as image_hosts.
+    #[serde(default)]
+    pub publish: PublishSettings,
+    /// Optional override path to the Pandoc binary. When unset (or
+    /// empty), Novelist auto-detects Pandoc from `$PATH` and common
+    /// install locations. Pandoc is NOT bundled with Novelist — users
+    /// without it installed are pointed at https://pandoc.org/installing.html.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pandoc_path: Option<String>,
 }
 
 /// Fully resolved settings handed to the frontend — no `Option`s.
@@ -70,6 +89,7 @@ pub struct GlobalSettings {
 pub struct ResolvedView {
     pub sort_mode: String,
     pub show_hidden_files: bool,
+    pub wrap_file_names: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq)]
@@ -114,6 +134,10 @@ pub fn resolve(
             .and_then(|v| v.show_hidden_files)
             .or(global.view.show_hidden_files)
             .unwrap_or(DEFAULT_SHOW_HIDDEN),
+        wrap_file_names: project_view
+            .and_then(|v| v.wrap_file_names)
+            .or(global.view.wrap_file_names)
+            .unwrap_or(DEFAULT_WRAP_FILE_NAMES),
     };
     let new_file = ResolvedNewFile {
         template: project_new_file
@@ -167,6 +191,7 @@ mod tests {
         let eff = resolve(&global, None, None, None);
         assert_eq!(eff.view.sort_mode, DEFAULT_SORT_MODE);
         assert_eq!(eff.view.show_hidden_files, DEFAULT_SHOW_HIDDEN);
+        assert_eq!(eff.view.wrap_file_names, DEFAULT_WRAP_FILE_NAMES);
         assert_eq!(eff.new_file.template, DEFAULT_TEMPLATE);
         assert!(eff.new_file.detect_from_folder);
         assert!(eff.new_file.auto_rename_from_h1);
@@ -180,6 +205,7 @@ mod tests {
             view: ViewConfig {
                 sort_mode: Some("name-asc".into()),
                 show_hidden_files: Some(true),
+                wrap_file_names: Some(true),
             },
             new_file: NewFileConfig {
                 template: Some("第{N}章".into()),
@@ -189,10 +215,14 @@ mod tests {
                 last_used_dir: None,
             },
             plugins: PluginsConfig::default(),
+            image_hosts: Default::default(),
+            publish: Default::default(),
+            pandoc_path: None,
         };
         let eff = resolve(&global, None, None, None);
         assert_eq!(eff.view.sort_mode, "name-asc");
         assert!(eff.view.show_hidden_files);
+        assert!(eff.view.wrap_file_names);
         assert_eq!(eff.new_file.template, "第{N}章");
         assert!(!eff.new_file.detect_from_folder);
         assert!(eff.new_file.auto_rename_from_h1); // falls through to baked default
@@ -204,6 +234,7 @@ mod tests {
             view: ViewConfig {
                 sort_mode: Some("name-asc".into()),
                 show_hidden_files: Some(false),
+                wrap_file_names: Some(false),
             },
             ..Default::default()
         };
@@ -211,10 +242,12 @@ mod tests {
             // only overrides show_hidden_files; sort_mode inherited from global
             sort_mode: None,
             show_hidden_files: Some(true),
+            wrap_file_names: Some(true),
         };
         let eff = resolve(&global, Some(&project_view), None, None);
         assert_eq!(eff.view.sort_mode, "name-asc");
         assert!(eff.view.show_hidden_files);
+        assert!(eff.view.wrap_file_names);
         assert!(eff.is_project_scoped);
     }
 
@@ -279,6 +312,7 @@ mod tests {
             view: ViewConfig {
                 sort_mode: Some("mtime-desc".into()),
                 show_hidden_files: Some(true),
+                wrap_file_names: Some(true),
             },
             new_file: NewFileConfig {
                 template: Some("Chapter {N}".into()),
@@ -288,6 +322,9 @@ mod tests {
                 last_used_dir: Some("/tmp/last".into()),
             },
             plugins: PluginsConfig { enabled: plugins },
+            image_hosts: Default::default(),
+            publish: Default::default(),
+            pandoc_path: None,
         };
         let json = serde_json::to_string(&original).unwrap();
         let back: GlobalSettings = serde_json::from_str(&json).unwrap();

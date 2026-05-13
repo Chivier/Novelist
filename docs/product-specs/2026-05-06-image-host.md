@@ -190,6 +190,21 @@ In every case the document Markdown is unchanged.
   and performs one real upload per configured provider. Run before
   release.
 
-## Open Questions
+## Open Questions / Known gaps after v0.2.4 implementation
 
-None at this stage. Implementation proceeds.
+- **tauri-specta codegen pipeline is stale.** The auto-generated
+  `app/lib/ipc/commands.ts` was last regenerated cleanly at v0.2.3.
+  Re-running `cargo run --features codegen` now panics inside
+  `specta-serde::validate` against the existing
+  `skip_serializing_if` usage in `ProjectConfig` (pre-existing, not
+  introduced by image-host). The image-host commands.ts entries are
+  maintained manually for v0.2.4. Fix tracked separately.
+- **Browser E2E tests for the image-host UI are not added in v0.2.4.**
+  Rust unit tests cover all six providers + the orchestrator's pure
+  helpers; frontend unit tests cover the orchestrator. The Settings UI
+  and editor integration are exercised manually for the v0.2.4
+  release. Adding Playwright coverage is a follow-up.
+- **No `live-host-tests` cargo feature shipped.** Originally planned
+  as opt-in real-network smoke tests using env-var credentials; not
+  needed for green-CI release and adds maintenance cost. Manual
+  release-time verification covers the same ground.

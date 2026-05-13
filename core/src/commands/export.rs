@@ -7,16 +7,40 @@ use specta::Type;
 pub struct PandocStatus {
     pub available: bool,
     pub version: Option<String>,
+    /// Absolute path of the resolved binary, when found. Useful for
+    /// the Settings UI to confirm what we're actually invoking.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_path: Option<String>,
+    /// The user's saved override (mirrors `GlobalSettings.pandoc_path`)
+    /// — surfaced so the Settings form can pre-fill the input.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub override_path: Option<String>,
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn check_pandoc() -> Result<PandocStatus, AppError> {
-    let version = pandoc::detect_pandoc().await;
+    let g = crate::commands::settings::read_global_settings().await;
+    let resolved = pandoc::resolve_pandoc(g.pandoc_path.as_deref()).await;
     Ok(PandocStatus {
-        available: version.is_some(),
-        version,
+        available: resolved.is_some(),
+        version: resolved.as_ref().map(|(_, v)| v.clone()),
+        resolved_path: resolved.map(|(p, _)| p),
+        override_path: g.pandoc_path,
     })
+}
+
+/// Persist the user's pandoc binary override. `None` clears it (revert
+/// to auto-detection). Empty string is treated as `None`.
+#[tauri::command]
+#[specta::specta]
+pub async fn set_pandoc_path(path: Option<String>) -> Result<(), AppError> {
+    let mut g = crate::commands::settings::read_global_settings().await;
+    g.pandoc_path = match path {
+        Some(s) if !s.trim().is_empty() => Some(s.trim().to_string()),
+        _ => None,
+    };
+    crate::commands::settings::write_global_settings_to_disk(&g).await
 }
 
 #[tauri::command]
@@ -80,6 +104,8 @@ mod tests {
         let status = PandocStatus {
             available: true,
             version: Some("pandoc 3.1".to_string()),
+            resolved_path: Some("/usr/local/bin/pandoc".to_string()),
+            override_path: None,
         };
         let json = serde_json::to_value(&status).unwrap();
         assert_eq!(json["available"], true);
@@ -91,6 +117,8 @@ mod tests {
         let status = PandocStatus {
             available: false,
             version: None,
+            resolved_path: None,
+            override_path: None,
         };
         let json = serde_json::to_value(&status).unwrap();
         assert_eq!(json["available"], false);

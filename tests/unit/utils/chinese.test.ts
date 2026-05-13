@@ -2,17 +2,24 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /**
  * [precision] chinese.ts — Simplified/Traditional conversion + pinyin.
- * Uses module mocks for opencc-js and pinyin-pro to avoid pulling in the
- * full dictionaries (which are huge). Verifies lazy-loading contract +
- * memoization of the OpenCC converters.
+ * Uses module mocks for opencc-js subpath presets and pinyin-pro to avoid
+ * pulling in the full dictionaries (which are huge). Verifies lazy-loading
+ * contract + per-direction memoization of the OpenCC converters.
  */
 
-const openccConverterFactory = vi.fn(({ from, to }: { from: string; to: string }) =>
+const s2tConverterFactory = vi.fn(({ from, to }: { from: string; to: string }) =>
+  (text: string) => `${from}->${to}:${text}`,
+);
+const t2sConverterFactory = vi.fn(({ from, to }: { from: string; to: string }) =>
   (text: string) => `${from}->${to}:${text}`,
 );
 
-vi.mock('opencc-js', () => ({
-  Converter: openccConverterFactory,
+vi.mock('opencc-js/cn2t', () => ({
+  Converter: s2tConverterFactory,
+}));
+
+vi.mock('opencc-js/t2cn', () => ({
+  Converter: t2sConverterFactory,
 }));
 
 vi.mock('pinyin-pro', () => ({
@@ -21,7 +28,8 @@ vi.mock('pinyin-pro', () => ({
 }));
 
 beforeEach(() => {
-  openccConverterFactory.mockClear();
+  s2tConverterFactory.mockClear();
+  t2sConverterFactory.mockClear();
   vi.resetModules();
 });
 
@@ -32,17 +40,26 @@ describe('[precision] chinese — simplifiedToTraditional', () => {
     expect(result).toBe('cn->tw:简体');
   });
 
-  it('constructs both converters exactly once across repeated calls', async () => {
+  it('constructs the simplified-to-traditional converter exactly once across repeated calls', async () => {
+    const { simplifiedToTraditional } = await import('$lib/utils/chinese');
+    await simplifiedToTraditional('a');
+    await simplifiedToTraditional('b');
+    expect(s2tConverterFactory).toHaveBeenCalledTimes(1);
+    expect(s2tConverterFactory).toHaveBeenCalledWith({ from: 'cn', to: 'tw' });
+    expect(t2sConverterFactory).not.toHaveBeenCalled();
+  });
+
+  it('constructs each direction independently when both are used', async () => {
     const { simplifiedToTraditional, traditionalToSimplified } = await import(
       '$lib/utils/chinese'
     );
     await simplifiedToTraditional('a');
     await simplifiedToTraditional('b');
     await traditionalToSimplified('c');
-    // One S2T + one T2S factory call, regardless of how many conversions run.
-    expect(openccConverterFactory).toHaveBeenCalledTimes(2);
-    expect(openccConverterFactory).toHaveBeenCalledWith({ from: 'cn', to: 'tw' });
-    expect(openccConverterFactory).toHaveBeenCalledWith({ from: 'tw', to: 'cn' });
+    expect(s2tConverterFactory).toHaveBeenCalledTimes(1);
+    expect(t2sConverterFactory).toHaveBeenCalledTimes(1);
+    expect(s2tConverterFactory).toHaveBeenCalledWith({ from: 'cn', to: 'tw' });
+    expect(t2sConverterFactory).toHaveBeenCalledWith({ from: 'tw', to: 'cn' });
   });
 });
 

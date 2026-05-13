@@ -3,6 +3,7 @@ import { tabsStore } from '$lib/stores/tabs.svelte';
 
 describe('tabsStore.updatePath', () => {
   beforeEach(() => {
+    localStorage.clear();
     tabsStore.closeAll();
   });
 
@@ -12,6 +13,14 @@ describe('tabsStore.updatePath', () => {
     tabsStore.updatePath('/proj/Untitled 1.md', '/proj/开篇.md');
     const tab = tabsStore.tabs.find(t => t.id === id);
     expect(tab?.filePath).toBe('/proj/开篇.md');
+    expect(tab?.fileName).toBe('开篇.md');
+  });
+
+  it('derives the fileName from Windows paths', () => {
+    tabsStore.openTab('C:\\proj\\Untitled 1.md', '');
+    const id = tabsStore.activeTabId!;
+    tabsStore.updatePath('C:\\proj\\Untitled 1.md', 'C:\\proj\\开篇.md');
+    const tab = tabsStore.tabs.find(t => t.id === id);
     expect(tab?.fileName).toBe('开篇.md');
   });
 

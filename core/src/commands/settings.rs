@@ -23,7 +23,7 @@ fn global_settings_path() -> PathBuf {
         .join("settings.json")
 }
 
-async fn read_global_settings() -> GlobalSettings {
+pub(crate) async fn read_global_settings() -> GlobalSettings {
     let path = global_settings_path();
     if !path.exists() {
         return GlobalSettings::default();
@@ -34,7 +34,9 @@ async fn read_global_settings() -> GlobalSettings {
     }
 }
 
-async fn write_global_settings_to_disk(settings: &GlobalSettings) -> Result<(), AppError> {
+pub(crate) async fn write_global_settings_to_disk(
+    settings: &GlobalSettings,
+) -> Result<(), AppError> {
     let path = global_settings_path();
     if let Some(parent) = path.parent() {
         if !parent.exists() {
@@ -182,6 +184,7 @@ template = "Chapter {N}"
             Some(ViewConfig {
                 sort_mode: Some("name-desc".into()),
                 show_hidden_files: Some(true),
+                wrap_file_names: None,
             }),
             None,
             None,
@@ -264,6 +267,7 @@ auto_save_minutes = 7
             Some(ViewConfig {
                 sort_mode: Some("mtime-desc".into()),
                 show_hidden_files: None,
+                wrap_file_names: Some(true),
             }),
             None,
             None,
@@ -276,5 +280,6 @@ auto_save_minutes = 7
         assert_eq!(config.writing.daily_goal, 1234);
         assert_eq!(config.writing.auto_save_minutes, 7);
         assert_eq!(config.view.sort_mode.as_deref(), Some("mtime-desc"));
+        assert_eq!(config.view.wrap_file_names, Some(true));
     }
 }

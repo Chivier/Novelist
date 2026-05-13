@@ -12,6 +12,7 @@ describe('makeTemplateContext', () => {
     const ctx = makeTemplateContext({ now: new Date(2026, 0, 4, 5, 7) });
     expect(ctx.date).toBe('2026-01-04');
     expect(ctx.time).toBe('05:07');
+    expect(ctx.datetime).toBe('2026-01-04 05:07');
   });
 
   it('derives filename stem from active path', () => {
@@ -62,6 +63,28 @@ describe('resolveBody', () => {
   it('resolves multiple occurrences of the same token', () => {
     expect(resolveBody('{date}/{date}/{date}', ctx)).toBe('2026-04-20/2026-04-20/2026-04-20');
   });
+
+  it('resolves {date:fmt} / {time:fmt} / {datetime:fmt}', () => {
+    expect(resolveBody('{date:YYMMDD}', ctx)).toBe('260420');
+    expect(resolveBody('{date:YYYYMMDD}', ctx)).toBe('20260420');
+    expect(resolveBody('{time:HHmm}', ctx)).toBe('1405');
+    expect(resolveBody('{datetime}', ctx)).toBe('2026-04-20 14:05');
+    expect(resolveBody('{datetime:YYYYMMDD-HHmmss}', ctx)).toBe('20260420-140500');
+  });
+
+  it('routes "{datetime:timestamp}" and "{datetime:iso}" reserved keywords', () => {
+    const out = resolveBody('{datetime:timestamp}', ctx);
+    expect(/^\d+$/.test(out)).toBe(true);
+    expect(resolveBody('{datetime:iso}', ctx)).toMatch(/^2026-04-20T14:05:00[+-]\d{2}:\d{2}$/);
+  });
+
+  it('preserves unknown variables even when they carry a fmt suffix', () => {
+    expect(resolveBody('{nonsense:abc}', ctx)).toBe('{nonsense:abc}');
+  });
+
+  it('ignores fmt on non-date variables (filename:foo → filename only)', () => {
+    expect(resolveBody('{filename:YYMMDD}', ctx)).toBe('draft');
+  });
 });
 
 describe('extractCursorAnchor', () => {
@@ -101,5 +124,9 @@ describe('resolveFilename', () => {
   it('passes {N}-style numbering placeholders through unchanged (caller runs inferNextName)', () => {
     expect(resolveFilename('第{N}章 {filename}.md', ctx)).toBe('第{N}章 current.md');
     expect(resolveFilename('ch-{3N}.md', ctx)).toBe('ch-{3N}.md');
+  });
+
+  it('substitutes {date:fmt} alongside numbering placeholders', () => {
+    expect(resolveFilename('第{N}章-{date:YYMMDD}.md', ctx)).toBe('第{N}章-260615.md');
   });
 });

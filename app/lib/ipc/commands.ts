@@ -39,6 +39,7 @@ export const commands = {
 	moveItem: (sourcePath: string, targetDir: string) => typedError<string, string>(__TAURI_INVOKE("move_item", { sourcePath, targetDir })),
 	deleteItem: (path: string) => typedError<null, string>(__TAURI_INVOKE("delete_item", { path })),
 	checkPandoc: () => typedError<PandocStatus, string>(__TAURI_INVOKE("check_pandoc")),
+	setPandocPath: (path: string | null) => typedError<null, string>(__TAURI_INVOKE("set_pandoc_path", { path })),
 	exportProject: (inputFiles: string[], outputPath: string, format: string, extraArgs: string[]) => typedError<string, string>(__TAURI_INVOKE("export_project", { inputFiles, outputPath, format, extraArgs })),
 	detectProject: (dirPath: string) => typedError<{
 	project: ProjectMeta,
@@ -145,6 +146,31 @@ export const commands = {
 	 *  pasted/dropped images without UTF-8 encoding corruption.
 	 */
 	writeBinaryFile: (path: string, base64Data: string) => typedError<null, string>(__TAURI_INVOKE("write_binary_file", { path, base64Data })),
+	// Image hosting (v0.2.4) — manually maintained until codegen pipeline is fixed.
+	readImageBytes: (path: string) => typedError<number[], string>(__TAURI_INVOKE("read_image_bytes", { path })),
+	uploadImageQiniu: (bytes: number[], filename: string, mime: string, config: ProviderConfig) => typedError<UploadResult, string>(__TAURI_INVOKE("upload_image_qiniu", { bytes, filename, mime, config })),
+	uploadImageAliyunOss: (bytes: number[], filename: string, mime: string, config: ProviderConfig) => typedError<UploadResult, string>(__TAURI_INVOKE("upload_image_aliyun_oss", { bytes, filename, mime, config })),
+	uploadImageS3: (bytes: number[], filename: string, mime: string, config: ProviderConfig) => typedError<UploadResult, string>(__TAURI_INVOKE("upload_image_s3", { bytes, filename, mime, config })),
+	uploadImageImgur: (bytes: number[], filename: string, mime: string, config: ProviderConfig) => typedError<UploadResult, string>(__TAURI_INVOKE("upload_image_imgur", { bytes, filename, mime, config })),
+	uploadImageSmms: (bytes: number[], filename: string, mime: string, config: ProviderConfig) => typedError<UploadResult, string>(__TAURI_INVOKE("upload_image_smms", { bytes, filename, mime, config })),
+	uploadImageCustom: (bytes: number[], filename: string, mime: string, config: ProviderConfig) => typedError<UploadResult, string>(__TAURI_INVOKE("upload_image_custom", { bytes, filename, mime, config })),
+	getImageHostSettings: () => typedError<ImageHostSettings, string>(__TAURI_INVOKE("get_image_host_settings")),
+	setImageHostSettings: (settings: ImageHostSettings) => typedError<null, string>(__TAURI_INVOKE("set_image_host_settings", { settings })),
+	// Publishing (v0.2.4) — manually maintained.
+	publishToGhost: (input: PublishInput, config: PlatformConfig) => typedError<PublishResult, string>(__TAURI_INVOKE("publish_to_ghost", { input, config })),
+	publishToWordpressSelfHosted: (input: PublishInput, config: PlatformConfig) => typedError<PublishResult, string>(__TAURI_INVOKE("publish_to_wordpress_self_hosted", { input, config })),
+	publishToWordpressCom: (input: PublishInput, config: PlatformConfig) => typedError<PublishResult, string>(__TAURI_INVOKE("publish_to_wordpress_com", { input, config })),
+	publishToMedium: (input: PublishInput, config: PlatformConfig) => typedError<PublishResult, string>(__TAURI_INVOKE("publish_to_medium", { input, config })),
+	uploadPostImageGhost: (bytes: number[], filename: string, mime: string, config: PlatformConfig) => typedError<PostImageUploadResult, string>(__TAURI_INVOKE("upload_post_image_ghost", { bytes, filename, mime, config })),
+	uploadPostImageWordpressSelfHosted: (bytes: number[], filename: string, mime: string, config: PlatformConfig) => typedError<PostImageUploadResult, string>(__TAURI_INVOKE("upload_post_image_wordpress_self_hosted", { bytes, filename, mime, config })),
+	uploadPostImageWordpressCom: (bytes: number[], filename: string, mime: string, config: PlatformConfig) => typedError<PostImageUploadResult, string>(__TAURI_INVOKE("upload_post_image_wordpress_com", { bytes, filename, mime, config })),
+	uploadPostImageMedium: (bytes: number[], filename: string, mime: string, config: PlatformConfig) => typedError<PostImageUploadResult, string>(__TAURI_INVOKE("upload_post_image_medium", { bytes, filename, mime, config })),
+	convertMarkdownToHtml: (markdown: string) => typedError<string, string>(__TAURI_INVOKE("convert_markdown_to_html", { markdown })),
+	verifyPublishChannel: (config: PlatformConfig) => typedError<string, string>(__TAURI_INVOKE("verify_publish_channel", { config })),
+	listPublishTags: (config: PlatformConfig) => typedError<string[], string>(__TAURI_INVOKE("list_publish_tags", { config })),
+	readClipboardImage: () => typedError<ClipboardImage, string>(__TAURI_INVOKE("read_clipboard_image")),
+	getPublishSettings: () => typedError<PublishSettings, string>(__TAURI_INVOKE("get_publish_settings")),
+	setPublishSettings: (settings: PublishSettings) => typedError<null, string>(__TAURI_INVOKE("set_publish_settings", { settings })),
 	// Reveal a file or folder in the platform's file manager (Finder on macOS).
 	revealInFileManager: (path: string) => typedError<null, string>(__TAURI_INVOKE("reveal_in_file_manager", { path })),
 	// Duplicate a file. Returns the path of the new copy.
@@ -256,6 +282,9 @@ export type FileEntry = {
 	size: number,
 	// Unix epoch milliseconds; None when filesystem doesn't expose mtime.
 	mtime: number | null,
+	// Unix epoch milliseconds for filesystem creation/birth time. None on
+	// platforms or filesystems that don't expose it.
+	ctime: number | null,
 };
 
 export type OutlineConfig = {
@@ -265,6 +294,8 @@ export type OutlineConfig = {
 export type PandocStatus = {
 	available: boolean,
 	version: string | null,
+	resolved_path?: string,
+	override_path?: string,
 };
 
 export type PluginInfo = {
@@ -307,6 +338,7 @@ export type ProjectConfig = {
 export type ViewConfig = {
 	sort_mode?: string | null,
 	show_hidden_files?: boolean | null,
+	wrap_file_names?: boolean | null,
 };
 
 export type NewFileConfig = {
@@ -330,6 +362,7 @@ export type GlobalSettings = {
 export type ResolvedView = {
 	sort_mode: string,
 	show_hidden_files: boolean,
+	wrap_file_names: boolean,
 };
 
 export type ResolvedNewFile = {
@@ -534,6 +567,79 @@ export type WritingStatsOverview = {
 	streak_days: number,
 	today_words: number,
 	today_minutes: number,
+};
+
+/* Image hosting (v0.2.4) — manually maintained types matching core/src/models/image_host.rs */
+export type UploadResult = {
+	url: string,
+	remote_key: string | null,
+};
+
+export type ImageHostSettings = {
+	hosts: HostConfig[],
+	active_host_id?: string,
+	auto_on_paste: boolean,
+};
+
+export type HostConfig = {
+	id: string,
+	name: string,
+} & ProviderConfig;
+
+export type ProviderConfig =
+	| { provider: "qiniu", access_key: string, secret_key: string, bucket: string, domain: string }
+	| { provider: "aliyun_oss", access_key_id: string, access_key_secret: string, bucket: string, endpoint: string, custom_domain?: string }
+	| { provider: "s3", access_key_id: string, secret_access_key: string, bucket: string, region: string, endpoint?: string, path_prefix?: string, custom_domain?: string }
+	| { provider: "imgur", client_id: string }
+	| { provider: "smms", api_token?: string }
+	| { provider: "custom", post_url: string, bearer?: string };
+
+/* Publishing (v0.2.4) — manually maintained types matching core/src/models/publish.rs */
+export type PublishSettings = {
+	channels: ChannelConfig[],
+};
+
+export type ChannelConfig = {
+	id: string,
+	name: string,
+} & PlatformConfig;
+
+export type PlatformConfig =
+	| { platform: "ghost", admin_url: string, api_key: string }
+	| { platform: "wordpress_self_hosted", site_url: string, username: string, app_password: string }
+	| { platform: "wordpress_com", site_id_or_domain: string, access_token: string }
+	| { platform: "medium", token: string };
+
+export type BodyFormat = "html" | "markdown";
+
+export type PublishInput = {
+	title: string,
+	body: string,
+	body_format: BodyFormat,
+	tags: string[],
+	slug?: string,
+	excerpt?: string,
+	status: string,
+	feature_image_url?: string,
+	featured_media_id?: number,
+	publication_id?: string,
+};
+
+export type PublishResult = {
+	url: string,
+	remote_id: string,
+};
+
+export type PostImageUploadResult = {
+	url: string,
+	attachment_id: number,
+};
+
+export type ClipboardImage = {
+	bytes: number[],
+	mime: string,
+	width: number,
+	height: number,
 };
 
 /* Tauri Specta runtime */

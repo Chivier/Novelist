@@ -72,6 +72,7 @@ export function buildTauriMockScript(config: TauriMockConfig): string {
           view: {
             sort_mode: pick('sort_mode', 'numeric-asc'),
             show_hidden_files: pick('show_hidden_files', false),
+            wrap_file_names: pick('wrap_file_names', false),
           },
           new_file: {
             template: pickNF('template', 'Untitled {N}'),
@@ -486,6 +487,9 @@ export function buildTauriMockScript(config: TauriMockConfig): string {
           for (const f of (newFiles || [])) {
             files.push({ ...f, mtime: f.mtime != null ? f.mtime : nowTs });
           }
+        },
+        seedFileContents(map) {
+          for (const k of Object.keys(map || {})) fileContents[k] = map[k];
         },
         renameFile(oldPath, newPath) {
           const f = files.find(x => x.path === oldPath);

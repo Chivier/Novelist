@@ -2,6 +2,7 @@ import { ViewPlugin, Decoration, type DecorationSet, EditorView, type ViewUpdate
 import { syntaxTree } from '@codemirror/language';
 import { type EditorState, type Extension, type Range, StateField } from '@codemirror/state';
 import { invoke } from '@tauri-apps/api/core';
+import { open as shellOpen } from '@tauri-apps/plugin-shell';
 import { imeComposingField } from './ime-guard';
 
 function uint8ToBase64(bytes: Uint8Array): string {
@@ -174,13 +175,25 @@ class ImageContextMenu {
           this.destroy();
         },
       });
+      items.push({
+        label: 'Upload to host',
+        action: () => {
+          this.uploadAndReplace().catch((e: unknown) => {
+            console.error('image upload failed', e);
+            const msg = e instanceof Error ? e.message : String(e);
+            window.dispatchEvent(new CustomEvent('image-host-toast', { detail: { kind: 'error', message: msg } }));
+          });
+          this.destroy();
+        },
+      });
     }
 
     if (this.imgSrc.startsWith('http://') || this.imgSrc.startsWith('https://')) {
       items.push({
         label: 'Open in Browser',
         action: () => {
-          window.open(this.imgSrc, '_blank');
+          // Tauri WKWebView blocks `window.open`; route through the shell plugin.
+          shellOpen(this.imgSrc).catch(e => console.error('[editor] shell.open failed:', e));
           this.destroy();
         },
       });
@@ -270,6 +283,40 @@ class ImageContextMenu {
     this.cleanup?.();
     this.cleanup = null;
     if (this.dom) { this.dom.remove(); this.dom = null; }
+  }
+
+  /**
+   * Upload the local image referenced by `this.imgSrc` to the active
+   * host and rewrite the Markdown link in place. Caller catches errors.
+   */
+  private async uploadAndReplace(): Promise<void> {
+    const { uploadImage } = await import('$lib/services/image-host');
+    const fullPath = this.imgSrc.startsWith('/')
+      ? this.imgSrc
+      : `${this.projectDir}/${this.imgSrc.replace(/^\.\//, '')}`;
+    const { url } = await uploadImage(fullPath);
+
+    // Replace the URL portion of `![alt](src)` on the line. Match the
+    // current src inside parens; preserve alt and surrounding text.
+    const lineText = this.view.state.doc.sliceString(this.lineFrom, this.lineTo);
+    const re = /!\[([^\]]*)\]\(([^)\s]+)(\s+"[^"]*")?\)/;
+    const m = re.exec(lineText);
+    if (!m) return;
+    const matchStart = m.index;
+    const oldSrcStart = matchStart + 2 + m[1].length + 2; // past `![alt](`
+    const oldSrcEnd = oldSrcStart + m[2].length;
+    this.view.dispatch({
+      changes: {
+        from: this.lineFrom + oldSrcStart,
+        to: this.lineFrom + oldSrcEnd,
+        insert: url,
+      },
+    });
+    window.dispatchEvent(
+      new CustomEvent('image-host-toast', {
+        detail: { kind: 'success', message: `Uploaded to ${url}` },
+      }),
+    );
   }
 }
 
@@ -403,14 +450,56 @@ export function setWysiwygRenderImages(enabled: boolean) { _renderImages = enabl
  * Full-document scan is acceptable: WYSIWYG is only enabled for docs
  * < 5000 lines, and Image nodes are rare (typically 0-20 per doc).
  */
+/**
+ * Tracks the line number containing the cursor when that line has an Image
+ * node — used to suppress block-image rendering so the user can edit the
+ * markdown `![alt](url)` source (e.g. fix a broken path).
+ *
+ * Pointer-driven transactions (`select.pointer`) are filtered out so the
+ * height map doesn't shift between mousedown and mouseup; the next
+ * non-pointer transaction (keyboard nav, typing, focus) flips the state.
+ */
+export function computeCursorImageLine(state: EditorState): number | null {
+  if (state.selection.ranges.length === 0) return null;
+  const head = state.selection.main.head;
+  const line = state.doc.lineAt(head);
+  let found = false;
+  syntaxTree(state).iterate({
+    from: line.from,
+    to: line.to,
+    enter(node) {
+      if (node.name === 'Image') { found = true; return false; }
+    },
+  });
+  return found ? line.number : null;
+}
+
+export const cursorImageLineField = StateField.define<number | null>({
+  // Initial state: render all images. The user has to explicitly move the
+  // cursor onto an image line (via keyboard) for the widget to collapse —
+  // avoids hiding the first image on doc-open when cursor defaults to pos 0.
+  create() { return null; },
+  update(value, tr) {
+    if (tr.isUserEvent('select.pointer')) return value;
+    if (tr.docChanged || tr.selection || syntaxTree(tr.state) !== syntaxTree(tr.startState)) {
+      return computeCursorImageLine(tr.state);
+    }
+    return value;
+  },
+});
+
 function buildImageBlockDecos(state: EditorState): DecorationSet {
   if (!_renderImages) return Decoration.none;
   const decos: Range<Decoration>[] = [];
   const projectDir = _projectDir;
+  const skipLine = state.field(cursorImageLineField, false);
 
   syntaxTree(state).iterate({
     enter(node) {
       if (node.name !== 'Image') return;
+
+      const line = state.doc.lineAt(node.from);
+      if (skipLine != null && line.number === skipLine) return;
 
       let imgUrl = '';
       let imgAlt = '';
@@ -429,7 +518,6 @@ function buildImageBlockDecos(state: EditorState): DecorationSet {
       }
 
       if (imgUrl) {
-        const line = state.doc.lineAt(node.from);
         decos.push(Decoration.replace({
           widget: new ImageWidget(imgUrl, imgAlt, projectDir),
           block: true,
@@ -450,8 +538,12 @@ const imageBlockDecoField = StateField.define<DecorationSet>({
     if (syntaxTree(tr.state) !== syntaxTree(tr.startState)) {
       return buildImageBlockDecos(tr.state);
     }
-    // No selection-based rebuild — toggling block decorations on cursor
-    // change causes height-map oscillation (see buildImageBlockDecos).
+    // Rebuild when the cursor enters/leaves an image line. Pointer events
+    // are filtered upstream in cursorImageLineField to avoid mousedown/
+    // mouseup height-map shift.
+    if (tr.state.field(cursorImageLineField) !== tr.startState.field(cursorImageLineField)) {
+      return buildImageBlockDecos(tr.state);
+    }
     return value;
   },
   provide: f => EditorView.decorations.from(f),
@@ -976,6 +1068,7 @@ class WysiwygPluginClass {
 }
 
 export const wysiwygPlugin: Extension = [
+  cursorImageLineField,
   imageBlockDecoField,
   ViewPlugin.fromClass(WysiwygPluginClass, {
     decorations: (v) => v.decorations,
@@ -1011,13 +1104,67 @@ export const linkClickPlugin = EditorView.domEventHandlers({
       if (!/^https?:\/\//i.test(url)) {
         url = 'https://' + url;
       }
-      window.open(url, '_blank');
+      // Tauri WKWebView blocks `window.open`; route through the shell plugin.
+      shellOpen(url).catch(e => console.error('[editor] shell.open failed:', e));
       event.preventDefault();
       return true;
     }
     return false;
   },
 });
+
+/**
+ * If auto-on-paste is enabled in settings AND an active host is configured,
+ * upload the just-inserted local image and rewrite the Markdown link to
+ * the remote URL. The local file under `.novelist/images/` is retained.
+ *
+ * `linkText` is the literal `![alt](path)` string that was inserted at
+ * `insertPos`, of length `linkText.length`. We re-derive the URL portion
+ * from a regex over that span and replace just it.
+ */
+async function maybeAutoUpload(
+  view: EditorView,
+  insertPos: number,
+  linkText: string,
+  absLocalPath: string,
+  filename: string,
+  mime: string,
+  bytes: Uint8Array,
+): Promise<void> {
+  try {
+    const { commands } = await import('$lib/ipc/commands');
+    const r = await commands.getImageHostSettings();
+    if (r.status !== 'ok') return;
+    if (!r.data.auto_on_paste) return;
+    if (!r.data.active_host_id) return;
+    const { uploadInlineBytes } = await import('$lib/services/image-host');
+    const { url } = await uploadInlineBytes(bytes, filename, mime);
+    // Replace the URL portion of the just-inserted markdown link.
+    const re = /!\[([^\]]*)\]\(([^)\s]+)(\s+"[^"]*")?\)/;
+    const m = re.exec(linkText);
+    if (!m) return;
+    const matchStart = m.index;
+    const oldSrcStart = insertPos + matchStart + 2 + m[1].length + 2;
+    const oldSrcEnd = oldSrcStart + m[2].length;
+    view.dispatch({
+      changes: { from: oldSrcStart, to: oldSrcEnd, insert: url },
+    });
+    window.dispatchEvent(
+      new CustomEvent('image-host-toast', {
+        detail: { kind: 'success', message: `Uploaded to ${url}` },
+      }),
+    );
+  } catch (e) {
+    console.warn('[ImagePaste] auto-upload failed; keeping local link', e);
+    window.dispatchEvent(
+      new CustomEvent('image-host-toast', {
+        detail: { kind: 'error', message: e instanceof Error ? e.message : String(e) },
+      }),
+    );
+  }
+  // Suppress unused-arg lint when localPath isn't needed in current impl
+  void absLocalPath;
+}
 
 /**
  * Image paste handler — when user pastes an image from clipboard,
@@ -1065,6 +1212,7 @@ export const imagePastePlugin = EditorView.domEventHandlers({
             changes: { from: pos, insert: mdText },
             selection: { anchor: pos + mdText.length },
           });
+          await maybeAutoUpload(view, pos, mdText, imgPath, filename, file.type, new Uint8Array(arrayBuffer));
         } catch (err) {
           console.error('[ImagePaste] Failed:', err);
           const reader = new FileReader();
@@ -1099,6 +1247,8 @@ export const imagePastePlugin = EditorView.domEventHandlers({
 
     (async () => {
       let insertText = '';
+      type DropQueued = { mdText: string; filename: string; mime: string; bytes: Uint8Array; imgPath: string };
+      const queued: DropQueued[] = [];
       for (const file of imageFiles) {
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
         const timestamp = Date.now();
@@ -1120,7 +1270,9 @@ export const imagePastePlugin = EditorView.domEventHandlers({
             base64Data: base64,
           });
 
-          insertText += `![${file.name}](.novelist/images/${filename})\n`;
+          const md = `![${file.name}](.novelist/images/${filename})\n`;
+          insertText += md;
+          queued.push({ mdText: md, filename, mime: file.type, bytes: new Uint8Array(arrayBuffer), imgPath });
         } catch (err) {
           console.error('[ImageDrop] Failed:', err);
         }
@@ -1131,6 +1283,12 @@ export const imagePastePlugin = EditorView.domEventHandlers({
           changes: { from: pos, insert: insertText },
           selection: { anchor: pos + insertText.length },
         });
+        // Auto-upload each dropped image (sequentially, after the bulk insert).
+        let runningPos = pos;
+        for (const q of queued) {
+          await maybeAutoUpload(view, runningPos, q.mdText, q.imgPath, q.filename, q.mime, q.bytes);
+          runningPos += q.mdText.length;
+        }
       }
     })();
 

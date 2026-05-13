@@ -339,7 +339,7 @@
     min-height: 60px;
     padding: 8px 10px;
     font-family: inherit;
-    font-size: 13px;
+    font-size: 14px;
     background: var(--novelist-bg);
     border: 1px solid var(--novelist-accent);
     border-radius: 4px;

@@ -1,6 +1,8 @@
 <script lang="ts">
   import { tabsStore } from '$lib/stores/tabs.svelte';
   import { t } from '$lib/i18n';
+  import EditorShareMenu from './EditorShareMenu.svelte';
+  import { SIDEBAR_PATH_MIME, hasSidebarPath, openPathInPane } from '$lib/services/pane-drop';
 
   interface Props {
     paneId?: string;
@@ -37,35 +39,50 @@
   }
 
   function handleDragOver(e: DragEvent) {
-    if (e.dataTransfer?.types.includes('novelist/tab-id')) {
+    const types = e.dataTransfer?.types;
+    if (types?.includes('novelist/tab-id') || hasSidebarPath(types)) {
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
     }
   }
 
   function handleDrop(e: DragEvent) {
-    e.preventDefault();
-    const tabId = e.dataTransfer?.getData('novelist/tab-id');
-    const sourcePaneId = e.dataTransfer?.getData('novelist/source-pane');
-    if (tabId && sourcePaneId && sourcePaneId !== effectivePaneId) {
-      tabsStore.moveTabToPane(tabId, effectivePaneId);
+    if (!e.dataTransfer) return;
+    const types = e.dataTransfer.types;
+    if (hasSidebarPath(types)) {
+      e.preventDefault();
+      const path = e.dataTransfer.getData(SIDEBAR_PATH_MIME);
+      if (path) void openPathInPane(effectivePaneId, path);
+      return;
+    }
+    if (types.includes('novelist/tab-id')) {
+      e.preventDefault();
+      const tabId = e.dataTransfer.getData('novelist/tab-id');
+      const sourcePaneId = e.dataTransfer.getData('novelist/source-pane');
+      if (tabId && sourcePaneId && sourcePaneId !== effectivePaneId) {
+        tabsStore.moveTabToPane(tabId, effectivePaneId);
+      }
     }
   }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
+  class="tab-bar-row flex items-center"
+  style="
+    height: 2.35rem;
+    background: transparent;
+    border-bottom: 1px solid var(--novelist-border-subtle, var(--novelist-border));
+    padding-left: env(titlebar-area-x, 78px);
+  "
+>
+<div
   class="tab-bar flex items-center overflow-x-auto"
   data-testid="tab-bar"
   data-tauri-drag-region
   ondragover={handleDragOver}
   ondrop={handleDrop}
-  style="
-    height: 2rem;
-    background: transparent;
-    border-bottom: 1px solid var(--novelist-border-subtle, var(--novelist-border));
-    padding-left: env(titlebar-area-x, 78px);
-  "
+  style="flex: 1 1 auto; min-width: 0; height: 100%;"
 >
   {#each paneTabs as tab (tab.id)}
     <button
@@ -130,8 +147,20 @@
     </button>
   {/each}
 </div>
+  {#if paneTabs.length > 0}
+    <div class="share-slot">
+      <EditorShareMenu />
+    </div>
+  {/if}
+</div>
 
 <style>
+  .tab-bar-row { position: relative; }
+  .share-slot {
+    flex-shrink: 0;
+    padding: 0 8px;
+    position: relative;
+  }
   /* Hide scrollbar but keep horizontal scroll functionality */
   .tab-bar {
     scrollbar-width: none; /* Firefox */

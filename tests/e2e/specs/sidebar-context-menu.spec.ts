@@ -133,4 +133,64 @@ test.describe('Sidebar view context menu', () => {
       return created.some(p => p.startsWith(`${MOCK_PROJECT_DIR}/Notes/`));
     }).toBe(true);
   });
+
+  test('double-clicking a file row enters rename mode (v0.2.4)', async ({ app }) => {
+    await seedAndEnterProject(app);
+
+    const file = app.getByTestId('sidebar-file-Chapter 1.md');
+    await file.dblclick();
+
+    await expect(app.getByTestId('sidebar-input')).toBeVisible();
+  });
+
+  test('double-clicking a folder row enters rename mode; single-click toggles (v0.2.4)', async ({ app }) => {
+    await seedAndEnterProject(app);
+
+    const folder = app.getByTestId('sidebar-folder-Notes');
+
+    // Single click toggles expansion. The child file becomes visible.
+    await folder.click();
+    await expect(app.getByTestId('sidebar-file-outline.md')).toBeVisible();
+
+    // Collapse again so the rename target stays the folder row, not its children.
+    await folder.click();
+    await expect(app.getByTestId('sidebar-file-outline.md')).toHaveCount(0);
+
+    // Double click on the folder row → rename input.
+    await folder.dblclick();
+    await expect(app.getByTestId('sidebar-input')).toBeVisible();
+  });
+
+  test('settings toggle wraps long sidebar file names instead of ellipsizing', async ({ app }) => {
+    const longName = 'this-is-a-very-long-sidebar-file-name-that-should-wrap-across-lines.md';
+    await seedAndEnterProject(app, [
+      { name: longName, path: `${MOCK_PROJECT_DIR}/${longName}`, is_dir: false, size: 0 },
+    ]);
+
+    const row = app.getByTestId(`sidebar-file-${longName}`);
+    const name = row.locator('.tree-name');
+    await expect(row).toBeVisible();
+
+    await expect(name).toHaveCSS('white-space', 'nowrap');
+    const singleLineHeight = await row.evaluate((el) => el.getBoundingClientRect().height);
+
+    await app.evaluate(() => (window as any).__test_api__.toggleSettings());
+    await app.getByTestId('settings-dialog').waitFor({ state: 'visible' });
+    await app.getByTestId('settings-section-editor').click();
+    await app.getByTestId('settings-sidebar-wrap-filenames').check();
+    await app.keyboard.press('Escape');
+
+    await expect(name).toHaveCSS('white-space', 'normal');
+    await expect(row).toHaveClass(/tree-row-wrap/);
+    await expect.poll(
+      async () => row.evaluate((el) => el.getBoundingClientRect().height),
+      { timeout: 3000 },
+    ).toBeGreaterThan(singleLineHeight);
+
+    const stored = await app.evaluate(
+      (key) => localStorage.getItem(key),
+      `__novelist_mock_project_settings__:${MOCK_PROJECT_DIR}`,
+    );
+    expect(JSON.parse(stored!).view.wrap_file_names).toBe(true);
+  });
 });

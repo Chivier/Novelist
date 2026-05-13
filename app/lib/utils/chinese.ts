@@ -6,28 +6,39 @@
 
 // --- Simplified <-> Traditional conversion (opencc-js) ---
 
-let openccLoaded = false;
-let converterS2T: ((text: string) => string) | null = null;
-let converterT2S: ((text: string) => string) | null = null;
+type Converter = (text: string) => string;
 
-async function ensureOpenCC(): Promise<void> {
-  if (openccLoaded) return;
-  const OpenCC = await import('opencc-js');
-  converterS2T = OpenCC.Converter({ from: 'cn', to: 'tw' });
-  converterT2S = OpenCC.Converter({ from: 'tw', to: 'cn' });
-  openccLoaded = true;
+let converterS2TPromise: Promise<Converter> | null = null;
+let converterT2SPromise: Promise<Converter> | null = null;
+
+function getS2TConverter(): Promise<Converter> {
+  if (!converterS2TPromise) {
+    converterS2TPromise = import('opencc-js/cn2t').then(OpenCC =>
+      OpenCC.Converter({ from: 'cn', to: 'tw' })
+    );
+  }
+  return converterS2TPromise;
+}
+
+function getT2SConverter(): Promise<Converter> {
+  if (!converterT2SPromise) {
+    converterT2SPromise = import('opencc-js/t2cn').then(OpenCC =>
+      OpenCC.Converter({ from: 'tw', to: 'cn' })
+    );
+  }
+  return converterT2SPromise;
 }
 
 /** Convert Simplified Chinese text to Traditional Chinese. */
 export async function simplifiedToTraditional(text: string): Promise<string> {
-  await ensureOpenCC();
-  return converterS2T!(text);
+  const converter = await getS2TConverter();
+  return converter(text);
 }
 
 /** Convert Traditional Chinese text to Simplified Chinese. */
 export async function traditionalToSimplified(text: string): Promise<string> {
-  await ensureOpenCC();
-  return converterT2S!(text);
+  const converter = await getT2SConverter();
+  return converter(text);
 }
 
 // --- Pinyin generation (pinyin-pro) ---

@@ -290,9 +290,15 @@ test.describe('[regression] Unified selection background — invariant 3+4+5 (::
       const lineBox = line ? line.getBoundingClientRect() : { right: 0 };
       // Content-box right = bounding right minus padding-right.
       const pad = line ? parseInt(getComputedStyle(line).paddingRight, 10) || 0 : 0;
+      // The app may auto-zoom the root element on high-DPI screens. WebKit
+      // includes that transform in client rects, so normalize back to
+      // unscaled CSS px before applying the historical gap threshold.
+      const rootTransform = getComputedStyle(document.documentElement).transform;
+      const matrixZoom = rootTransform.match(/^matrix\(([^,]+),/);
+      const zoom = matrixZoom ? (parseFloat(matrixZoom[1]) || 1) : 1;
       return {
-        rectRights: rects.map(r => +r.right.toFixed(1)),
-        lineRight: +(lineBox.right - pad).toFixed(1),
+        rectRights: rects.map(r => +(r.right / zoom).toFixed(1)),
+        lineRight: +((lineBox.right - pad) / zoom).toFixed(1),
         rectCount: rects.length,
       };
     });

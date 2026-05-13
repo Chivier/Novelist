@@ -52,6 +52,28 @@ sidebar blank-area right-click menu
 (`data-testid="sidebar-view-menu"`) to see project config directly in
 the tree.
 
+### View settings (`[view]`)
+
+| Field              | Type   | Where surfaced |
+|--------------------|--------|-----------------|
+| `sort_mode`        | string | Sidebar header sort menu. Allowed values: `name-asc/desc`, `numeric-asc/desc`, `mtime-asc/desc`, `ctime-asc/desc`. Anything else coerces back to `numeric-asc` in `projectStore.coerceSortMode`. |
+| `show_hidden_files`| bool   | Sidebar blank-area right-click toggle. |
+| `wrap_file_names`  | bool   | Settings → Editor. When `true`, `FileTreeNode` adds `tree-row-wrap` so long names wrap to multiple lines instead of truncating with an ellipsis. |
+
+`ctime-*` reads the new `ctime: Option<i64>` field on `FileEntry`,
+populated from `metadata.created()` in `list_directory`. The
+comparator (`app/lib/utils/file-sort.ts → compareByMode`) falls back
+to `mtime` when `ctime` is null so filesystems without birth-time
+support still produce a deterministic order.
+
+### Filename template grammar
+
+See `docs/product-specs/2026-05-07-v0.2.4-rename-and-macros.md` for
+the full grammar. `parseTemplate` in `app/lib/utils/placeholder.ts`
+enforces: at most one `{N}`-style counter slot, at most one
+`{title}` slot, at least one of the two, and rejects unrecognized
+brace-tokens up front so typos like `{cN}` / `{Title}` fail loudly.
+
 ## New-file location tracking
 
 `NewFileConfig` carries two related fields beyond the template settings:
@@ -80,14 +102,13 @@ Two distinct context menus:
   `createFileAt` / `createFolderAt` in `Sidebar.svelte` with the target
   dir. Those helpers create an `untitled.md` / `new-folder` (backend
   auto-numbers on collision), expand the folder, refresh, and kick off
-  inline rename on the new node via `startRename`. Root-level new nodes
-  land in `sortedFiles` so the inline rename input (top of Sidebar) is
-  reachable; nested new nodes in FileTreeNode have no inline rename
-  surface — those show in the tree and must be renamed via the right-click
-  menu.
+  inline rename on the new node via `startRename`. The rename input is
+  rendered by `FileTreeNode` itself (gated on `renamingPath === node.path`)
+  so it lines up under the renamed node at any depth — there is no
+  separate top-of-sidebar rename row anymore.
 - **Blank-area view menu** (right-click the empty region of
   `[data-testid="sidebar-files"]`, skipped if the target is a `.tree-row`
-  or `.sidebar-input-row`). `data-testid="sidebar-view-menu"`. Lists:
+  or `.tree-input-row`). `data-testid="sidebar-view-menu"`. Lists:
   `New File` (root-level), `New Folder` (root-level), and the
   `Show hidden files` checkable item that writes to
   `settingsStore.view.show_hidden_files` and immediately refreshes the
