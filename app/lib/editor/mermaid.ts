@@ -3,6 +3,16 @@ import { syntaxTree } from '@codemirror/language';
 import { StateField, type EditorState, type Range } from '@codemirror/state';
 import { imeComposingField } from './ime-guard';
 
+interface BlockRange {
+  from: number;
+  to: number;
+}
+
+interface MermaidBlockState {
+  decorations: DecorationSet;
+  ranges: BlockRange[];
+}
+
 /**
  * Lazy-loaded mermaid module reference.
  * Mermaid is ~2.5 MB so we only import it when a mermaid block is first encountered.
@@ -152,6 +162,12 @@ function cursorInRange(heads: number[], from: number, to: number): boolean {
   return lo < heads.length && heads[lo] <= to;
 }
 
+function selectionTouchesRanges(state: EditorState, ranges: readonly BlockRange[]): boolean {
+  if (ranges.length === 0) return false;
+  const cursorHeads = makeCursorSet(state);
+  return ranges.some(range => cursorInRange(cursorHeads, range.from, range.to));
+}
+
 /**
  * Extract the info string (language) from a FencedCode node.
  * Returns the language name or empty string.
@@ -207,8 +223,9 @@ function getCodeContent(node: any, state: EditorState): string {
  * Build block decorations for mermaid code blocks.
  * Full-doc scan is acceptable — mermaid blocks are rare (typically <10).
  */
-function buildMermaidBlockDecos(state: EditorState): DecorationSet {
+function buildMermaidBlockState(state: EditorState): MermaidBlockState {
   const decos: Range<Decoration>[] = [];
+  const ranges: BlockRange[] = [];
   const cursorHeads = makeCursorSet(state);
 
   syntaxTree(state).iterate({
@@ -217,6 +234,7 @@ function buildMermaidBlockDecos(state: EditorState): DecorationSet {
 
       const info = getCodeInfo(node.node, state);
       if (info !== 'mermaid') return;
+      ranges.push({ from: node.from, to: node.to });
 
       if (cursorInRange(cursorHeads, node.from, node.to)) return false;
 
@@ -234,25 +252,31 @@ function buildMermaidBlockDecos(state: EditorState): DecorationSet {
     },
   });
 
-  return Decoration.set(decos, true);
+  return { decorations: Decoration.set(decos, true), ranges };
 }
 
 /**
  * Block decorations via StateField — CM6 requires block decorations
  * to come from StateField, not ViewPlugin.
  */
-export const mermaidPlugin = StateField.define<DecorationSet>({
-  create(state) { return buildMermaidBlockDecos(state); },
+export const mermaidPlugin = StateField.define<MermaidBlockState>({
+  create(state) { return buildMermaidBlockState(state); },
   update(value, tr) {
     if (tr.state.field(imeComposingField, false)) return value;
-    if (tr.docChanged) return buildMermaidBlockDecos(tr.state);
+    if (tr.docChanged) return buildMermaidBlockState(tr.state);
     if (syntaxTree(tr.state) !== syntaxTree(tr.startState)) {
-      return buildMermaidBlockDecos(tr.state);
+      return buildMermaidBlockState(tr.state);
     }
-    if (tr.selection) return buildMermaidBlockDecos(tr.state);
+    if (
+      tr.selection &&
+      (selectionTouchesRanges(tr.startState, value.ranges) ||
+        selectionTouchesRanges(tr.state, value.ranges))
+    ) {
+      return buildMermaidBlockState(tr.state);
+    }
     return value;
   },
-  provide: f => EditorView.decorations.from(f),
+  provide: f => EditorView.decorations.from(f, value => value.decorations),
 });
 
 // Listen for theme changes and re-initialize mermaid

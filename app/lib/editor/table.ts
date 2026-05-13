@@ -28,6 +28,16 @@ interface ParsedTable {
   rows: string[][];
 }
 
+interface BlockRange {
+  from: number;
+  to: number;
+}
+
+interface TableBlockState {
+  decorations: DecorationSet;
+  ranges: BlockRange[];
+}
+
 function parseCells(line: string): string[] {
   let trimmed = line.trim();
   if (trimmed.startsWith('|')) trimmed = trimmed.slice(1);
@@ -159,10 +169,16 @@ function cursorInRangeFast(heads: number[], from: number, to: number): boolean {
   return lo < heads.length && heads[lo] <= to;
 }
 
+function selectionTouchesRanges(state: EditorState, ranges: readonly BlockRange[]): boolean {
+  if (ranges.length === 0) return false;
+  const cursorHeads = makeCursorSet(state);
+  return ranges.some(range => cursorInRangeFast(cursorHeads, range.from, range.to));
+}
+
 /* ── Collect Table node ranges from syntax tree ───────────── */
 
-function getTableRanges(state: EditorState): { from: number; to: number }[] {
-  const ranges: { from: number; to: number }[] = [];
+function getTableRanges(state: EditorState): BlockRange[] {
+  const ranges: BlockRange[] = [];
   syntaxTree(state).iterate({
     enter(node) {
       if (node.name === 'Table') {
@@ -181,11 +197,12 @@ function getTableRanges(state: EditorState): { from: number; to: number }[] {
  * CM6 requires block decorations to come from StateField, not ViewPlugin.
  * Replaces table markdown with rendered HTML widget when cursor is outside.
  */
-function buildTableBlockDecos(state: EditorState): DecorationSet {
+function buildTableBlockState(state: EditorState): TableBlockState {
   const decos: Range<Decoration>[] = [];
   const cursorHeads = makeCursorSet(state);
+  const ranges = getTableRanges(state);
 
-  for (const range of getTableRanges(state)) {
+  for (const range of ranges) {
     const cursorInside = cursorInRangeFast(cursorHeads, range.from, range.to);
     if (cursorInside) continue;
 
@@ -201,25 +218,31 @@ function buildTableBlockDecos(state: EditorState): DecorationSet {
     }
   }
 
-  return Decoration.set(decos, true);
+  return { decorations: Decoration.set(decos, true), ranges };
 }
 
-const tableBlockDecoField = StateField.define<DecorationSet>({
-  create(state) { return buildTableBlockDecos(state); },
+const tableBlockDecoField = StateField.define<TableBlockState>({
+  create(state) { return buildTableBlockState(state); },
   update(value, tr) {
     if (tr.state.field(imeComposingField, false)) return value;
     // Rebuild on doc change
-    if (tr.docChanged) return buildTableBlockDecos(tr.state);
+    if (tr.docChanged) return buildTableBlockState(tr.state);
     // Rebuild when incremental parser finishes
     if (syntaxTree(tr.state) !== syntaxTree(tr.startState)) {
-      return buildTableBlockDecos(tr.state);
+      return buildTableBlockState(tr.state);
     }
     // Rebuild on selection change — cursor entering/leaving a table
     // toggles between rendered widget and raw markdown
-    if (tr.selection) return buildTableBlockDecos(tr.state);
+    if (
+      tr.selection &&
+      (selectionTouchesRanges(tr.startState, value.ranges) ||
+        selectionTouchesRanges(tr.state, value.ranges))
+    ) {
+      return buildTableBlockState(tr.state);
+    }
     return value;
   },
-  provide: f => EditorView.decorations.from(f),
+  provide: f => EditorView.decorations.from(f, value => value.decorations),
 });
 
 /* ── Inline/line decorations (ViewPlugin) ────────────────── */

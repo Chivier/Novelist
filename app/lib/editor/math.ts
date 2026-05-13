@@ -16,6 +16,16 @@ import { syntaxTree } from '@codemirror/language';
 import { StateField, type EditorState, type Range } from '@codemirror/state';
 import { imeComposingField } from './ime-guard';
 
+interface BlockRange {
+  from: number;
+  to: number;
+}
+
+interface DisplayMathBlockState {
+  decorations: DecorationSet;
+  ranges: BlockRange[];
+}
+
 /* ── Lazy-loaded KaTeX ────────────────────────────────────── */
 
 let katexModule: typeof import('katex') | null = null;
@@ -145,14 +155,21 @@ function cursorInRangeFast(heads: number[], from: number, to: number): boolean {
   return lo < heads.length && heads[lo] <= to;
 }
 
+function selectionTouchesRanges(state: EditorState, ranges: readonly BlockRange[]): boolean {
+  if (ranges.length === 0) return false;
+  const cursorHeads = makeCursorSet(state);
+  return ranges.some(range => cursorInRangeFast(cursorHeads, range.from, range.to));
+}
+
 /* ── Block decorations (StateField) — display math ────────── */
 
 // Weak ref to the active EditorView, used by widgets for lazy KaTeX reload
 let _mathEditorView: EditorView | null = null;
 function getMathEditorView(): EditorView | null { return _mathEditorView; }
 
-function buildDisplayMathBlockDecos(state: EditorState): DecorationSet {
+function buildDisplayMathBlockState(state: EditorState): DisplayMathBlockState {
   const decos: Range<Decoration>[] = [];
+  const ranges: BlockRange[] = [];
   const cursorHeads = makeCursorSet(state);
   let hasMath = false;
 
@@ -160,6 +177,7 @@ function buildDisplayMathBlockDecos(state: EditorState): DecorationSet {
     enter(node) {
       if (node.name !== 'DisplayMath') return;
       hasMath = true;
+      ranges.push({ from: node.from, to: node.to });
 
       if (cursorInRangeFast(cursorHeads, node.from, node.to)) return false;
 
@@ -185,21 +203,27 @@ function buildDisplayMathBlockDecos(state: EditorState): DecorationSet {
     ensureKatex();
   }
 
-  return Decoration.set(decos, true);
+  return { decorations: Decoration.set(decos, true), ranges };
 }
 
-const mathBlockDecoField = StateField.define<DecorationSet>({
-  create(state) { return buildDisplayMathBlockDecos(state); },
+const mathBlockDecoField = StateField.define<DisplayMathBlockState>({
+  create(state) { return buildDisplayMathBlockState(state); },
   update(value, tr) {
     if (tr.state.field(imeComposingField, false)) return value;
-    if (tr.docChanged) return buildDisplayMathBlockDecos(tr.state);
+    if (tr.docChanged) return buildDisplayMathBlockState(tr.state);
     if (syntaxTree(tr.state) !== syntaxTree(tr.startState)) {
-      return buildDisplayMathBlockDecos(tr.state);
+      return buildDisplayMathBlockState(tr.state);
     }
-    if (tr.selection) return buildDisplayMathBlockDecos(tr.state);
+    if (
+      tr.selection &&
+      (selectionTouchesRanges(tr.startState, value.ranges) ||
+        selectionTouchesRanges(tr.state, value.ranges))
+    ) {
+      return buildDisplayMathBlockState(tr.state);
+    }
     return value;
   },
-  provide: f => EditorView.decorations.from(f),
+  provide: f => EditorView.decorations.from(f, value => value.decorations),
 });
 
 /* ── Inline/line decorations (ViewPlugin) ─────────────────── */
