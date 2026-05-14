@@ -42,9 +42,7 @@ export const SETTINGS_SEARCH_INDEX: SearchableSetting[] = [
   { id: 'editor.renderImages', sectionId: 'editor', sectionLabelKey: 'settings.editor', labelKey: 'settings.renderImages' },
   { id: 'editor.sidebarWrapFileNames', sectionId: 'editor', sectionLabelKey: 'settings.editor', labelKey: 'settings.sidebar.wrapFileNames', hintKey: 'settings.sidebar.wrapFileNamesHint', anchor: 'settings-sidebar-wrap-filenames', keywords: ['sidebar', 'filename', 'ellipsis', 'wrap', '侧边栏', '文件名', '换行', '省略号'] },
   // Editor → New File
-  { id: 'newfile.detect', sectionId: 'editor', sectionLabelKey: 'settings.editor', labelKey: 'settings.editor.newFile.detectFromFolder', hintKey: 'settings.editor.newFile.detectFromFolderHint', anchor: 'settings-newfile-detect' },
-  { id: 'newfile.template', sectionId: 'editor', sectionLabelKey: 'settings.editor', labelKey: 'settings.editor.newFile.template', hintKey: 'settings.editor.newFile.templateHint', anchor: 'settings-newfile-template', keywords: ['macro', 'date', 'datetime', '宏', '日期'] },
-  { id: 'newfile.autoRename', sectionId: 'editor', sectionLabelKey: 'settings.editor', labelKey: 'settings.editor.newFile.autoRename', hintKey: 'settings.editor.newFile.autoRenameHint', anchor: 'settings-newfile-autorename', keywords: ['h1', 'rename', '重命名'] },
+  { id: 'newfile.template', sectionId: 'editor', sectionLabelKey: 'settings.editor', labelKey: 'settings.editor.newFile.template', hintKey: 'settings.editor.newFile.templateHint', anchor: 'settings-newfile-template', keywords: ['macro', 'date', 'datetime', 'h1', 'rename', 'title', '宏', '日期', '重命名', '标题'] },
   { id: 'newfile.defaultDir', sectionId: 'editor', sectionLabelKey: 'settings.editor', labelKey: 'settings.editor.newFile.defaultDir', hintKey: 'settings.editor.newFile.defaultDirHint', anchor: 'settings-newfile-defaultdir' },
 
   // Theme

@@ -202,9 +202,11 @@ describe('[contract] createNewFileInProject', () => {
     expect(h.cmd.createFile).toHaveBeenCalledWith('/proj', 'Chapter 3.md');
   });
 
-  it('inferNextName uses an empty sibling list when detectFromFolder is false', async () => {
+  it('inferNextName always consults the sibling list — the legacy detectFromFolder flag is gone', async () => {
+    // Folder-detection is now implicit (we always pass siblings); the toggle
+    // was removed because templates with `{N}` already signal numbering intent.
     h.projectState.dirPath = '/proj';
-    h.newFileState.detectFromFolder = false;
+    h.newFileState.detectFromFolder = false; // ignored
     h.cmd.listDirectory
       .mockResolvedValueOnce({ status: 'ok', data: [] })
       .mockResolvedValueOnce({
@@ -215,11 +217,10 @@ describe('[contract] createNewFileInProject', () => {
         ],
       })
       .mockResolvedValueOnce({ status: 'ok', data: [] });
-    h.cmd.createFile.mockResolvedValue({ status: 'ok', data: '/proj/Chapter 1.md' });
+    h.cmd.createFile.mockResolvedValue({ status: 'ok', data: '/proj/Chapter 3.md' });
     h.cmd.readFile.mockResolvedValue({ status: 'ok', data: '' });
     await createNewFileInProject();
-    // With siblings ignored, we propose "Chapter 1" again.
-    expect(h.cmd.createFile).toHaveBeenCalledWith('/proj', 'Chapter 1.md');
+    expect(h.cmd.createFile).toHaveBeenCalledWith('/proj', 'Chapter 3.md');
   });
 
   it('refreshes a non-root target dir via expandFolder + refreshFolder', async () => {

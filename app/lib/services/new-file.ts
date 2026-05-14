@@ -31,7 +31,7 @@ export async function createScratchFile() {
 /**
  * Compute the smart proposed filename for a new file in `targetDir`,
  * applying the user's template (date/time macros + `{N}` numbering with
- * optional sibling-aware inference). Pure naming — does not create the file.
+ * sibling-aware inference). Pure naming — does not create the file.
  *
  * If `ext` is provided and differs from the template's extension, the
  * resulting basename's extension is swapped (e.g. `.canvas`, `.kanban`).
@@ -49,9 +49,7 @@ export async function proposeNewFileName(targetDir: string, ext?: string): Promi
   const resolvedTemplateRaw = resolveBody(newFileSettings.template, macroCtx);
   const userTemplate = parseTemplate(resolvedTemplateRaw) ?? parseTemplate('Untitled {N}')!;
 
-  const proposedName = newFileSettings.detectFromFolder
-    ? inferNextName(siblings, userTemplate)
-    : inferNextName([], userTemplate);
+  const proposedName = inferNextName(siblings, userTemplate);
 
   if (ext) {
     const dot = proposedName.lastIndexOf('.');
@@ -68,8 +66,8 @@ export async function proposeNewFileName(targetDir: string, ext?: string): Promi
  * resolved dir has been deleted, falls back to project root.
  *
  * Filename is derived from the user's template (`newFileSettings.template`)
- * combined with optional sibling detection (`detectFromFolder`) to pick the
- * next chapter/numbering slot.
+ * combined with sibling-aware inference to pick the next chapter/numbering
+ * slot.
  *
  * After a successful create:
  *  - records last-used-dir so the next Cmd+N lands here

@@ -18,7 +18,7 @@ vi.mock('$lib/ipc/commands', () => ({
 }));
 
 vi.mock('$lib/stores/new-file-settings.svelte', () => ({
-  newFileSettings: { autoRenameFromH1: false },
+  newFileSettings: { template: '第{N}章' },
 }));
 
 vi.mock('$lib/i18n', () => ({ t: (k: string) => k }));

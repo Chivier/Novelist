@@ -201,22 +201,22 @@ class TabsStore {
    * Returns the new path (== old path if no rename). Safe to call after every
    * successful writeFile — both manual Cmd+S and auto-save funnel here.
    *
-   * Two paths, gated by `auto_rename_from_h1`:
+   * Gated implicitly: the user's new-file template must include `{title}`.
+   * Using `{title}` is the user's explicit signal that filenames should
+   * follow the H1 heading.
    *
-   *  Path A — placeholder first-time rename (v0.2.4 behavior, unchanged):
+   *  Path A — placeholder first-time rename:
    *    File still matches `isPlaceholder()` and has a non-empty H1.
    *    Uses `renameFromH1`.
    *
-   *  Path B — ongoing sync (v0.2.5+):
+   *  Path B — ongoing sync:
    *    File is past the placeholder stage; we compare the just-saved H1
    *    against the per-tab `lastSyncedH1`. If changed and the old H1 still
    *    appears in the current filename, swap that substring for the new H1.
    *    Manually renamed files have no anchor to find, so sync auto-detaches.
-   *
-   * See spec `docs/superpowers/specs/2026-05-12-h1-filename-ongoing-sync-design.md`.
    */
   async tryRenameAfterSave(filePath: string, content: string): Promise<string> {
-    if (!newFileSettings.autoRenameFromH1) return filePath;
+    if (!newFileSettings.template.includes('{title}')) return filePath;
     if (isScratchFile(filePath)) return filePath;
 
     // Find the tab so we can read/update `lastSyncedH1`. Save-from-another-pane

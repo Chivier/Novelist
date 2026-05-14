@@ -829,22 +829,6 @@
             {t('settings.editor.newFile.heading')}
           </h4>
 
-          <label class="flex items-start gap-2 mb-4">
-            <input
-              type="checkbox"
-              class="mt-1 shrink-0"
-              data-testid="settings-newfile-detect"
-              checked={newFileSettings.detectFromFolder}
-              onchange={(e) => newFileSettings.setDetectFromFolder(e.currentTarget.checked)}
-            />
-            <div>
-              <div class="text-sm">{t('settings.editor.newFile.detectFromFolder')}</div>
-              <div class="text-xs" style="color: var(--novelist-text-secondary);">
-                {t('settings.editor.newFile.detectFromFolderHint')}
-              </div>
-            </div>
-          </label>
-
           <div class="mb-4">
             <div class="text-sm mb-1 flex items-center gap-2">
               <span>{t('settings.editor.newFile.template')}</span>
@@ -882,22 +866,6 @@
               </div>
             {/if}
           </div>
-
-          <label class="flex items-start gap-2">
-            <input
-              type="checkbox"
-              class="mt-1 shrink-0"
-              data-testid="settings-newfile-autorename"
-              checked={newFileSettings.autoRenameFromH1}
-              onchange={(e) => newFileSettings.setAutoRenameFromH1(e.currentTarget.checked)}
-            />
-            <div>
-              <div class="text-sm">{t('settings.editor.newFile.autoRename')}</div>
-              <div class="text-xs" style="color: var(--novelist-text-secondary);">
-                {t('settings.editor.newFile.autoRenameHint')}
-              </div>
-            </div>
-          </label>
 
           <div class="mt-4" data-testid="settings-newfile-defaultdir">
             <div class="text-sm mb-1">{t('settings.editor.newFile.defaultDir')}</div>
