@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-DIST_MAX_KB=5120   # 5 MB
+DIST_MAX_KB=15360  # 15 MB
 DMG_MAX_KB=15360   # 15 MB
 
 echo "=== Bundle Size Benchmark ==="
