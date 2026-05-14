@@ -7,13 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-- Filename now follows the H1 heading on every save (was first-save only).
-  Manually renaming a file detaches the sync. See spec
-  `docs/superpowers/specs/2026-05-12-h1-filename-ongoing-sync-design.md`.
-
-## [0.2.4] - 2026-05-11
+## [0.2.4] - 2026-05-14
 
 Major release adding **image hosting** and **publishing** — Novelist
 can now upload images to your CDN of choice and push the active
@@ -139,12 +133,37 @@ sm.ms 或自定义 HTTP 接口），并直接发布到 Ghost / WordPress / Mediu
 - **Command-palette shortcut chip uses the UI font** so Apple
   shortcut symbols (⇧⌘⌥⌃) render with the same stroke weight as
   the letter next to them.
-- **Settings checkbox rows align with the first text line** —
-  the wrap-filenames, detect-from-folder, and auto-rename rows
-  in Settings → Editor previously floated their checkbox above
-  the label baseline; they now line up.
+- **Settings checkbox rows align with the first text line** — the
+  wrap-filenames row in Settings → Editor previously floated its
+  checkbox above the label baseline; it now lines up.
+- **Sidebar folder right-click adds Expand All / Collapse All** —
+  recursive (whole subtree), lazy-loaded BFS expand, collapse keeps
+  the child cache so re-expand is instant. The same items also appear
+  in the empty-area sidebar menu (operates on project root). See
+  `docs/design-docs/ui-design.md` §3.2.3.
+
+### Changed
+
+- **Filename now follows the H1 heading on every save** (was first-save
+  only). Manually renaming a file detaches the sync. See spec
+  `docs/superpowers/specs/2026-05-12-h1-filename-ongoing-sync-design.md`.
+- **`{title}` in the new-file template implicitly opts in to H1
+  rename-on-save.** The dedicated *Sync filename with H1 on save*
+  checkbox is gone — its intent is now expressed by whether the
+  template contains `{title}`. The shipped default
+  (`第{N}章-{title}`) keeps the behavior on; remove `{title}` to
+  opt out. Path A (placeholder first-time rename) and Path B (ongoing
+  sync) both honor the new gate.
+- **Sibling-aware new-file naming is always on.** The *Detect chapter
+  pattern from folder* checkbox is gone — `inferNextName` always reads
+  the folder so `{N}` slots pick the next free number; templates
+  without `{N}` are unaffected.
 
 ### Fixed
+
+- **Filename-macro tooltip (the `?` next to "默认文件名模板") opens
+  rightward**, so content no longer clips against the panel's left
+  edge when the trigger sits near it.
 
 - **Numeric sidebar sort orders 第九 < 第十 < 第十一** and no
   longer misplaces files whose Chinese number is followed by extra
@@ -194,6 +213,12 @@ sm.ms 或自定义 HTTP 接口），并直接发布到 Ghost / WordPress / Mediu
 
 - **"Run Release Benchmark" command** — internal diagnostic, not
   user-facing. The regular performance benchmark stays available.
+- **Settings → Editor → "Sync filename with H1 on save" checkbox** —
+  the gate moved to the filename template (use `{title}`). Stored
+  `auto_rename_from_h1` values in existing project configs are still
+  parsed but no longer consulted.
+- **Settings → Editor → "Auto-detect chapter pattern from folder"
+  checkbox** — sibling-aware naming is now unconditional.
 
 ### Notes for developers
 
