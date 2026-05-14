@@ -59,7 +59,7 @@
   .macro-hint-popover {
     position: absolute;
     top: calc(100% + 6px);
-    right: 0;
+    left: 0;
     min-width: 320px;
     max-width: 460px;
     padding: 10px 12px;
