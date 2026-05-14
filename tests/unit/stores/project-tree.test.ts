@@ -62,6 +62,47 @@ describe('projectStore tree extensions', () => {
     expect(sub.children).toHaveLength(1);
   });
 
+  it('expandFolderRecursive expands the subtree and lazily loads each level', async () => {
+    // Root: a/ b/   a/: a1/   a/a1/: leaf.md
+    projectStore.setProject('/proj', null, [node('a', true, '/proj/a'), node('b', true, '/proj/b')]);
+
+    (commands.listDirectory as any).mockImplementation((p: string) => {
+      if (p === '/proj/a') return Promise.resolve({ status: 'ok', data: [{ name: 'a1', path: '/proj/a/a1', is_dir: true, size: 0 }] });
+      if (p === '/proj/a/a1') return Promise.resolve({ status: 'ok', data: [{ name: 'leaf.md', path: '/proj/a/a1/leaf.md', is_dir: false, size: 0 }] });
+      if (p === '/proj/b') return Promise.resolve({ status: 'ok', data: [] });
+      return Promise.resolve({ status: 'ok', data: [] });
+    });
+
+    await projectStore.expandFolderRecursive('/proj');
+
+    const a = projectStore.files.find(f => f.path === '/proj/a')!;
+    const b = projectStore.files.find(f => f.path === '/proj/b')!;
+    expect(a.expanded).toBe(true);
+    expect(b.expanded).toBe(true);
+    const a1 = a.children!.find(f => f.path === '/proj/a/a1')!;
+    expect(a1.expanded).toBe(true);
+    expect(a1.children).toHaveLength(1);
+  });
+
+  it('collapseFolderRecursive collapses every descendant without unloading children', async () => {
+    projectStore.setProject('/proj', null, [node('a', true, '/proj/a')]);
+    (commands.listDirectory as any).mockImplementation((p: string) => {
+      if (p === '/proj/a') return Promise.resolve({ status: 'ok', data: [{ name: 'a1', path: '/proj/a/a1', is_dir: true, size: 0 }] });
+      if (p === '/proj/a/a1') return Promise.resolve({ status: 'ok', data: [{ name: 'leaf.md', path: '/proj/a/a1/leaf.md', is_dir: false, size: 0 }] });
+      return Promise.resolve({ status: 'ok', data: [] });
+    });
+    await projectStore.expandFolderRecursive('/proj');
+
+    projectStore.collapseFolderRecursive('/proj');
+
+    const a = projectStore.files.find(f => f.path === '/proj/a')!;
+    const a1 = a.children!.find(f => f.path === '/proj/a/a1')!;
+    expect(a.expanded).toBe(false);
+    expect(a1.expanded).toBe(false);
+    // Cached children survive — re-expansion is instant.
+    expect(a1.children).toHaveLength(1);
+  });
+
   it('refreshFolder re-fetches an already-loaded folder', async () => {
     projectStore.setProject('/proj', null, [node('sub', true)]);
     (commands.listDirectory as any).mockResolvedValueOnce({

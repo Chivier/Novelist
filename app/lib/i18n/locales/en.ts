@@ -57,6 +57,8 @@ export const en: TranslationMap = {
   'sidebar.menu.newFolderHere': 'New Folder in Folder',
   'sidebar.menu.newFileOfType': 'New {type}',
   'sidebar.menu.newFileOfTypeHere': 'New {type} in Folder',
+  'sidebar.menu.expandAll': 'Expand All',
+  'sidebar.menu.collapseAll': 'Collapse All',
 
   // --- TabBar ---
   'tab.unsaved': 'Unsaved changes',

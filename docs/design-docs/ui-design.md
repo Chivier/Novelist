@@ -178,6 +178,9 @@ Reveal in Finder
 New File
 New Folder
 ────────
+Expand All
+Collapse All
+────────
 Rename              F2
 Delete
 ────────
@@ -185,13 +188,23 @@ Copy Path
 Reveal in Finder
 ```
 
+`Expand All` / `Collapse All` 作用于该文件夹整棵子树（递归），底层调用
+`projectStore.expandFolderRecursive(path)` /
+`projectStore.collapseFolderRecursive(path)`。展开为宽度优先 + 惰性加载未
+读取的子节点；折叠不释放已加载的子节点缓存，再次展开瞬时完成。
+
 **空白区域右键:**
 ```
 New File
 New Folder
 ────────
+Expand All
+Collapse All
+────────
 Refresh
 ```
+
+空白区域的 `Expand All` / `Collapse All` 以项目根目录为子树根。
 
 #### 3.2.4 顶部搜索/过滤
 

@@ -57,6 +57,8 @@ export const zhCN: TranslationMap = {
   'sidebar.menu.newFolderHere': '在此文件夹中新建文件夹',
   'sidebar.menu.newFileOfType': '新建 {type}',
   'sidebar.menu.newFileOfTypeHere': '在此文件夹中新建 {type}',
+  'sidebar.menu.expandAll': '全部展开',
+  'sidebar.menu.collapseAll': '全部折叠',
 
   // --- TabBar ---
   'tab.unsaved': '未保存的更改',

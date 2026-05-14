@@ -338,6 +338,18 @@
       }));
   });
 
+  async function expandAllAt(targetDir: string) {
+    closeContextMenu();
+    closeViewMenu();
+    await projectStore.expandFolderRecursive(targetDir);
+  }
+
+  function collapseAllAt(targetDir: string) {
+    closeContextMenu();
+    closeViewMenu();
+    projectStore.collapseFolderRecursive(targetDir);
+  }
+
   async function createFolderAt(targetDir: string) {
     closeContextMenu();
     closeViewMenu();
@@ -891,6 +903,19 @@
         onclick={() => createFolderAt(projectStore.dirPath!)}
       >{t('sidebar.menu.newFolder')}</button>
       <div class="context-menu-separator"></div>
+      <button
+        role="menuitem"
+        class="context-menu-item"
+        data-testid="sidebar-view-expand-all"
+        onclick={() => expandAllAt(projectStore.dirPath!)}
+      >{t('sidebar.menu.expandAll')}</button>
+      <button
+        role="menuitem"
+        class="context-menu-item"
+        data-testid="sidebar-view-collapse-all"
+        onclick={() => collapseAllAt(projectStore.dirPath!)}
+      >{t('sidebar.menu.collapseAll')}</button>
+      <div class="context-menu-separator"></div>
     {/if}
     <button
       role="menuitem"
@@ -924,6 +949,9 @@
         >{t('sidebar.menu.newFileOfTypeHere', { type: creator.label })}</button>
       {/each}
       <button role="menuitem" class="context-menu-item" data-testid="context-menu-new-folder" onclick={() => createFolderAt(contextMenu!.entry.path)}>{t('sidebar.menu.newFolderHere')}</button>
+      <div class="context-menu-separator"></div>
+      <button role="menuitem" class="context-menu-item" data-testid="context-menu-expand-all" onclick={() => expandAllAt(contextMenu!.entry.path)}>{t('sidebar.menu.expandAll')}</button>
+      <button role="menuitem" class="context-menu-item" data-testid="context-menu-collapse-all" onclick={() => collapseAllAt(contextMenu!.entry.path)}>{t('sidebar.menu.collapseAll')}</button>
       <div class="context-menu-separator"></div>
     {/if}
     {#if !contextMenu.entry.is_dir && isTextFile(contextMenu.entry.name)}

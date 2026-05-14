@@ -144,6 +144,48 @@ class ProjectStore {
     if (node) node.expanded = false;
   }
 
+  /**
+   * Expand a folder and every descendant folder, lazily loading children as
+   * needed. Width-first traversal so the UI grows top-down. The provided
+   * `path` is treated as the subtree root: pass `dirPath` to expand the whole
+   * project, or any folder path to expand only that branch.
+   */
+  async expandFolderRecursive(path: string): Promise<void> {
+    const roots = path === this.dirPath ? this.files : [this.findFolder(path)].filter(Boolean) as FileNode[];
+    const queue: FileNode[] = [];
+    for (const r of roots) if (r.is_dir) queue.push(r);
+
+    while (queue.length > 0) {
+      const node = queue.shift()!;
+      if (node.children === undefined) {
+        await this.expandFolder(node.path);
+      } else {
+        node.expanded = true;
+      }
+      if (node.children) {
+        for (const child of node.children) if (child.is_dir) queue.push(child);
+      }
+    }
+  }
+
+  /**
+   * Collapse a folder and every already-loaded descendant. Does not unload
+   * children — re-expansion is instant.
+   */
+  collapseFolderRecursive(path: string): void {
+    const roots = path === this.dirPath ? this.files : [this.findFolder(path)].filter(Boolean) as FileNode[];
+    const stack: FileNode[] = [];
+    for (const r of roots) if (r.is_dir) stack.push(r);
+
+    while (stack.length > 0) {
+      const node = stack.pop()!;
+      node.expanded = false;
+      if (node.children) {
+        for (const child of node.children) if (child.is_dir) stack.push(child);
+      }
+    }
+  }
+
   /** Re-fetch children for a previously-loaded folder (used by file watcher + post-move). */
   async refreshFolder(path: string): Promise<void> {
     // Project root is represented by `this.files` (no wrapper node).
