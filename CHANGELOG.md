@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### CI
+
+- **Release workflow no longer dead-locks on a single failing matrix leg.**
+  The `release` job's `if:` now wraps with `always()` so the implicit
+  `success()` gate stops permanently skipping it when any one upstream
+  platform fails (the case that left v0.2.4's macOS dmg out of the auto-
+  published release until manual upload). Gate still requires at least one
+  upstream build to succeed before publishing.
+- **Intel macOS DMG cross-compiled from `macos-14` instead of `macos-13`.**
+  GitHub-hosted Intel macOS runners are mid-retirement and queue for
+  multiple hours; we now cross-compile `x86_64-apple-darwin` from the
+  GitHub-hosted Apple Silicon runner via `rustup target add` +
+  `tauri build --target x86_64-apple-darwin`. ARM mac still builds
+  natively on the self-hosted runner.
+
 ## [0.2.4] - 2026-05-14
 
 Major release adding **image hosting** and **publishing** — Novelist

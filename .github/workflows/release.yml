@@ -54,13 +54,18 @@ jobs:
         include:
           - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
+            tauri-args: ""
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
-          # macos-13 is the last GitHub-hosted Intel runner; needed for the
-          # Homebrew Cask intel: sha256 entry. ARM mac is built on the
-          # self-hosted runner above.
-          - platform: macos-13
+            tauri-args: ""
+          # Intel Mac DMG is cross-compiled from a GitHub-hosted Apple Silicon
+          # runner. macos-13 (the last GitHub-hosted Intel runner) is in the
+          # tail end of its retirement window with multi-hour queue times, so
+          # we use macos-14 + `rustup target add x86_64-apple-darwin` instead.
+          # ARM mac is built natively on the self-hosted runner above.
+          - platform: macos-14
             target: x86_64-apple-darwin
+            tauri-args: "--target x86_64-apple-darwin"
 
     runs-on: ${{ matrix.platform }}
 
@@ -107,6 +112,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         with:
           projectPath: core
+          args: ${{ matrix.tauri-args }}
           tagName: ${{ github.ref_name }}
           releaseName: 'Novelist ${{ github.ref_name }}'
           releaseBody: |
@@ -119,7 +125,14 @@ jobs:
   release:
     needs: [build-macos-arm, build-other]
     runs-on: ubuntu-latest
-    if: ${{ needs.build-macos-arm.result == 'success' || needs.build-other.result == 'success' }}
+    # `always()` turns off the implicit `success()` gate that would otherwise
+    # skip this job whenever ANY matrix leg of `build-other` fails (e.g. a
+    # transient GitHub-hosted runner outage on one platform). We still gate on
+    # at least one upstream build succeeding so we never publish an empty
+    # release.
+    if: |
+      always() &&
+      (needs.build-macos-arm.result == 'success' || needs.build-other.result == 'success')
     steps:
       - name: Download macOS ARM artifact
         uses: actions/download-artifact@v6
