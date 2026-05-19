@@ -25,6 +25,13 @@ const { hoisted } = vi.hoisted(() => {
 
   const readFile = vi.fn();
   const registerOpenFile = vi.fn(async () => ({ status: 'ok' }));
+  const routeSingleFileOpen = vi.fn(async (
+    _path: string,
+    _line: number | null = null,
+    _col: number | null = null,
+    _forceNew = false,
+  ) => {});
+  const wireFileRoutingBids = vi.fn(async () => () => {});
 
   const tabsState = {
     findByPath: vi.fn(),
@@ -53,6 +60,8 @@ const { hoisted } = vi.hoisted(() => {
       getCurrentWindow,
       readFile,
       registerOpenFile,
+      routeSingleFileOpen,
+      wireFileRoutingBids,
       tabsState,
       projectState,
       uiState,
@@ -69,6 +78,11 @@ vi.mock('$lib/ipc/commands', () => ({
     readFile: hoisted.readFile,
     registerOpenFile: hoisted.registerOpenFile,
   },
+}));
+
+vi.mock('$lib/services/file-route', () => ({
+  routeSingleFileOpen: hoisted.routeSingleFileOpen,
+  wireFileRoutingBids: hoisted.wireFileRoutingBids,
 }));
 
 vi.mock('$lib/stores/tabs.svelte', () => ({
@@ -110,6 +124,8 @@ beforeEach(() => {
   hoisted.getCurrentWindow.mockClear();
   hoisted.readFile.mockReset();
   hoisted.registerOpenFile.mockReset();
+  hoisted.routeSingleFileOpen.mockReset().mockResolvedValue(undefined);
+  hoisted.wireFileRoutingBids.mockReset().mockResolvedValue(() => {});
   hoisted.tabsState.findByPath.mockReset();
   hoisted.tabsState.reloadContent.mockReset();
   hoisted.tabsState.openTab.mockReset();
@@ -157,7 +173,15 @@ describe('[contract] wireAppEvents — listener setup', () => {
   it('subscribes to the expected events', async () => {
     await wire();
     const names = hoisted.listen.mock.calls.map((c: any) => c[0]).sort();
-    expect(names).toEqual(['cli-open', 'directory-changed', 'file-changed', 'file-renamed', 'open-file', 'recent-projects-updated']);
+    expect(names).toEqual([
+      'cli-open',
+      'directory-changed',
+      'file-changed',
+      'file-renamed',
+      'open-file',
+      'open-file-deliver',
+      'recent-projects-updated',
+    ]);
   });
 
   it('registers a drag-drop handler on the current window', async () => {
@@ -166,35 +190,39 @@ describe('[contract] wireAppEvents — listener setup', () => {
     expect(hoisted.dragDropHandlers.length).toBe(1);
   });
 
+  it('wires the cross-window file routing bid listener', async () => {
+    await wire();
+    expect(hoisted.wireFileRoutingBids).toHaveBeenCalled();
+  });
+
   it('returns a teardown that unlistens + removes the goto-line listener', async () => {
     const { teardown } = await wire();
     const removeSpy = vi.spyOn(window, 'removeEventListener');
     teardown();
-    // Six listen()s succeeded (open-file, file-changed, file-renamed,
-    // recent-projects-updated, onDragDropEvent) — unlisten was called for
-    // each except the pending-files drain (which uses invoke).
-    expect(hoisted.unlisten).toHaveBeenCalledTimes(7);
+    // One unlisten per: open-file, open-file-deliver, file-open-bid-request
+    // (returned by wireFileRoutingBids), cli-open, file-changed,
+    // directory-changed, file-renamed, recent-projects-updated, drag-drop.
+    expect(hoisted.unlisten).toHaveBeenCalledTimes(8);
     expect(removeSpy).toHaveBeenCalledWith('novelist-goto-line', expect.any(Function));
     removeSpy.mockRestore();
   });
 });
 
 describe('[contract] pending-files drain', () => {
-  it('opens each pending text file', async () => {
+  it('forwards each pending file to the cross-window router', async () => {
     hoisted.invoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_pending_open_projects') return Promise.resolve([]);
       if (cmd === 'get_pending_open_files') return Promise.resolve([
         { path: '/proj/a.md', line: null, col: null },
-        { path: '/tmp/x.txt', line: null, col: null },
+        { path: '/tmp/x.txt', line: 4, col: 2 },
       ]);
       return Promise.resolve(undefined);
     });
-    hoisted.readFile.mockResolvedValue({ status: 'ok', data: 'content' });
     activeTeardowns.push(wireAppEvents(defaultCtx()));
     await flushAsyncWork();
-    expect(hoisted.tabsState.openTab).toHaveBeenCalledTimes(2);
-    expect(hoisted.tabsState.openTab).toHaveBeenCalledWith('/proj/a.md', 'content');
-    expect(hoisted.tabsState.openTab).toHaveBeenCalledWith('/tmp/x.txt', 'content');
+    expect(hoisted.routeSingleFileOpen).toHaveBeenCalledTimes(2);
+    expect(hoisted.routeSingleFileOpen).toHaveBeenNthCalledWith(1, '/proj/a.md', null, null);
+    expect(hoisted.routeSingleFileOpen).toHaveBeenNthCalledWith(2, '/tmp/x.txt', 4, 2);
   });
 
   it('drains pending projects via the context callback', async () => {
@@ -217,11 +245,22 @@ describe('[contract] pending-files drain', () => {
   });
 });
 
-describe('[contract] openFileByPath via open-file event', () => {
-  it('opens markdown files', async () => {
+describe('[contract] open-file event → cross-window routing', () => {
+  it('forwards macOS Finder Open-With events to the router', async () => {
+    await wire();
+    await hoisted.listeners.get('open-file')!({ payload: '/tmp/x.md' });
+    expect(hoisted.routeSingleFileOpen).toHaveBeenCalledWith('/tmp/x.md');
+    expect(hoisted.tabsState.openTab).not.toHaveBeenCalled();
+  });
+});
+
+describe('[contract] open-file-deliver event (router→winner)', () => {
+  it('opens markdown files locally', async () => {
     hoisted.readFile.mockResolvedValue({ status: 'ok', data: 'body' });
     await wire();
-    await hoisted.listeners.get('open-file')!({ payload: '/proj/story.md' });
+    await hoisted.listeners.get('open-file-deliver')!({
+      payload: { path: '/proj/story.md', line: null, col: null },
+    });
     expect(hoisted.readFile).toHaveBeenCalledWith('/proj/story.md');
     expect(hoisted.tabsState.openTab).toHaveBeenCalledWith('/proj/story.md', 'body');
     expect(hoisted.registerOpenFile).toHaveBeenCalledWith('/proj/story.md');
@@ -229,7 +268,9 @@ describe('[contract] openFileByPath via open-file event', () => {
 
   it('skips non-text extensions', async () => {
     await wire();
-    await hoisted.listeners.get('open-file')!({ payload: '/proj/image.png' });
+    await hoisted.listeners.get('open-file-deliver')!({
+      payload: { path: '/proj/image.png', line: null, col: null },
+    });
     expect(hoisted.readFile).not.toHaveBeenCalled();
     expect(hoisted.tabsState.openTab).not.toHaveBeenCalled();
   });
@@ -238,7 +279,9 @@ describe('[contract] openFileByPath via open-file event', () => {
     hoisted.readFile.mockResolvedValue({ status: 'ok', data: 'x' });
     hoisted.projectState.isOpen = false;
     await wire();
-    await hoisted.listeners.get('open-file')!({ payload: '/tmp/x.md' });
+    await hoisted.listeners.get('open-file-deliver')!({
+      payload: { path: '/tmp/x.md', line: null, col: null },
+    });
     expect(hoisted.projectState.enterSingleFileMode).toHaveBeenCalled();
     expect(hoisted.uiState.sidebarVisible).toBe(false);
   });
@@ -247,14 +290,18 @@ describe('[contract] openFileByPath via open-file event', () => {
     hoisted.readFile.mockResolvedValue({ status: 'ok', data: 'x' });
     hoisted.projectState.isOpen = true;
     await wire();
-    await hoisted.listeners.get('open-file')!({ payload: '/tmp/x.md' });
+    await hoisted.listeners.get('open-file-deliver')!({
+      payload: { path: '/tmp/x.md', line: null, col: null },
+    });
     expect(hoisted.projectState.enterSingleFileMode).not.toHaveBeenCalled();
   });
 
   it('does not openTab when readFile errors', async () => {
     hoisted.readFile.mockResolvedValue({ status: 'error', error: 'denied' });
     await wire();
-    await hoisted.listeners.get('open-file')!({ payload: '/tmp/x.md' });
+    await hoisted.listeners.get('open-file-deliver')!({
+      payload: { path: '/tmp/x.md', line: null, col: null },
+    });
     expect(hoisted.tabsState.openTab).not.toHaveBeenCalled();
   });
 });
@@ -336,19 +383,20 @@ describe('[contract] recent-projects-updated event', () => {
 });
 
 describe('[contract] drag-drop', () => {
-  it('opens each dropped text file', async () => {
-    hoisted.readFile.mockResolvedValue({ status: 'ok', data: 'drop-body' });
+  it('forwards each dropped path to the cross-window router', async () => {
     await wire();
     const handler = hoisted.dragDropHandlers[0];
     await handler({ payload: { type: 'drop', paths: ['/a.md', '/b.md'] } });
-    expect(hoisted.tabsState.openTab).toHaveBeenCalledTimes(2);
+    expect(hoisted.routeSingleFileOpen).toHaveBeenCalledTimes(2);
+    expect(hoisted.routeSingleFileOpen).toHaveBeenNthCalledWith(1, '/a.md');
+    expect(hoisted.routeSingleFileOpen).toHaveBeenNthCalledWith(2, '/b.md');
   });
 
   it('ignores non-drop events (hover/leave)', async () => {
     await wire();
     const handler = hoisted.dragDropHandlers[0];
     await handler({ payload: { type: 'enter', paths: ['/a.md'] } });
-    expect(hoisted.readFile).not.toHaveBeenCalled();
+    expect(hoisted.routeSingleFileOpen).not.toHaveBeenCalled();
   });
 });
 

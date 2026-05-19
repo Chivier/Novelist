@@ -6,6 +6,7 @@ import { projectStore } from '$lib/stores/project.svelte';
 import { tabsStore } from '$lib/stores/tabs.svelte';
 import { uiStore } from '$lib/stores/ui.svelte';
 import { handleCliOpen, openProjectInThisWindow } from '$lib/services/cli-open';
+import { routeSingleFileOpen, wireFileRoutingBids } from '$lib/services/file-route';
 import { pathDirname } from '$lib/utils/path';
 
 export type AppEventContext = {
@@ -21,9 +22,26 @@ export type AppEventContext = {
 
 const TEXT_EXTENSIONS = ['.md', '.markdown', '.txt', '.canvas', '.kanban', '.json', '.jsonl', '.csv'];
 
+function reportEventError(label: string, error: unknown): void {
+  console.error(`[app-events] ${label} failed:`, error);
+}
+
+function safeAsync<T>(label: string, fn: (value: T) => Promise<void> | void): (value: T) => Promise<void> {
+  return async (value: T) => {
+    try {
+      await fn(value);
+    } catch (e) {
+      reportEventError(label, e);
+    }
+  };
+}
+
 /**
- * Open a text file by absolute path. Used by pending-files drain, the
- * open-file Tauri event (macOS Finder "Open With"), and drag-drop.
+ * Open a text file by absolute path *in this window*. This is the local
+ * "actually open the tab" step — it does NOT consult the cross-window
+ * router. Callers come from one of:
+ *   - The `open-file-deliver` event (router picked us as the winner).
+ *   - Tests that pre-seed `commands.readFile` and want to assert tab state.
  *
  * Kicks the app into single-file mode if no project is open.
  *
@@ -62,6 +80,8 @@ export function wireAppEvents(ctx: AppEventContext): () => void {
   let unlistenFileChanged: (() => void) | null = null;
   let unlistenDragDrop: (() => void) | null = null;
   let unlistenOpenFile: (() => void) | null = null;
+  let unlistenOpenFileDeliver: (() => void) | null = null;
+  let unlistenFileRoutingBids: (() => void) | null = null;
   let unlistenFileRenamed: (() => void) | null = null;
   let unlistenDirectoryChanged: (() => void) | null = null;
   let unlistenRecentProjectsUpdated: (() => void) | null = null;
@@ -84,26 +104,55 @@ export function wireAppEvents(ctx: AppEventContext): () => void {
         }
       }
       for (const f of pendingFiles) {
-        await openFileByPath(f.path, f.line ?? null);
+        await routeSingleFileOpen(f.path, f.line ?? null, f.col ?? null);
       }
     } catch (_) {
       // ignore — command may not exist on older builds
     }
   })();
 
-  // Listen for open-file events from Rust (macOS Finder "Open With" while running)
-  listen<string>('open-file', async (event) => {
-    await openFileByPath(event.payload);
-  }).then(fn => { unlistenOpenFile = fn; });
+  function bindEvent<T>(
+    name: string,
+    handler: (event: { payload: T }) => Promise<void> | void,
+    assign: (fn: () => void) => void,
+  ) {
+    try {
+      listen<T>(name, safeAsync(`event:${name}`, handler)).then(assign).catch((e) => {
+        reportEventError(`listen:${name}`, e);
+      });
+    } catch (e) {
+      reportEventError(`listen:${name}`, e);
+    }
+  }
+
+  // Listen for open-file events from Rust (macOS Finder "Open With" while running).
+  // Goes through the cross-window router — may end up in a different window.
+  bindEvent<string>('open-file', async (event) => {
+    await routeSingleFileOpen(event.payload);
+  }, fn => { unlistenOpenFile = fn; });
+
+  // Router delivered this file *to this window*. Open it locally.
+  bindEvent<{ path: string; line: number | null; col: number | null }>(
+    'open-file-deliver',
+    async (event) => {
+      await openFileByPath(event.payload.path, event.payload.line ?? null);
+    },
+    fn => { unlistenOpenFileDeliver = fn; },
+  );
+
+  // Respond to bid requests from the router (in any window).
+  wireFileRoutingBids()
+    .then(fn => { unlistenFileRoutingBids = fn; })
+    .catch((e) => reportEventError('listen:file-open-bid-request', e));
 
   // Hot-path CLI invocations: a second `novelist ...` process forwarded its
-  // args via tauri-plugin-single-instance. Route folders to new windows and
-  // files to either this window (if in single-file mode) or a fresh window.
-  listen<CliOpenPayload>('cli-open', async (event) => {
-    await handleCliOpen(event.payload, openFileByPath);
-  }).then(fn => { unlistenCliOpen = fn; });
+  // args via tauri-plugin-single-instance. Folders spawn new windows; files
+  // go through the cross-window router.
+  bindEvent<CliOpenPayload>('cli-open', async (event) => {
+    await handleCliOpen(event.payload);
+  }, fn => { unlistenCliOpen = fn; });
 
-  listen<{ path: string }>('file-changed', async (event) => {
+  bindEvent<{ path: string }>('file-changed', async (event) => {
     const { path } = event.payload;
 
     // Refresh tab content if a currently-open file changed on disk.
@@ -126,11 +175,11 @@ export function wireAppEvents(ctx: AppEventContext): () => void {
     if (parent) {
       await projectStore.refreshFolder(parent);
     }
-  }).then(fn => { unlistenFileChanged = fn; });
+  }, fn => { unlistenFileChanged = fn; });
 
-  listen<{ path: string }>('directory-changed', async (event) => {
+  bindEvent<{ path: string }>('directory-changed', async (event) => {
     await projectStore.refreshFolder(event.payload.path);
-  }).then(fn => { unlistenDirectoryChanged = fn; });
+  }, fn => { unlistenDirectoryChanged = fn; });
 
   const refreshInterval = window.setInterval(() => {
     if (projectStore.dirPath) {
@@ -140,29 +189,35 @@ export function wireAppEvents(ctx: AppEventContext): () => void {
 
   // Cross-window file rename broadcast: another window auto-renamed a file we
   // may have open. Update our tab paths and refresh the affected sidebar folder.
-  listen<{ old_path: string; new_path: string }>('file-renamed', (event) => {
+  bindEvent<{ old_path: string; new_path: string }>('file-renamed', (event) => {
     const { old_path, new_path } = event.payload;
     tabsStore.updatePath(old_path, new_path);
     const parent = pathDirname(new_path);
     if (parent) {
       projectStore.refreshFolder(parent).catch(() => {});
     }
-  }).then(fn => { unlistenFileRenamed = fn; });
+  }, fn => { unlistenFileRenamed = fn; });
 
   // Backend background cleanup of recent projects completed — refresh our
   // in-memory list. The event payload is the filtered list.
-  listen<RecentProject[]>('recent-projects-updated', (event) => {
+  bindEvent<RecentProject[]>('recent-projects-updated', (event) => {
     ctx.onRecentProjectsUpdated(event.payload);
-  }).then(fn => { unlistenRecentProjectsUpdated = fn; });
+  }, fn => { unlistenRecentProjectsUpdated = fn; });
 
   // Drag-and-drop: open text files dropped onto the window
-  getCurrentWindow().onDragDropEvent(async (event) => {
-    if (event.payload.type === 'drop') {
-      for (const filePath of event.payload.paths) {
-        await openFileByPath(filePath);
+  try {
+    getCurrentWindow().onDragDropEvent(safeAsync('drag-drop', async (event) => {
+      if (event.payload.type === 'drop') {
+        for (const filePath of event.payload.paths) {
+          await routeSingleFileOpen(filePath);
+        }
       }
-    }
-  }).then(fn => { unlistenDragDrop = fn; });
+    })).then(fn => { unlistenDragDrop = fn; }).catch((e) => {
+      reportEventError('drag-drop-listener', e);
+    });
+  } catch (e) {
+    reportEventError('drag-drop-listener', e);
+  }
 
   // Listen for goto-line events from ProjectSearch
   const handleGotoLine = (e: Event) => {
@@ -176,6 +231,8 @@ export function wireAppEvents(ctx: AppEventContext): () => void {
     unlistenDirectoryChanged?.();
     unlistenDragDrop?.();
     unlistenOpenFile?.();
+    unlistenOpenFileDeliver?.();
+    unlistenFileRoutingBids?.();
     unlistenFileRenamed?.();
     unlistenRecentProjectsUpdated?.();
     unlistenCliOpen?.();

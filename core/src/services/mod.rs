@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod file_routing;
 pub mod file_watcher;
 pub mod image_host;
 pub mod pandoc;

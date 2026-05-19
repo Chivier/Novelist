@@ -4,19 +4,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * [contract] services/cli-open — routing for the `cli-open` event from
  * tauri-plugin-single-instance.
  *
- * Rules under test (mirrors `cli-and-windows.md`):
+ * Rules under test (mirrors `cli-and-windows.md` after the 2026-05-19
+ * single-file-open-routing refactor):
  *   1. Folders always spawn a new WebviewWindow with `#project=…` hash.
- *   2. Files reuse the current window IFF projectStore.isOpen===false AND
- *      `force_new_window===false`. Otherwise spawn a new window with
- *      `#file=…&line=…&col=…`.
+ *   2. Files always call `routeSingleFileOpen`, forwarding `force_new_window`.
+ *      The cross-window router (mocked here) decides where the file lands.
  *   3. consumeWindowSeed parses the URL hash and dispatches at most one
  *      project + one file, then clears the hash.
  */
 
 const { h } = vi.hoisted(() => {
-  const projectState = {
-    isOpen: false,
-  };
   const ctorCalls: Array<{ label: string; opts: Record<string, unknown> }> = [];
   class FakeWebviewWindow {
     constructor(label: string, opts: Record<string, unknown>) {
@@ -24,13 +21,21 @@ const { h } = vi.hoisted(() => {
     }
     once(_evt: string, _cb: (e: unknown) => void) { /* no-op */ }
   }
-  return { h: { projectState, ctorCalls, FakeWebviewWindow } };
+  const routeCalls: Array<[string, number | null, number | null, boolean]> = [];
+  const routeSingleFileOpen = (
+    path: string,
+    line: number | null = null,
+    col: number | null = null,
+    forceNew = false,
+  ): Promise<void> => {
+    routeCalls.push([path, line, col, forceNew]);
+    return Promise.resolve();
+  };
+  return { h: { ctorCalls, FakeWebviewWindow, routeCalls, routeSingleFileOpen } };
 });
 
-vi.mock('$lib/stores/project.svelte', () => ({
-  projectStore: {
-    get isOpen() { return h.projectState.isOpen; },
-  },
+vi.mock('$lib/services/file-route', () => ({
+  routeSingleFileOpen: h.routeSingleFileOpen,
 }));
 
 vi.mock('@tauri-apps/api/webviewWindow', () => ({
@@ -39,7 +44,7 @@ vi.mock('@tauri-apps/api/webviewWindow', () => ({
 
 beforeEach(() => {
   h.ctorCalls.length = 0;
-  h.projectState.isOpen = false;
+  h.routeCalls.length = 0;
 });
 
 import { handleCliOpen, consumeWindowSeed, openProjectInThisWindow, openFileInNewWindow } from '$lib/services/cli-open';
@@ -63,11 +68,7 @@ function lastWindowHash(): string | null {
 
 describe('handleCliOpen — folder routing', () => {
   it('spawns one window per folder, encoding the project path in the URL hash', async () => {
-    const opener = vi.fn(async () => true);
-    await handleCliOpen(
-      payload({ folders: ['/work/novel-a', '/work/novel-b'] }),
-      opener,
-    );
+    await handleCliOpen(payload({ folders: ['/work/novel-a', '/work/novel-b'] }));
     expect(h.ctorCalls).toHaveLength(2);
     const hashes = h.ctorCalls.map(c => {
       const url = String(c.opts.url);
@@ -75,107 +76,52 @@ describe('handleCliOpen — folder routing', () => {
     });
     expect(hashes[0]).toContain('project=%2Fwork%2Fnovel-a');
     expect(hashes[1]).toContain('project=%2Fwork%2Fnovel-b');
-    // Folders never go through the in-window opener.
-    expect(opener).not.toHaveBeenCalled();
-  });
-
-  it('spawns folder windows even when no project is currently open', async () => {
-    h.projectState.isOpen = false;
-    await handleCliOpen(payload({ folders: ['/p'] }), vi.fn());
-    expect(h.ctorCalls).toHaveLength(1);
+    // Folders never go through the file router.
+    expect(h.routeCalls).toHaveLength(0);
   });
 
   it('spawns folder windows even with force_new_window=false (folders ignore the flag)', async () => {
-    await handleCliOpen(
-      payload({ folders: ['/p'], force_new_window: false }),
-      vi.fn(),
-    );
+    await handleCliOpen(payload({ folders: ['/p'], force_new_window: false }));
     expect(h.ctorCalls).toHaveLength(1);
   });
 });
 
 describe('handleCliOpen — file routing', () => {
-  it('reuses this window for a file when no project is open and -n was not passed', async () => {
-    h.projectState.isOpen = false;
-    const opener = vi.fn(async () => true);
+  it('forwards every file to the cross-window router with the right args', async () => {
     await handleCliOpen(
-      payload({ files: [{ path: '/x/note.md', line: null, col: null }] }),
-      opener,
+      payload({
+        files: [
+          { path: '/a.md', line: null, col: null },
+          { path: '/b.md', line: 12, col: 3 },
+        ],
+      }),
     );
-    expect(opener).toHaveBeenCalledWith('/x/note.md', null);
+    expect(h.routeCalls).toEqual([
+      ['/a.md', null, null, false],
+      ['/b.md', 12, 3, false],
+    ]);
     expect(h.ctorCalls).toHaveLength(0);
   });
 
-  it('spawns a new window for a file when a project IS open (any file would pollute project view)', async () => {
-    h.projectState.isOpen = true;
-    const opener = vi.fn(async () => true);
-    await handleCliOpen(
-      payload({ files: [{ path: '/x/note.md', line: 12, col: 3 }] }),
-      opener,
-    );
-    expect(opener).not.toHaveBeenCalled();
-    expect(h.ctorCalls).toHaveLength(1);
-    const hash = lastWindowHash() ?? '';
-    expect(hash).toContain('file=%2Fx%2Fnote.md');
-    expect(hash).toContain('line=12');
-    expect(hash).toContain('col=3');
-  });
-
-  it('spawns a new window for a file when force_new_window=true, even if no project is open', async () => {
-    h.projectState.isOpen = false;
-    const opener = vi.fn(async () => true);
+  it('forwards force_new_window=true so the router skips the bid round', async () => {
     await handleCliOpen(
       payload({
         files: [{ path: '/x/note.md', line: null, col: null }],
         force_new_window: true,
       }),
-      opener,
     );
-    expect(opener).not.toHaveBeenCalled();
-    expect(h.ctorCalls).toHaveLength(1);
+    expect(h.routeCalls).toEqual([['/x/note.md', null, null, true]]);
   });
 
-  it('falls back to a new window if the in-window opener returns false', async () => {
-    h.projectState.isOpen = false;
-    const opener = vi.fn(async () => false); // e.g. file unreadable
-    await handleCliOpen(
-      payload({ files: [{ path: '/x/note.md', line: null, col: null }] }),
-      opener,
-    );
-    expect(opener).toHaveBeenCalled();
-    expect(h.ctorCalls).toHaveLength(1);
-  });
-
-  it('routes multiple files independently in order', async () => {
-    h.projectState.isOpen = false;
-    const opener = vi.fn(async () => true);
-    await handleCliOpen(
-      payload({
-        files: [
-          { path: '/a.md', line: null, col: null },
-          { path: '/b.md', line: 5, col: null },
-        ],
-      }),
-      opener,
-    );
-    expect(opener).toHaveBeenCalledTimes(2);
-    expect(opener).toHaveBeenNthCalledWith(1, '/a.md', null);
-    expect(opener).toHaveBeenNthCalledWith(2, '/b.md', 5);
-    expect(h.ctorCalls).toHaveLength(0);
-  });
-
-  it('combined: folder + file with project open → folder window + file window', async () => {
-    h.projectState.isOpen = true;
-    const opener = vi.fn(async () => true);
+  it('combined: folder + file → folder window + file routed', async () => {
     await handleCliOpen(
       payload({
         folders: ['/proj'],
         files: [{ path: '/x/note.md', line: null, col: null }],
       }),
-      opener,
     );
-    expect(opener).not.toHaveBeenCalled();
-    expect(h.ctorCalls).toHaveLength(2);
+    expect(h.ctorCalls).toHaveLength(1); // folder
+    expect(h.routeCalls).toEqual([['/x/note.md', null, null, false]]);
   });
 });
 

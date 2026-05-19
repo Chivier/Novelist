@@ -134,6 +134,8 @@ export const commands = {
 	importTemplateZip: (zipPath: string) => typedError<TemplateInfo, string>(__TAURI_INVOKE("import_template_zip", { zipPath })),
 	getPendingOpenFiles: () => __TAURI_INVOKE<PendingFile[]>("get_pending_open_files"),
 	getPendingOpenProjects: () => __TAURI_INVOKE<string[]>("get_pending_open_projects"),
+	routeSingleFileOpenCmd: (sourceLabel: string | null, path: string, line: number | null, col: number | null, forceNew: boolean) => __TAURI_INVOKE<RouteResult>("route_single_file_open_cmd", { sourceLabel, path, line, col, forceNew }),
+	submitFileOpenBid: (bidId: number, windowLabel: string, canClaim: boolean, hasProject: boolean) => typedError<null, string>(__TAURI_INVOKE("submit_file_open_bid", { bidId, windowLabel, canClaim, hasProject })),
 	cliShimStatus: () => typedError<CliShimStatus, string>(__TAURI_INVOKE("cli_shim_status")),
 	installCliShim: () => typedError<CliShimStatus, string>(__TAURI_INVOKE("install_cli_shim")),
 	/**
@@ -210,6 +212,10 @@ export type CliOpenPayload = {
 	files: PendingFile[],
 	folders: string[],
 	force_new_window: boolean,
+};
+
+export type RouteResult = {
+	winner_label: string | null,
 };
 
 export type CliShimStatus = {

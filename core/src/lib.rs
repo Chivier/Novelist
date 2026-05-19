@@ -65,6 +65,7 @@ use commands::template_files::{
 };
 use commands::window::set_window_appearance;
 use serde::{Deserialize, Serialize};
+use services::file_routing::{route_single_file_open_cmd, submit_file_open_bid, FileRoutingState};
 use services::file_watcher::{
     register_open_file, register_write_ignore, start_file_watcher, stop_file_watcher,
     unregister_open_file, FileWatcherState,
@@ -325,6 +326,8 @@ pub fn run() {
         create_file_with_body,
         get_pending_open_files,
         get_pending_open_projects,
+        route_single_file_open_cmd,
+        submit_file_open_bid,
         cli_shim_status,
         install_cli_shim,
         read_image_data_uri,
@@ -447,6 +450,8 @@ pub fn run() {
         create_file_with_body,
         get_pending_open_files,
         get_pending_open_projects,
+        route_single_file_open_cmd,
+        submit_file_open_bid,
         cli_shim_status,
         install_cli_shim,
         read_image_data_uri,
@@ -563,6 +568,7 @@ pub fn run() {
         .manage(EncodingState::new())
         .manage(PendingOpenFiles::new())
         .manage(PendingOpenProjects::new())
+        .manage(FileRoutingState::new())
         .manage(AiBridgeState::new())
         .manage(ClaudeBridgeState::new())
         .invoke_handler(builder.invoke_handler())

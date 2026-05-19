@@ -1,14 +1,12 @@
 /**
  * Routing logic for the `cli-open` event emitted by the Rust single-instance
- * callback. Decides per-target whether to open in the current window or
- * spawn a new one.
+ * callback.
  *
- * Rules:
- * - **Folders** always get their own new window.
- * - **Files** open in this window IFF this window is currently in
- *   single-file mode (no project open) AND the user did not pass
- *   `-n / --new-window`. Otherwise a new window is spawned with the file
- *   queued in its URL hash.
+ * - **Folders** always spawn new windows.
+ * - **Files** go through the cross-window router (`routeSingleFileOpen`),
+ *   which either picks an existing window that owns the file or spawns a
+ *   fresh single-file window. The `-n / --new-window` flag is forwarded so
+ *   the router skips the bid round and spawns immediately.
  *
  * URL-hash payload format (read by App.svelte mount in the new window):
  *   #project=<encoded-path>
@@ -18,7 +16,7 @@
 
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { CliOpenPayload } from '$lib/ipc/commands';
-import { projectStore } from '$lib/stores/project.svelte';
+import { routeSingleFileOpen } from '$lib/services/file-route';
 
 export type FileOpener = (filePath: string, line: number | null) => Promise<boolean>;
 
@@ -80,34 +78,16 @@ async function spawnWindow(seed: WindowSeed): Promise<void> {
 /**
  * Apply the routing rules above. Called from the `cli-open` event listener.
  *
- * `openFileHere` is injected so this module stays free of imports from the
- * editor/tab stores (avoids circular deps with app-events composable).
+ * Folders spawn new windows directly. Files are routed by the cross-window
+ * router, which talks to Rust + every existing window before deciding.
  */
-export async function handleCliOpen(
-  payload: CliOpenPayload,
-  openFileHere: FileOpener,
-): Promise<void> {
-  // Folders always spawn new windows.
+export async function handleCliOpen(payload: CliOpenPayload): Promise<void> {
   for (const folder of payload.folders) {
     await openProjectInThisWindow(folder, /*spawnNew*/ true);
   }
-
-  // Files: route based on this window's mode and the -n flag.
-  const canReuseHere = !payload.force_new_window && isSingleFileMode();
   for (const f of payload.files) {
-    if (canReuseHere) {
-      const ok = await openFileHere(f.path, f.line ?? null);
-      if (ok) continue;
-    }
-    await openFileInNewWindow(f.path, f.line ?? null, f.col ?? null);
+    await routeSingleFileOpen(f.path, f.line ?? null, f.col ?? null, payload.force_new_window);
   }
-}
-
-function isSingleFileMode(): boolean {
-  // single-file mode = no project open. The store has `isOpen` for projects;
-  // when false, we either have nothing open at all OR are in scratch/single-
-  // file mode. Either way, accepting another file here is fine.
-  return !projectStore.isOpen;
 }
 
 /**
