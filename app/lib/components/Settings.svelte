@@ -16,6 +16,7 @@
   import SettingsImageHostsPanel from './SettingsImageHostsPanel.svelte';
   import SettingsPublishPanel from './SettingsPublishPanel.svelte';
   import MacroHint from './MacroHint.svelte';
+  import PortableModeBanner from '$lib/components/PortableModeBanner.svelte';
   import {
     SETTINGS_SEARCH_INDEX,
     filterSettingsIndex,
@@ -603,11 +604,13 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="rounded-lg shadow-xl w-full flex"
+    class="rounded-lg shadow-xl w-full flex flex-col overflow-hidden"
     data-testid="settings-dialog"
     style="max-width: 680px; background: var(--novelist-bg); color: var(--novelist-text); border: 1px solid var(--novelist-border); height: 520px;"
     onclick={(e) => e.stopPropagation()}
   >
+    <PortableModeBanner />
+    <div class="flex flex-1 min-h-0">
     <!-- Left nav -->
     <div class="shrink-0 flex flex-col py-3" style="width: 160px; border-right: 1px solid var(--novelist-border); background: var(--novelist-bg-secondary); border-radius: 8px 0 0 8px;">
       <div class="px-3 mb-2">
@@ -1384,6 +1387,7 @@
           <div class="text-xs" style="color: var(--novelist-text-secondary);">{t('settings.plugins.section.loading')}</div>
         {/if}
       {/if}
+    </div>
     </div>
   </div>
 </div>
