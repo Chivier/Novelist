@@ -9,9 +9,13 @@ export async function getPortableInfo(): Promise<PortableInfo> {
   if (cached) return cached;
   if (inflight) return inflight;
   inflight = (async () => {
-    const info = await commands.isPortableMode();
-    cached = { enabled: info.enabled, dataRoot: info.data_root };
-    return cached;
+    try {
+      const info = await commands.isPortableMode();
+      cached = { enabled: info.enabled, dataRoot: info.data_root };
+      return cached;
+    } finally {
+      inflight = null;
+    }
   })();
   return inflight;
 }

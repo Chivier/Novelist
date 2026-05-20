@@ -11,9 +11,11 @@
 
 {#if info?.enabled}
   <div
-    class="bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-900"
+    role="status"
+    class="px-4 py-2 text-sm"
+    style="background: var(--novelist-bg-secondary); color: var(--novelist-text); border-bottom: 1px solid var(--novelist-border);"
     data-testid="portable-mode-banner"
   >
-    便携模式 — 数据存储于 <code class="font-mono">{info.dataRoot}</code>
+    便携模式 — 数据存储于 <code class="font-mono" style="color: var(--novelist-text-secondary);">{info.dataRoot}</code>
   </div>
 {/if}
