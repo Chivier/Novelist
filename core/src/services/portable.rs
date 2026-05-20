@@ -8,7 +8,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct PortableConfig {
     pub enabled: bool,
     pub data_root: PathBuf,
@@ -26,7 +26,9 @@ pub fn init() {
         .and_then(|p| p.parent().map(Path::to_path_buf))
         .unwrap_or_else(|| PathBuf::from("."));
     let cfg = detect_with_exe_dir(&exe_dir);
-    let _ = CONFIG.set(cfg);
+    CONFIG
+        .set(cfg)
+        .expect("portable::init() called more than once");
 }
 
 /// Test seam: detect using a caller-provided exe directory.
@@ -36,7 +38,7 @@ pub fn detect_with_exe_dir(exe_dir: &Path) -> PortableConfig {
         return PortableConfig {
             enabled: false,
             data_root: dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("~"))
+                .expect("Cannot determine home directory for Novelist user data")
                 .join(".novelist"),
         };
     }
@@ -51,16 +53,18 @@ pub fn detect_with_exe_dir(exe_dir: &Path) -> PortableConfig {
         )
     });
 
-    let probe = data_root.join(".write-probe");
-    std::fs::write(&probe, b"ok").unwrap_or_else(|e| {
-        panic!(
+    match tempfile::NamedTempFile::new_in(&data_root) {
+        Ok(probe) => {
+            // probe auto-deletes on drop
+            drop(probe);
+        }
+        Err(e) => panic!(
             "Portable mode: data directory at {} is not writable: {}. \
              Move Novelist out of Program Files or any read-only location.",
             data_root.display(),
             e
-        )
-    });
-    let _ = std::fs::remove_file(&probe);
+        ),
+    }
 
     PortableConfig {
         enabled: true,
@@ -74,8 +78,8 @@ pub fn config() -> &'static PortableConfig {
         .expect("portable::init() must be called before config()")
 }
 
-pub fn novelist_home() -> PathBuf {
-    config().data_root.clone()
+pub fn novelist_home() -> &'static Path {
+    &config().data_root
 }
 
 pub fn is_portable() -> bool {
