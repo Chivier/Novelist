@@ -584,6 +584,27 @@ pub fn run() {
                 since_start_ms = t0.elapsed().as_secs_f64() * 1000.0,
                 "backend phase"
             );
+
+            if crate::services::portable::is_portable() {
+                let plugins_dir = crate::services::portable::novelist_home().join("plugins");
+                if let Err(e) = std::fs::create_dir_all(&plugins_dir) {
+                    tracing::warn!(
+                        target: "novelist::portable",
+                        ?plugins_dir,
+                        error = %e,
+                        "failed to create portable plugins directory"
+                    );
+                }
+                if let Err(e) = app.asset_protocol_scope().allow_directory(&plugins_dir, true) {
+                    tracing::warn!(
+                        target: "novelist::portable",
+                        ?plugins_dir,
+                        error = %e,
+                        "failed to extend asset protocol scope for portable plugins"
+                    );
+                }
+            }
+
             builder.mount_events(app);
 
             // macOS chrome tweaks — run after the main window exists.
