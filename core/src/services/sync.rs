@@ -47,11 +47,24 @@ pub struct SyncState {
 
 /// Get the sync data directory for a project: ~/.novelist/sync/{project-hash}/
 fn sync_dir_for_project(project_dir: &str) -> Result<PathBuf, AppError> {
-    let home =
-        dirs::home_dir().ok_or_else(|| AppError::Custom("Cannot find home directory".into()))?;
     let hash = blake3::hash(project_dir.as_bytes()).to_hex();
-    let dir = home.join(".novelist").join("sync").join(&hash[..16]);
+    let dir = data_root().join("sync").join(&hash[..16]);
     Ok(dir)
+}
+
+fn data_root() -> PathBuf {
+    // `NOVELIST_DATA_DIR` is a test seam (used by unit tests that need
+    // per-test isolation and can't rely on `portable::init()` having run).
+    // Production code goes through `portable::novelist_home`.
+    #[cfg(test)]
+    {
+        if let Ok(p) = std::env::var("NOVELIST_DATA_DIR") {
+            if !p.is_empty() {
+                return PathBuf::from(p);
+            }
+        }
+    }
+    crate::services::portable::novelist_home().to_path_buf()
 }
 
 /// Read sync config from disk
@@ -513,6 +526,25 @@ fn chrono_now_iso() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    // Tests that touch sync_dir_for_project mutate `NOVELIST_DATA_DIR`
+    // (process-global env). Serialize so they don't race.
+    static DATA_DIR_MUTEX: Mutex<()> = Mutex::new(());
+
+    fn set_data_dir(p: &std::path::Path) -> Option<std::ffi::OsString> {
+        let old = std::env::var_os("NOVELIST_DATA_DIR");
+        std::env::set_var("NOVELIST_DATA_DIR", p);
+        old
+    }
+
+    fn restore_data_dir(old: Option<std::ffi::OsString>) {
+        if let Some(v) = old {
+            std::env::set_var("NOVELIST_DATA_DIR", v);
+        } else {
+            std::env::remove_var("NOVELIST_DATA_DIR");
+        }
+    }
 
     #[test]
     fn test_sync_config_default() {
@@ -723,6 +755,10 @@ mod tests {
 
     #[test]
     fn test_sync_config_save_and_read() {
+        let _guard = DATA_DIR_MUTEX.lock().unwrap();
+        let data_tmp = tempfile::TempDir::new().unwrap();
+        let old = set_data_dir(data_tmp.path());
+
         let dir = tempfile::TempDir::new().unwrap();
         let project = dir.path().to_string_lossy().to_string();
 
@@ -740,19 +776,31 @@ mod tests {
         assert_eq!(loaded.webdav_url, "https://example.com/dav");
         assert_eq!(loaded.username, "testuser");
         assert_eq!(loaded.interval_minutes, 10);
+
+        restore_data_dir(old);
     }
 
     #[test]
     fn test_read_sync_config_missing() {
+        let _guard = DATA_DIR_MUTEX.lock().unwrap();
+        let data_tmp = tempfile::TempDir::new().unwrap();
+        let old = set_data_dir(data_tmp.path());
+
         let dir = tempfile::TempDir::new().unwrap();
         let project = dir.path().to_string_lossy().to_string();
         let config = read_sync_config(&project).unwrap();
         assert!(!config.enabled);
         assert!(config.webdav_url.is_empty());
+
+        restore_data_dir(old);
     }
 
     #[test]
     fn test_sync_state_roundtrip() {
+        let _guard = DATA_DIR_MUTEX.lock().unwrap();
+        let data_tmp = tempfile::TempDir::new().unwrap();
+        let old = set_data_dir(data_tmp.path());
+
         let dir = tempfile::TempDir::new().unwrap();
         let project = dir.path().to_string_lossy().to_string();
 
@@ -774,5 +822,7 @@ mod tests {
             loaded.file_mod_times.get("chapter1.md"),
             Some(&1704067200u64)
         );
+
+        restore_data_dir(old);
     }
 }
