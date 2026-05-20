@@ -20,10 +20,7 @@ pub struct RecentProject {
 }
 
 fn recent_projects_path() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("~"))
-        .join(".novelist")
-        .join("recent-projects.json")
+    crate::services::portable::novelist_home().join("recent-projects.json")
 }
 
 /// Canonical sort used by `get_recent_projects`:
