@@ -17,10 +17,18 @@ use crate::models::settings::{
 use std::path::{Path, PathBuf};
 
 fn global_settings_path() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("~"))
-        .join(".novelist")
-        .join("settings.json")
+    // `NOVELIST_DATA_DIR` is a test seam (used by unit tests that need
+    // per-test isolation and can't rely on `portable::init()` having run).
+    // Production code goes through `portable::novelist_home`.
+    #[cfg(test)]
+    {
+        if let Ok(p) = std::env::var("NOVELIST_DATA_DIR") {
+            if !p.is_empty() {
+                return PathBuf::from(p).join("settings.json");
+            }
+        }
+    }
+    crate::services::portable::novelist_home().join("settings.json")
 }
 
 pub(crate) async fn read_global_settings() -> GlobalSettings {
@@ -159,13 +167,32 @@ pub async fn write_project_settings(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
     use tempfile::TempDir;
+
+    // Tests that touch the global settings path mutate `NOVELIST_DATA_DIR`
+    // (process-global env). Serialize through this mutex so they don't race.
+    static DATA_DIR_MUTEX: Mutex<()> = Mutex::new(());
 
     fn write_minimal_project(dir: &TempDir, overlay_toml: &str) {
         let novelist_dir = dir.path().join(".novelist");
         std::fs::create_dir(&novelist_dir).unwrap();
         let content = format!("[project]\nname = \"T\"\n\n{overlay_toml}");
         std::fs::write(novelist_dir.join("project.toml"), content).unwrap();
+    }
+
+    fn set_data_dir(p: &Path) -> Option<std::ffi::OsString> {
+        let old = std::env::var_os("NOVELIST_DATA_DIR");
+        std::env::set_var("NOVELIST_DATA_DIR", p);
+        old
+    }
+
+    fn restore_data_dir(old: Option<std::ffi::OsString>) {
+        if let Some(v) = old {
+            std::env::set_var("NOVELIST_DATA_DIR", v);
+        } else {
+            std::env::remove_var("NOVELIST_DATA_DIR");
+        }
     }
 
     #[tokio::test]
@@ -204,6 +231,10 @@ template = "Chapter {N}"
 
     #[tokio::test]
     async fn get_effective_settings_merges_global_with_project_overlay() {
+        let _guard = DATA_DIR_MUTEX.lock().unwrap();
+        let global_tmp = TempDir::new().unwrap();
+        let old = set_data_dir(global_tmp.path());
+
         let dir = TempDir::new().unwrap();
         write_minimal_project(
             &dir,
@@ -219,12 +250,20 @@ show_hidden_files = true
             .unwrap();
         assert!(eff.view.show_hidden_files);
         assert!(eff.is_project_scoped);
+
+        restore_data_dir(old);
     }
 
     #[tokio::test]
     async fn get_effective_settings_scratch_mode_is_not_project_scoped() {
+        let _guard = DATA_DIR_MUTEX.lock().unwrap();
+        let global_tmp = TempDir::new().unwrap();
+        let old = set_data_dir(global_tmp.path());
+
         let eff = get_effective_settings(None).await.unwrap();
         assert!(!eff.is_project_scoped);
+
+        restore_data_dir(old);
     }
 
     #[tokio::test]
