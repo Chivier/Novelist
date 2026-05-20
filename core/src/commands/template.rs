@@ -21,9 +21,7 @@ fn templates_dir() -> Result<PathBuf, AppError> {
             return Ok(PathBuf::from(p));
         }
     }
-    let home = dirs::home_dir()
-        .ok_or_else(|| AppError::Custom("Cannot determine home directory".into()))?;
-    Ok(home.join(".novelist").join("templates"))
+    Ok(crate::services::portable::novelist_home().join("templates"))
 }
 
 /// Built-in templates that are always available (generated in-memory, not on disk).
