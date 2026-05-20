@@ -238,9 +238,12 @@ fn handle_early_exit_flags() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    crate::services::portable::init();
-
+    // Early-exit flags (--version, --help) must work even if the portable
+    // data directory is unwritable. Run them before portable::init() so a
+    // read-only USB stick doesn't crash CLI introspection.
     handle_early_exit_flags();
+
+    crate::services::portable::init();
 
     let t0 = std::time::Instant::now();
     tracing_subscriber::fmt()

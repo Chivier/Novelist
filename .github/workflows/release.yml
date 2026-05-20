@@ -131,7 +131,7 @@ jobs:
           $outDir = "$rel/bundle/zip"
           New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 
-          # ---- standard zip (APPDATA mode) ----
+          # ---- standard zip (user-profile mode: data in %USERPROFILE%\.novelist) ----
           $std = "Novelist_${ver}_x64_windows"
           if (Test-Path $std) { Remove-Item $std -Recurse -Force }
           New-Item -ItemType Directory -Path $std | Out-Null
