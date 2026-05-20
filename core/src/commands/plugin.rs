@@ -11,11 +11,11 @@ use tauri::{Manager, State};
 const BUILTIN_PLUGIN_IDS: &[&str] = &["canvas", "mindmap", "kanban"];
 
 fn novelist_dir() -> PathBuf {
-    // `NOVELIST_DATA_DIR` is a test seam (used by unit tests that need
+    // `NOVELIST_PLUGIN_DATA_DIR` is a test seam (used by unit tests that need
     // per-test isolation). Production code goes through `portable::novelist_home`.
     #[cfg(test)]
     {
-        if let Ok(p) = std::env::var("NOVELIST_DATA_DIR") {
+        if let Ok(p) = std::env::var("NOVELIST_PLUGIN_DATA_DIR") {
             if !p.is_empty() {
                 return PathBuf::from(p);
             }
@@ -515,7 +515,7 @@ mod tests {
     use std::sync::Mutex;
     use tempfile::TempDir;
 
-    // Tests that mutate NOVELIST_DATA_DIR must not run concurrently
+    // Tests that mutate NOVELIST_PLUGIN_DATA_DIR must not run concurrently
     // (env is process-global). DATA_DIR_MUTEX is intentionally held across
     // .await so the entire test body runs serialized — tokio may move the
     // task across threads, but std::Mutex is Send so this is sound in
@@ -523,16 +523,16 @@ mod tests {
     static DATA_DIR_MUTEX: Mutex<()> = Mutex::new(());
 
     fn set_data_dir(p: &Path) -> Option<std::ffi::OsString> {
-        let old = std::env::var_os("NOVELIST_DATA_DIR");
-        std::env::set_var("NOVELIST_DATA_DIR", p);
+        let old = std::env::var_os("NOVELIST_PLUGIN_DATA_DIR");
+        std::env::set_var("NOVELIST_PLUGIN_DATA_DIR", p);
         old
     }
 
     fn restore_data_dir(old: Option<std::ffi::OsString>) {
         if let Some(v) = old {
-            std::env::set_var("NOVELIST_DATA_DIR", v);
+            std::env::set_var("NOVELIST_PLUGIN_DATA_DIR", v);
         } else {
-            std::env::remove_var("NOVELIST_DATA_DIR");
+            std::env::remove_var("NOVELIST_PLUGIN_DATA_DIR");
         }
     }
 

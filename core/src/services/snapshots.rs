@@ -22,12 +22,12 @@ pub fn snapshots_dir(project_dir: &str) -> PathBuf {
 }
 
 fn data_root() -> PathBuf {
-    // `NOVELIST_DATA_DIR` is a test seam (used by unit tests that need
+    // `NOVELIST_SNAPSHOTS_DATA_DIR` is a test seam (used by unit tests that need
     // per-test isolation and can't rely on `portable::init()` having run).
     // Production code goes through `portable::novelist_home`.
     #[cfg(test)]
     {
-        if let Ok(p) = std::env::var("NOVELIST_DATA_DIR") {
+        if let Ok(p) = std::env::var("NOVELIST_SNAPSHOTS_DATA_DIR") {
             if !p.is_empty() {
                 return PathBuf::from(p);
             }
@@ -192,21 +192,21 @@ mod tests {
     use std::sync::Mutex;
     use tempfile::TempDir;
 
-    // Tests that touch snapshots_dir mutate `NOVELIST_DATA_DIR`
+    // Tests that touch snapshots_dir mutate `NOVELIST_SNAPSHOTS_DATA_DIR`
     // (process-global env). Serialize so they don't race.
     static DATA_DIR_MUTEX: Mutex<()> = Mutex::new(());
 
     fn set_data_dir(p: &std::path::Path) -> Option<std::ffi::OsString> {
-        let old = std::env::var_os("NOVELIST_DATA_DIR");
-        std::env::set_var("NOVELIST_DATA_DIR", p);
+        let old = std::env::var_os("NOVELIST_SNAPSHOTS_DATA_DIR");
+        std::env::set_var("NOVELIST_SNAPSHOTS_DATA_DIR", p);
         old
     }
 
     fn restore_data_dir(old: Option<std::ffi::OsString>) {
         if let Some(v) = old {
-            std::env::set_var("NOVELIST_DATA_DIR", v);
+            std::env::set_var("NOVELIST_SNAPSHOTS_DATA_DIR", v);
         } else {
-            std::env::remove_var("NOVELIST_DATA_DIR");
+            std::env::remove_var("NOVELIST_SNAPSHOTS_DATA_DIR");
         }
     }
 
