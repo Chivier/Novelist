@@ -270,17 +270,22 @@ export function registerAppCommands(ctx: AppCommandContext) {
     alert(result);
   }});
   // Portable builds skip the updater plugin on the Rust side (Task 2),
-  // so the manual "Check for updates" affordance would only error out.
-  // Register it asynchronously, but bail in portable mode. The native
-  // menu item dispatches through `commandRegistry.execute(id)` which
-  // silently no-ops when no handler is registered.
-  void getPortableInfo().then((info) => {
-    if (info.enabled) return;
-    reg({ id: 'check-for-updates', labelKey: 'command.checkForUpdates', handler: async () => {
-      const { checkForUpdates } = await import('$lib/updater');
-      checkForUpdates(false);
-    }});
-  });
+  // so the manual "Check for updates" affordance is gated at click-time:
+  // the command is always registered (avoids palette/menu race), and the
+  // handler bails with a user-visible dialog when running in portable mode.
+  reg({ id: 'check-for-updates', labelKey: 'command.checkForUpdates', handler: async () => {
+    const info = await getPortableInfo();
+    if (info.enabled) {
+      const { message } = await import('@tauri-apps/plugin-dialog');
+      await message('Updates disabled in portable mode', {
+        title: 'Check for Updates',
+        kind: 'info',
+      });
+      return;
+    }
+    const { checkForUpdates } = await import('$lib/updater');
+    checkForUpdates(false);
+  }});
   reg({ id: 'install-cli-shim', labelKey: 'command.installCliShim', handler: async () => {
     const { runInstallCliShim } = await import('$lib/services/cli-shim');
     await runInstallCliShim(t);
