@@ -125,6 +125,7 @@ jobs:
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           $ver = "${{ github.ref_name }}" -replace '^v',''
           $rel = "core/target/release"
           $outDir = "$rel/bundle/zip"
