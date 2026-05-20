@@ -598,7 +598,10 @@ pub fn run() {
                         "failed to create portable plugins directory"
                     );
                 }
-                if let Err(e) = app.asset_protocol_scope().allow_directory(&plugins_dir, true) {
+                if let Err(e) = app
+                    .asset_protocol_scope()
+                    .allow_directory(&plugins_dir, true)
+                {
                     tracing::warn!(
                         target: "novelist::portable",
                         ?plugins_dir,

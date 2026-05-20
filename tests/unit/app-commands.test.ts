@@ -100,6 +100,10 @@ vi.mock('$lib/utils/markdown-copy', () => ({ markdownToHtml, markdownToPlainText
 vi.mock('$lib/utils/benchmark', () => ({ runBenchmark, runReleaseBenchmark }));
 vi.mock('$lib/utils/scroll-edit-test', () => ({ runScrollEditTest }));
 vi.mock('$lib/updater', () => ({ checkForUpdates }));
+vi.mock('$lib/services/portable', () => ({
+  getPortableInfo: async () => ({ enabled: false, dataRoot: '/home/test/.novelist' }),
+  portableInfoSync: () => null,
+}));
 
 import { registerAppCommands, type AppCommandContext } from '$lib/app-commands';
 
