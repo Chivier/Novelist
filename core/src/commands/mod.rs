@@ -9,6 +9,7 @@ pub mod file;
 pub mod image_host;
 pub mod menu;
 pub mod plugin;
+pub mod portable;
 pub mod project;
 pub mod publish;
 pub mod recent;

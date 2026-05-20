@@ -36,6 +36,7 @@ use commands::plugin::{
     get_plugin_commands, get_plugins_dir, invoke_plugin_command, list_plugins, load_plugin,
     reload_plugin, scaffold_plugin, set_plugin_document_state, set_plugin_enabled, unload_plugin,
 };
+use commands::portable::is_portable_mode;
 use commands::project::{detect_project, read_project_config};
 use commands::publish::{
     convert_markdown_to_html, get_publish_settings, list_publish_tags, publish_to_ghost,
@@ -297,6 +298,7 @@ pub fn run() {
         set_plugin_enabled,
         scaffold_plugin,
         get_plugins_dir,
+        is_portable_mode,
         rope_open,
         rope_get_lines,
         rope_apply_edit,
@@ -421,6 +423,7 @@ pub fn run() {
         set_plugin_enabled,
         scaffold_plugin,
         get_plugins_dir,
+        is_portable_mode,
         rope_open,
         rope_get_lines,
         rope_apply_edit,

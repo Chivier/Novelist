@@ -97,6 +97,8 @@ export const commands = {
 	scaffoldPlugin: (id: string, displayName: string | null) => typedError<string, string>(__TAURI_INVOKE("scaffold_plugin", { id, displayName })),
 	// Return the absolute path of ~/.novelist/plugins/, creating it if missing.
 	getPluginsDir: () => typedError<string, string>(__TAURI_INVOKE("get_plugins_dir")),
+	// Portable mode introspection — manually maintained until codegen pipeline is fixed.
+	isPortableMode: () => __TAURI_INVOKE<PortableModeInfo>("is_portable_mode"),
 	// Open a large file into a Rope. Returns metadata.
 	ropeOpen: (path: string) => typedError<RopeDocumentMeta, string>(__TAURI_INVOKE("rope_open", { path })),
 	/**
@@ -330,6 +332,11 @@ export type PluginUiConfig = {
 	width?: number | null,
 	label?: string | null,
 	file_extensions?: string[] | null,
+};
+
+export type PortableModeInfo = {
+	enabled: boolean,
+	data_root: string,
 };
 
 export type ProjectConfig = {
