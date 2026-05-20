@@ -94,11 +94,23 @@ fn stats_dir(project_dir: &str) -> PathBuf {
     let hash = blake3::hash(project_dir.as_bytes());
     let hex = hash.to_hex();
     let short = &hex[..16];
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".novelist")
-        .join("stats")
-        .join(short)
+    let base = data_root();
+    base.join("stats").join(short)
+}
+
+fn data_root() -> PathBuf {
+    // `NOVELIST_DATA_DIR` is a test seam (used by unit tests that need
+    // per-test isolation and can't rely on `portable::init()` having run).
+    // Production code goes through `portable::novelist_home`.
+    #[cfg(test)]
+    {
+        if let Ok(p) = std::env::var("NOVELIST_DATA_DIR") {
+            if !p.is_empty() {
+                return PathBuf::from(p);
+            }
+        }
+    }
+    crate::services::portable::novelist_home().to_path_buf()
 }
 
 fn stats_file(project_dir: &str) -> PathBuf {
@@ -300,20 +312,47 @@ pub async fn get_stats_overview(project_dir: &str) -> Result<WritingStatsOvervie
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
     use tempfile::TempDir;
+
+    // Tests that touch stats_dir mutate `NOVELIST_DATA_DIR` (process-global env).
+    // Serialize so they don't race.
+    static DATA_DIR_MUTEX: Mutex<()> = Mutex::new(());
+
+    fn set_data_dir(p: &std::path::Path) -> Option<std::ffi::OsString> {
+        let old = std::env::var_os("NOVELIST_DATA_DIR");
+        std::env::set_var("NOVELIST_DATA_DIR", p);
+        old
+    }
+
+    fn restore_data_dir(old: Option<std::ffi::OsString>) {
+        if let Some(v) = old {
+            std::env::set_var("NOVELIST_DATA_DIR", v);
+        } else {
+            std::env::remove_var("NOVELIST_DATA_DIR");
+        }
+    }
 
     #[test]
     fn test_stats_dir_deterministic() {
+        let _guard = DATA_DIR_MUTEX.lock().unwrap();
+        let tmp = TempDir::new().unwrap();
+        let old = set_data_dir(tmp.path());
         let d1 = stats_dir("/home/user/novel");
         let d2 = stats_dir("/home/user/novel");
         assert_eq!(d1, d2);
+        restore_data_dir(old);
     }
 
     #[test]
     fn test_stats_dir_different_for_different_projects() {
+        let _guard = DATA_DIR_MUTEX.lock().unwrap();
+        let tmp = TempDir::new().unwrap();
+        let old = set_data_dir(tmp.path());
         let d1 = stats_dir("/project-a");
         let d2 = stats_dir("/project-b");
         assert_ne!(d1, d2);
+        restore_data_dir(old);
     }
 
     #[test]
@@ -326,6 +365,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_record_and_read() {
+        let _guard = DATA_DIR_MUTEX.lock().unwrap();
+        let data_tmp = TempDir::new().unwrap();
+        let old = set_data_dir(data_tmp.path());
+
         let dir = TempDir::new().unwrap();
         let project = dir.path().to_string_lossy().to_string();
 
@@ -335,10 +378,16 @@ mod tests {
         let overview = get_stats_overview(&project).await.unwrap();
         assert_eq!(overview.today_words, 150);
         assert_eq!(overview.today_minutes, 8);
+
+        restore_data_dir(old);
     }
 
     #[tokio::test]
     async fn test_chapter_stats_reads_files() {
+        let _guard = DATA_DIR_MUTEX.lock().unwrap();
+        let data_tmp = TempDir::new().unwrap();
+        let old = set_data_dir(data_tmp.path());
+
         let dir = TempDir::new().unwrap();
         std::fs::write(dir.path().join("ch1.md"), "hello world foo").unwrap();
         std::fs::write(dir.path().join("ch2.md"), "你好世界").unwrap();
@@ -356,6 +405,8 @@ mod tests {
         // 3 (ch1) + 4 (ch2 CJK) + 2 (ch3) = 9
         assert_eq!(overview.total_words, 9);
         assert_eq!(overview.chapters.len(), 3);
+
+        restore_data_dir(old);
     }
 
     #[test]
