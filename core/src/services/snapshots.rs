@@ -13,13 +13,27 @@ pub struct SnapshotMeta {
     pub total_bytes: u64,
 }
 
-/// Returns `~/.novelist/snapshots/{blake3_hash_of_project_dir}/`
+/// Returns `<novelist_home>/snapshots/{blake3_hash_of_project_dir}/`,
+/// where `novelist_home` is `~/.novelist/` in standard mode or
+/// `<exe_dir>/data/` in portable mode.
 pub fn snapshots_dir(project_dir: &str) -> PathBuf {
     let hash = blake3::hash(project_dir.as_bytes()).to_hex();
-    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-    home.join(".novelist")
-        .join("snapshots")
-        .join(hash.to_string())
+    data_root().join("snapshots").join(hash.to_string())
+}
+
+fn data_root() -> PathBuf {
+    // `NOVELIST_DATA_DIR` is a test seam (used by unit tests that need
+    // per-test isolation and can't rely on `portable::init()` having run).
+    // Production code goes through `portable::novelist_home`.
+    #[cfg(test)]
+    {
+        if let Ok(p) = std::env::var("NOVELIST_DATA_DIR") {
+            if !p.is_empty() {
+                return PathBuf::from(p);
+            }
+        }
+    }
+    crate::services::portable::novelist_home().to_path_buf()
 }
 
 fn validate_snapshot_id(id: &str) -> Result<(), AppError> {
@@ -175,17 +189,44 @@ pub async fn delete_snapshot(project_dir: &str, snapshot_id: &str) -> Result<(),
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
     use tempfile::TempDir;
+
+    // Tests that touch snapshots_dir mutate `NOVELIST_DATA_DIR`
+    // (process-global env). Serialize so they don't race.
+    static DATA_DIR_MUTEX: Mutex<()> = Mutex::new(());
+
+    fn set_data_dir(p: &std::path::Path) -> Option<std::ffi::OsString> {
+        let old = std::env::var_os("NOVELIST_DATA_DIR");
+        std::env::set_var("NOVELIST_DATA_DIR", p);
+        old
+    }
+
+    fn restore_data_dir(old: Option<std::ffi::OsString>) {
+        if let Some(v) = old {
+            std::env::set_var("NOVELIST_DATA_DIR", v);
+        } else {
+            std::env::remove_var("NOVELIST_DATA_DIR");
+        }
+    }
 
     #[tokio::test]
     async fn test_snapshots_dir_is_deterministic() {
+        let _guard = DATA_DIR_MUTEX.lock().unwrap();
+        let tmp = TempDir::new().unwrap();
+        let old = set_data_dir(tmp.path());
         let d1 = snapshots_dir("/home/user/novel");
         let d2 = snapshots_dir("/home/user/novel");
         assert_eq!(d1, d2);
+        restore_data_dir(old);
     }
 
     #[tokio::test]
     async fn test_create_and_list_snapshot() {
+        let _guard = DATA_DIR_MUTEX.lock().unwrap();
+        let data_tmp = TempDir::new().unwrap();
+        let old = set_data_dir(data_tmp.path());
+
         let dir = TempDir::new().unwrap();
         let project = dir.path().to_string_lossy().to_string();
 
@@ -202,10 +243,16 @@ mod tests {
         let list = list_snapshots(&project).await.unwrap();
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].id, meta.id);
+
+        restore_data_dir(old);
     }
 
     #[tokio::test]
     async fn test_restore_snapshot() {
+        let _guard = DATA_DIR_MUTEX.lock().unwrap();
+        let data_tmp = TempDir::new().unwrap();
+        let old = set_data_dir(data_tmp.path());
+
         let dir = TempDir::new().unwrap();
         let project = dir.path().to_string_lossy().to_string();
 
@@ -225,10 +272,16 @@ mod tests {
             std::fs::read_to_string(dir.path().join("chapter1.md")).unwrap(),
             "Original"
         );
+
+        restore_data_dir(old);
     }
 
     #[tokio::test]
     async fn test_delete_snapshot() {
+        let _guard = DATA_DIR_MUTEX.lock().unwrap();
+        let data_tmp = TempDir::new().unwrap();
+        let old = set_data_dir(data_tmp.path());
+
         let dir = TempDir::new().unwrap();
         let project = dir.path().to_string_lossy().to_string();
 
@@ -242,13 +295,21 @@ mod tests {
 
         let list = list_snapshots(&project).await.unwrap();
         assert_eq!(list.len(), 0);
+
+        restore_data_dir(old);
     }
 
     #[tokio::test]
     async fn test_list_empty() {
+        let _guard = DATA_DIR_MUTEX.lock().unwrap();
+        let data_tmp = TempDir::new().unwrap();
+        let old = set_data_dir(data_tmp.path());
+
         let dir = TempDir::new().unwrap();
         let project = dir.path().to_string_lossy().to_string();
         let list = list_snapshots(&project).await.unwrap();
         assert!(list.is_empty());
+
+        restore_data_dir(old);
     }
 }
