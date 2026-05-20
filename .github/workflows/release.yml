@@ -121,6 +121,45 @@ jobs:
           prerelease: false
           includeUpdaterJson: true
 
+      - name: Stage Windows portable zips
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $ver = "${{ github.ref_name }}" -replace '^v',''
+          $rel = "core/target/release"
+          $outDir = "$rel/bundle/zip"
+          New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+
+          # ---- standard zip (APPDATA mode) ----
+          $std = "Novelist_${ver}_x64_windows"
+          if (Test-Path $std) { Remove-Item $std -Recurse -Force }
+          New-Item -ItemType Directory -Path $std | Out-Null
+          # Cargo bin is `novelist.exe`; rename to `Novelist.exe` for user-facing zip.
+          Copy-Item "$rel/novelist.exe" "$std/Novelist.exe"
+          if (Test-Path "$rel/resources") {
+            Copy-Item "$rel/resources" "$std/" -Recurse
+          }
+          if (Test-Path "$rel/WebView2Loader.dll") {
+            Copy-Item "$rel/WebView2Loader.dll" "$std/"
+          }
+          Compress-Archive -Path "$std/*" -DestinationPath "$outDir/$std.zip" -Force
+
+          # ---- portable zip (same-dir mode) ----
+          $pt = "Novelist_${ver}_x64_windows-portable"
+          if (Test-Path $pt) { Remove-Item $pt -Recurse -Force }
+          Copy-Item $std $pt -Recurse
+          New-Item -ItemType File -Path "$pt/portable.dat" -Force | Out-Null
+          Compress-Archive -Path "$pt/*" -DestinationPath "$outDir/$pt.zip" -Force
+
+          Get-ChildItem $outDir | Format-Table Name, Length
+
+      - name: Upload Windows portable zips to release
+        if: matrix.platform == 'windows-latest'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: core/target/release/bundle/zip/*.zip
+          tag_name: ${{ github.ref_name }}
+
   # ── Create GitHub Release with ARM artifacts + updater JSON ──
   release:
     needs: [build-macos-arm, build-other]
