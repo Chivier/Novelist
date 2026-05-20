@@ -11,9 +11,17 @@ use tauri::{Manager, State};
 const BUILTIN_PLUGIN_IDS: &[&str] = &["canvas", "mindmap", "kanban"];
 
 fn novelist_dir() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("~"))
-        .join(".novelist")
+    // `NOVELIST_DATA_DIR` is a test seam (used by unit tests that need
+    // per-test isolation). Production code goes through `portable::novelist_home`.
+    #[cfg(test)]
+    {
+        if let Ok(p) = std::env::var("NOVELIST_DATA_DIR") {
+            if !p.is_empty() {
+                return PathBuf::from(p);
+            }
+        }
+    }
+    crate::services::portable::novelist_home().to_path_buf()
 }
 
 fn plugins_dir() -> PathBuf {
@@ -507,22 +515,32 @@ mod tests {
     use std::sync::Mutex;
     use tempfile::TempDir;
 
-    // Tests that mutate HOME must not run concurrently (env is process-global).
-    // HOME_MUTEX is intentionally held across .await so the entire test body
-    // runs serialized — tokio may move the task across threads, but std::Mutex
-    // is Send so this is sound in practice for test-only serialization.
-    static HOME_MUTEX: Mutex<()> = Mutex::new(());
+    // Tests that mutate NOVELIST_DATA_DIR must not run concurrently
+    // (env is process-global). DATA_DIR_MUTEX is intentionally held across
+    // .await so the entire test body runs serialized — tokio may move the
+    // task across threads, but std::Mutex is Send so this is sound in
+    // practice for test-only serialization.
+    static DATA_DIR_MUTEX: Mutex<()> = Mutex::new(());
 
-    // These tests mutate HOME to isolate the plugins_dir(). Run sequentially by
-    // serializing through a single process mutex (tokio tests already serialize
-    // when each test sets+restores HOME in a scoped manner).
+    fn set_data_dir(p: &Path) -> Option<std::ffi::OsString> {
+        let old = std::env::var_os("NOVELIST_DATA_DIR");
+        std::env::set_var("NOVELIST_DATA_DIR", p);
+        old
+    }
+
+    fn restore_data_dir(old: Option<std::ffi::OsString>) {
+        if let Some(v) = old {
+            std::env::set_var("NOVELIST_DATA_DIR", v);
+        } else {
+            std::env::remove_var("NOVELIST_DATA_DIR");
+        }
+    }
 
     #[tokio::test]
     async fn test_scaffold_plugin_creates_files() {
-        let _guard = HOME_MUTEX.lock().unwrap();
+        let _guard = DATA_DIR_MUTEX.lock().unwrap();
         let tmp = TempDir::new().unwrap();
-        let old = std::env::var_os("HOME");
-        std::env::set_var("HOME", tmp.path());
+        let old = set_data_dir(tmp.path());
 
         let result = scaffold_plugin(
             "sentence-counter".to_string(),
@@ -530,7 +548,7 @@ mod tests {
         )
         .await
         .unwrap();
-        assert!(Path::new(&result).ends_with(Path::new(".novelist/plugins/sentence-counter")));
+        assert!(Path::new(&result).ends_with(Path::new("plugins/sentence-counter")));
         let dir = std::path::PathBuf::from(&result);
         assert!(dir.join("manifest.toml").is_file());
         assert!(dir.join("index.js").is_file());
@@ -538,11 +556,7 @@ mod tests {
         assert!(manifest.contains("id = \"sentence-counter\""));
         assert!(manifest.contains("name = \"Sentence Counter\""));
 
-        if let Some(h) = old {
-            std::env::set_var("HOME", h);
-        } else {
-            std::env::remove_var("HOME");
-        }
+        restore_data_dir(old);
     }
 
     #[tokio::test]
@@ -555,38 +569,28 @@ mod tests {
 
     #[tokio::test]
     async fn test_scaffold_plugin_rejects_duplicate() {
-        let _guard = HOME_MUTEX.lock().unwrap();
+        let _guard = DATA_DIR_MUTEX.lock().unwrap();
         let tmp = TempDir::new().unwrap();
-        let old = std::env::var_os("HOME");
-        std::env::set_var("HOME", tmp.path());
+        let old = set_data_dir(tmp.path());
 
         scaffold_plugin("dup".to_string(), None).await.unwrap();
         let second = scaffold_plugin("dup".to_string(), None).await;
         assert!(second.is_err());
 
-        if let Some(h) = old {
-            std::env::set_var("HOME", h);
-        } else {
-            std::env::remove_var("HOME");
-        }
+        restore_data_dir(old);
     }
 
     #[tokio::test]
     async fn test_scaffold_plugin_defaults_display_name_to_id() {
-        let _guard = HOME_MUTEX.lock().unwrap();
+        let _guard = DATA_DIR_MUTEX.lock().unwrap();
         let tmp = TempDir::new().unwrap();
-        let old = std::env::var_os("HOME");
-        std::env::set_var("HOME", tmp.path());
+        let old = set_data_dir(tmp.path());
 
         let result = scaffold_plugin("foo".to_string(), None).await.unwrap();
         let manifest =
             std::fs::read_to_string(std::path::Path::new(&result).join("manifest.toml")).unwrap();
         assert!(manifest.contains("name = \"foo\""));
 
-        if let Some(h) = old {
-            std::env::set_var("HOME", h);
-        } else {
-            std::env::remove_var("HOME");
-        }
+        restore_data_dir(old);
     }
 }
