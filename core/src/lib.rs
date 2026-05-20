@@ -237,6 +237,8 @@ fn handle_early_exit_flags() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    crate::services::portable::init();
+
     handle_early_exit_flags();
 
     let t0 = std::time::Instant::now();
@@ -547,8 +549,11 @@ pub fn run() {
         })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init());
+
+    if !crate::services::portable::is_portable() {
+        app_builder = app_builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
 
     #[cfg(feature = "e2e-testing")]
     {
