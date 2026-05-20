@@ -35,6 +35,7 @@ Latest release: **[v0.2.3](https://github.com/Saber-AI-Research/Novelist/release
 |---|---|
 | macOS (Apple Silicon) | [`Novelist_0.2.3_aarch64.dmg`](https://github.com/Saber-AI-Research/Novelist/releases/download/v0.2.3/Novelist_0.2.3_aarch64.dmg) |
 | Windows | [`Novelist_0.2.3_x64_en-US.msi`](https://github.com/Saber-AI-Research/Novelist/releases/download/v0.2.3/Novelist_0.2.3_x64_en-US.msi) · [`x64-setup.exe`](https://github.com/Saber-AI-Research/Novelist/releases/download/v0.2.3/Novelist_0.2.3_x64-setup.exe) |
+| Windows (Portable, no install) | [`Novelist_0.2.3_x64_windows-portable.zip`](https://github.com/Saber-AI-Research/Novelist/releases/download/v0.2.3/Novelist_0.2.3_x64_windows-portable.zip) — Unzip and run. Data stays in the same folder — copy the folder to a USB drive and your data follows. Requires Windows 10 (1803+) or 11 with WebView2 Runtime (preinstalled on recent Windows). |
 | Linux (deb) | [`Novelist_0.2.3_amd64.deb`](https://github.com/Saber-AI-Research/Novelist/releases/download/v0.2.3/Novelist_0.2.3_amd64.deb) |
 | Linux (rpm) | [`Novelist-0.2.3-1.x86_64.rpm`](https://github.com/Saber-AI-Research/Novelist/releases/download/v0.2.3/Novelist-0.2.3-1.x86_64.rpm) |
 | Linux (AppImage) | [`Novelist_0.2.3_amd64.AppImage`](https://github.com/Saber-AI-Research/Novelist/releases/download/v0.2.3/Novelist_0.2.3_amd64.AppImage) |

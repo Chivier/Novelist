@@ -58,3 +58,27 @@ tokio task that filters missing paths and emits `recent-projects-updated`
 (listened to in `app/lib/composables/app-events.svelte.ts`) when the set
 changes. Welcome screen wires a pin button per row; the Tauri mock
 mirrors the same sort for browser-mode E2E.
+
+## Portable mode path resolution
+
+Windows ships an optional truly-portable zip distribution. The marker file
+`portable.dat`, sitting next to `Novelist.exe`, switches the app into portable
+mode at startup (`core/src/services/portable.rs`).
+
+In portable mode:
+
+- `services::portable::novelist_home()` returns `<exe_dir>/data/` instead of
+  `~/.novelist/`. All user data (settings, plugins, recent projects, writing
+  stats, sync, snapshots, templates) flows through this helper.
+- The Tauri updater plugin is not registered (`core/src/lib.rs` `run()`), and
+  the "Check for updates" command shows an info dialog instead of triggering
+  a check.
+- The asset protocol scope is extended at runtime to allow loading plugins
+  from `<exe_dir>/data/plugins/**`, since the static `tauri.conf.json` scope
+  only covers `$HOME/.novelist/plugins/**`.
+- Startup panics with a clear error if `<exe_dir>/data/` cannot be created or
+  written — we never silently fall back to `%APPDATA%`.
+
+The standard (`Novelist_<ver>_x64_windows.zip`) and portable
+(`Novelist_<ver>_x64_windows-portable.zip`) zips contain the same binary;
+only `portable.dat` differs.
