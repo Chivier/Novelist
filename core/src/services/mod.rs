@@ -4,6 +4,7 @@ pub mod file_watcher;
 pub mod image_host;
 pub mod pandoc;
 pub mod plugin_host;
+pub mod portable;
 pub mod publish;
 pub mod rope_benchmark;
 pub mod rope_document;
