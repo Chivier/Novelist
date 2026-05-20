@@ -941,13 +941,17 @@ mod tests {
     impl IsolatedTemplatesDir {
         fn new() -> Self {
             let dir = TempDir::new().unwrap();
-            std::env::set_var("NOVELIST_TEMPLATES_DIR", dir.path());
+            unsafe {
+                std::env::set_var("NOVELIST_TEMPLATES_DIR", dir.path());
+            }
             Self { _dir: dir }
         }
     }
     impl Drop for IsolatedTemplatesDir {
         fn drop(&mut self) {
-            std::env::remove_var("NOVELIST_TEMPLATES_DIR");
+            unsafe {
+                std::env::remove_var("NOVELIST_TEMPLATES_DIR");
+            }
         }
     }
 

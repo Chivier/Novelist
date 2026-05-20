@@ -524,21 +524,31 @@ mod tests {
 
     fn set_data_dir(p: &Path) -> Option<std::ffi::OsString> {
         let old = std::env::var_os("NOVELIST_PLUGIN_DATA_DIR");
-        std::env::set_var("NOVELIST_PLUGIN_DATA_DIR", p);
+        unsafe {
+            std::env::set_var("NOVELIST_PLUGIN_DATA_DIR", p);
+        }
         old
     }
 
     fn restore_data_dir(old: Option<std::ffi::OsString>) {
         if let Some(v) = old {
-            std::env::set_var("NOVELIST_PLUGIN_DATA_DIR", v);
+            unsafe {
+                std::env::set_var("NOVELIST_PLUGIN_DATA_DIR", v);
+            }
         } else {
-            std::env::remove_var("NOVELIST_PLUGIN_DATA_DIR");
+            unsafe {
+                std::env::remove_var("NOVELIST_PLUGIN_DATA_DIR");
+            }
         }
+    }
+
+    fn lock_data_dir() -> std::sync::MutexGuard<'static, ()> {
+        DATA_DIR_MUTEX.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     #[tokio::test]
     async fn test_scaffold_plugin_creates_files() {
-        let _guard = DATA_DIR_MUTEX.lock().unwrap();
+        let _guard = lock_data_dir();
         let tmp = TempDir::new().unwrap();
         let old = set_data_dir(tmp.path());
 
@@ -569,7 +579,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_scaffold_plugin_rejects_duplicate() {
-        let _guard = DATA_DIR_MUTEX.lock().unwrap();
+        let _guard = lock_data_dir();
         let tmp = TempDir::new().unwrap();
         let old = set_data_dir(tmp.path());
 
@@ -582,7 +592,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_scaffold_plugin_defaults_display_name_to_id() {
-        let _guard = DATA_DIR_MUTEX.lock().unwrap();
+        let _guard = lock_data_dir();
         let tmp = TempDir::new().unwrap();
         let old = set_data_dir(tmp.path());
 

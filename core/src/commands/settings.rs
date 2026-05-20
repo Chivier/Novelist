@@ -183,16 +183,26 @@ mod tests {
 
     fn set_data_dir(p: &Path) -> Option<std::ffi::OsString> {
         let old = std::env::var_os("NOVELIST_SETTINGS_DATA_DIR");
-        std::env::set_var("NOVELIST_SETTINGS_DATA_DIR", p);
+        unsafe {
+            std::env::set_var("NOVELIST_SETTINGS_DATA_DIR", p);
+        }
         old
     }
 
     fn restore_data_dir(old: Option<std::ffi::OsString>) {
         if let Some(v) = old {
-            std::env::set_var("NOVELIST_SETTINGS_DATA_DIR", v);
+            unsafe {
+                std::env::set_var("NOVELIST_SETTINGS_DATA_DIR", v);
+            }
         } else {
-            std::env::remove_var("NOVELIST_SETTINGS_DATA_DIR");
+            unsafe {
+                std::env::remove_var("NOVELIST_SETTINGS_DATA_DIR");
+            }
         }
+    }
+
+    fn lock_data_dir() -> std::sync::MutexGuard<'static, ()> {
+        DATA_DIR_MUTEX.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     #[tokio::test]
@@ -231,7 +241,7 @@ template = "Chapter {N}"
 
     #[tokio::test]
     async fn get_effective_settings_merges_global_with_project_overlay() {
-        let _guard = DATA_DIR_MUTEX.lock().unwrap();
+        let _guard = lock_data_dir();
         let global_tmp = TempDir::new().unwrap();
         let old = set_data_dir(global_tmp.path());
 
@@ -256,7 +266,7 @@ show_hidden_files = true
 
     #[tokio::test]
     async fn get_effective_settings_scratch_mode_is_not_project_scoped() {
-        let _guard = DATA_DIR_MUTEX.lock().unwrap();
+        let _guard = lock_data_dir();
         let global_tmp = TempDir::new().unwrap();
         let old = set_data_dir(global_tmp.path());
 
