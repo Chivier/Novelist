@@ -9,6 +9,7 @@ import { aiTalkSessions } from '$lib/components/ai-talk/sessions.svelte';
 import { aiAgentSessions } from '$lib/components/ai-agent/sessions.svelte';
 import * as fmt from '$lib/editor/formatting';
 import { i18n, t as tFn, tIn } from '$lib/i18n';
+import { getPortableInfo } from '$lib/services/portable';
 
 /**
  * Bundle of App.svelte-local references the command handlers need.
@@ -268,10 +269,18 @@ export function registerAppCommands(ctx: AppCommandContext) {
     const result = await runScrollEditTest();
     alert(result);
   }});
-  reg({ id: 'check-for-updates', labelKey: 'command.checkForUpdates', handler: async () => {
-    const { checkForUpdates } = await import('$lib/updater');
-    checkForUpdates(false);
-  }});
+  // Portable builds skip the updater plugin on the Rust side (Task 2),
+  // so the manual "Check for updates" affordance would only error out.
+  // Register it asynchronously, but bail in portable mode. The native
+  // menu item dispatches through `commandRegistry.execute(id)` which
+  // silently no-ops when no handler is registered.
+  void getPortableInfo().then((info) => {
+    if (info.enabled) return;
+    reg({ id: 'check-for-updates', labelKey: 'command.checkForUpdates', handler: async () => {
+      const { checkForUpdates } = await import('$lib/updater');
+      checkForUpdates(false);
+    }});
+  });
   reg({ id: 'install-cli-shim', labelKey: 'command.installCliShim', handler: async () => {
     const { runInstallCliShim } = await import('$lib/services/cli-shim');
     await runInstallCliShim(t);
