@@ -189,12 +189,8 @@ pub async fn delete_snapshot(project_dir: &str, snapshot_id: &str) -> Result<(),
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
+    use serial_test::serial;
     use tempfile::TempDir;
-
-    // Tests that touch snapshots_dir mutate `NOVELIST_SNAPSHOTS_DATA_DIR`
-    // (process-global env). Serialize so they don't race.
-    static DATA_DIR_MUTEX: Mutex<()> = Mutex::new(());
 
     fn set_data_dir(p: &std::path::Path) -> Option<std::ffi::OsString> {
         let old = std::env::var_os("NOVELIST_SNAPSHOTS_DATA_DIR");
@@ -216,13 +212,9 @@ mod tests {
         }
     }
 
-    fn lock_data_dir() -> std::sync::MutexGuard<'static, ()> {
-        DATA_DIR_MUTEX.lock().unwrap_or_else(|e| e.into_inner())
-    }
-
     #[tokio::test]
+    #[serial(snapshots_data_dir)]
     async fn test_snapshots_dir_is_deterministic() {
-        let _guard = lock_data_dir();
         let tmp = TempDir::new().unwrap();
         let old = set_data_dir(tmp.path());
         let d1 = snapshots_dir("/home/user/novel");
@@ -232,8 +224,8 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial(snapshots_data_dir)]
     async fn test_create_and_list_snapshot() {
-        let _guard = lock_data_dir();
         let data_tmp = TempDir::new().unwrap();
         let old = set_data_dir(data_tmp.path());
 
@@ -258,8 +250,8 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial(snapshots_data_dir)]
     async fn test_restore_snapshot() {
-        let _guard = lock_data_dir();
         let data_tmp = TempDir::new().unwrap();
         let old = set_data_dir(data_tmp.path());
 
@@ -287,8 +279,8 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial(snapshots_data_dir)]
     async fn test_delete_snapshot() {
-        let _guard = lock_data_dir();
         let data_tmp = TempDir::new().unwrap();
         let old = set_data_dir(data_tmp.path());
 
@@ -310,8 +302,8 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial(snapshots_data_dir)]
     async fn test_list_empty() {
-        let _guard = lock_data_dir();
         let data_tmp = TempDir::new().unwrap();
         let old = set_data_dir(data_tmp.path());
 

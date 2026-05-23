@@ -22,6 +22,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tauri build --target x86_64-apple-darwin`. ARM mac still builds
   natively on the self-hosted runner.
 
+## [0.2.6] - 2026-05-23
+
+### Fixed
+
+- Prevented close-tab, window-close, and project-switch flows from proceeding
+  after a dirty file fails to save.
+- Fixed empty-document saves so clearing a file writes the empty content
+  instead of skipping the save path.
+- Restored H1-driven filename sync for `Untitled {N}`-style templates and made
+  the behavior respect the `auto_rename_from_h1` setting.
+- Corrected first-launch and legacy auto-zoom behavior so OS-level DPI scaling
+  is not compounded by Novelist's own zoom transform.
+- Improved sidebar file-row sizing and font selection for readable CJK and
+  non-monospace desktop navigation.
+- Hardened startup/menu event listeners so async initialization failures are
+  logged without breaking the app shell.
+- Stabilized Vitest under Node 26 by providing a deterministic `localStorage`
+  test setup.
+- Fixed Rust clippy failures in async tests that mutate process-global test
+  data directories.
+
 ## [0.2.4] - 2026-05-14
 
 Major release adding **image hosting** and **publishing** — Novelist

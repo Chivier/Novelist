@@ -12,7 +12,7 @@ into Rust.
 
 The project is past MVP and is in a v0.2.x hardening phase.
 
-- Release version in source: `0.2.1`.
+- Release version in source: `0.2.6`.
 - Frontend surface: 134 TypeScript/Svelte source files under `app/lib`.
 - Backend surface: 41 Rust source files under `core/src`.
 - Tests: 68 unit test files, 3 integration test files, 20 browser E2E specs.

@@ -645,7 +645,7 @@
           if (!tab.isDirty) continue;
           tabsStore.syncFromView(tab.id);
           const freshTab = tabsStore.findByPath(tab.filePath);
-          if (freshTab?.isDirty && freshTab.content) {
+          if (freshTab?.isDirty) {
             await commands.registerWriteIgnore(freshTab.filePath);
             const result = await commands.writeFile(freshTab.filePath, freshTab.content);
             if (result.status === 'ok') {

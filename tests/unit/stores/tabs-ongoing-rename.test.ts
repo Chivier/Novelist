@@ -17,7 +17,7 @@ vi.mock('$lib/ipc/commands', () => ({
 }));
 
 vi.mock('$lib/stores/new-file-settings.svelte', () => ({
-  newFileSettings: { template: '第{N}章-{title}' },
+  newFileSettings: { template: '第{N}章-{title}', autoRenameFromH1: true },
 }));
 
 vi.mock('$lib/i18n', () => ({
@@ -128,11 +128,10 @@ describe('tabsStore.tryRenameAfterSave — Path B (ongoing H1 sync)', () => {
     expect(commands.renameItem).not.toHaveBeenCalled();
   });
 
-  it('does not rename when the template lacks {title} (gate honored)', async () => {
-    // The default mock has a {title}-bearing template; swap to one without it.
+  it('does not rename when auto_rename_from_h1 is off (gate honored)', async () => {
+    // The default mock has it on; flip it for this case.
     const settingsMod = await import('$lib/stores/new-file-settings.svelte');
-    const originalTemplate = (settingsMod.newFileSettings as any).template;
-    (settingsMod.newFileSettings as any).template = '第{N}章';
+    (settingsMod.newFileSettings as any).autoRenameFromH1 = false;
     try {
       tabsStore.openTab(`${PROJECT}/第1章-开篇.md`, '# 开篇');
       const newPath = await tabsStore.tryRenameAfterSave(
@@ -142,7 +141,7 @@ describe('tabsStore.tryRenameAfterSave — Path B (ongoing H1 sync)', () => {
       expect(newPath).toBe(`${PROJECT}/第1章-开篇.md`);
       expect(commands.renameItem).not.toHaveBeenCalled();
     } finally {
-      (settingsMod.newFileSettings as any).template = originalTemplate;
+      (settingsMod.newFileSettings as any).autoRenameFromH1 = true;
     }
   });
 

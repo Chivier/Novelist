@@ -18,6 +18,32 @@ test.describe('Sidebar', () => {
     await expect(sidebar).toContainText('Notes');
   });
 
+  test('sidebar file rows keep readable desktop sizing', async ({ app }) => {
+    const row = app.getByTestId('sidebar-file-Chapter 1.md');
+    await expect(row).toBeVisible();
+
+    const metrics = await row.evaluate((el) => {
+      const rowStyles = getComputedStyle(el);
+      const name = el.querySelector('.tree-name');
+      const nameStyles = name ? getComputedStyle(name) : null;
+      return {
+        fontSize: rowStyles.fontSize,
+        lineHeight: rowStyles.lineHeight,
+        minHeight: rowStyles.minHeight,
+        height: el.getBoundingClientRect().height,
+        fontFamily: rowStyles.fontFamily,
+        nameFontFamily: nameStyles?.fontFamily ?? '',
+      };
+    });
+
+    expect(metrics.fontSize).toBe('14px');
+    expect(parseFloat(metrics.lineHeight)).toBeGreaterThanOrEqual(18);
+    expect(parseFloat(metrics.minHeight)).toBeGreaterThanOrEqual(30);
+    expect(metrics.height).toBeGreaterThanOrEqual(30);
+    expect(metrics.nameFontFamily).toBe(metrics.fontFamily);
+    expect(metrics.fontFamily.toLowerCase()).not.toContain('monospace');
+  });
+
   test('toggle sidebar visibility', async ({ app }) => {
     const sidebar = app.getByTestId('sidebar');
     await expect(sidebar).toBeVisible();

@@ -312,12 +312,8 @@ pub async fn get_stats_overview(project_dir: &str) -> Result<WritingStatsOvervie
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
+    use serial_test::serial;
     use tempfile::TempDir;
-
-    // Tests that touch stats_dir mutate `NOVELIST_STATS_DATA_DIR` (process-global env).
-    // Serialize so they don't race.
-    static DATA_DIR_MUTEX: Mutex<()> = Mutex::new(());
 
     fn set_data_dir(p: &std::path::Path) -> Option<std::ffi::OsString> {
         let old = std::env::var_os("NOVELIST_STATS_DATA_DIR");
@@ -339,13 +335,9 @@ mod tests {
         }
     }
 
-    fn lock_data_dir() -> std::sync::MutexGuard<'static, ()> {
-        DATA_DIR_MUTEX.lock().unwrap_or_else(|e| e.into_inner())
-    }
-
     #[test]
+    #[serial(stats_data_dir)]
     fn test_stats_dir_deterministic() {
-        let _guard = lock_data_dir();
         let tmp = TempDir::new().unwrap();
         let old = set_data_dir(tmp.path());
         let d1 = stats_dir("/home/user/novel");
@@ -355,8 +347,8 @@ mod tests {
     }
 
     #[test]
+    #[serial(stats_data_dir)]
     fn test_stats_dir_different_for_different_projects() {
-        let _guard = lock_data_dir();
         let tmp = TempDir::new().unwrap();
         let old = set_data_dir(tmp.path());
         let d1 = stats_dir("/project-a");
@@ -374,8 +366,8 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial(stats_data_dir)]
     async fn test_record_and_read() {
-        let _guard = lock_data_dir();
         let data_tmp = TempDir::new().unwrap();
         let old = set_data_dir(data_tmp.path());
 
@@ -393,8 +385,8 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial(stats_data_dir)]
     async fn test_chapter_stats_reads_files() {
-        let _guard = lock_data_dir();
         let data_tmp = TempDir::new().unwrap();
         let old = set_data_dir(data_tmp.path());
 

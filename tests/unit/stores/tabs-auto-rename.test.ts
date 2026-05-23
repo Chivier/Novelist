@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
  * Regression coverage for `tabsStore.tryRenameAfterSave`.
  *
  * Gating:
- *  - The current new-file template must include `{title}` (implicit signal)
+ *  - The auto-rename setting must be enabled
  *  - Filename must match `isPlaceholder()` (Untitled N / 第N章 / Chapter N / …)
  *  - The save content must contain a non-empty H1
  *
@@ -23,7 +23,7 @@ vi.mock('$lib/ipc/commands', () => ({
 }));
 
 vi.mock('$lib/stores/new-file-settings.svelte', () => ({
-  newFileSettings: { template: '第{N}章-{title}' },
+  newFileSettings: { template: '第{N}章-{title}', autoRenameFromH1: true },
 }));
 
 vi.mock('$lib/i18n', () => ({

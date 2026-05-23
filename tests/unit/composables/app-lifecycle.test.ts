@@ -24,7 +24,7 @@ const { hoisted } = vi.hoisted(() => {
 
   const tabsState = {
     dirtyTabs: [] as { id: string; fileName: string }[],
-    saveAllDirty: vi.fn(async () => {}),
+    saveAllDirty: vi.fn(async () => true),
     markSaved: vi.fn(),
   };
 
@@ -174,6 +174,20 @@ describe('[contract] useAppLifecycle — onCloseRequested', () => {
     teardown();
   });
 
+  it('swallows close-listener registration failures', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const win = hoisted.getCurrentWindow();
+    win.onCloseRequested.mockRejectedValueOnce(new Error('listener unavailable'));
+    const teardown = useAppLifecycle(ctx());
+    await flushListeners();
+    expect(errorSpy).toHaveBeenCalledWith(
+      '[lifecycle] failed to register close handler:',
+      expect.any(Error),
+    );
+    teardown();
+    errorSpy.mockRestore();
+  });
+
   it('preventDefaults and returns early when tab-close is in flight', async () => {
     const teardown = useAppLifecycle(ctx(/* isClosingTab */ true));
     await flushListeners();
@@ -182,6 +196,22 @@ describe('[contract] useAppLifecycle — onCloseRequested', () => {
     expect(preventDefault).toHaveBeenCalled();
     expect(hoisted.confirmUnsaved).not.toHaveBeenCalled();
     teardown();
+  });
+
+  it('keeps close handler errors local to the handler', async () => {
+    hoisted.tabsState.dirtyTabs = [{ id: 't1', fileName: 'a.md' }];
+    hoisted.confirmUnsaved.mockRejectedValueOnce(new Error('dialog failed'));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const teardown = useAppLifecycle(ctx());
+    await flushListeners();
+    await expect(hoisted.getCloseHandler()!({ preventDefault: vi.fn() })).resolves.toBeUndefined();
+    expect(errorSpy).toHaveBeenCalledWith(
+      '[lifecycle] close-request handling failed:',
+      expect.any(Error),
+    );
+    expect(hoisted.destroy).not.toHaveBeenCalled();
+    teardown();
+    errorSpy.mockRestore();
   });
 
   it('passes through silently when no dirty tabs', async () => {
@@ -194,7 +224,7 @@ describe('[contract] useAppLifecycle — onCloseRequested', () => {
     teardown();
   });
 
-  it('prompts to save, saves, marks clean, and destroys when user confirms', async () => {
+  it('prompts to save and destroys when all dirty tabs save successfully', async () => {
     hoisted.tabsState.dirtyTabs = [{ id: 't1', fileName: 'a.md' }];
     hoisted.confirmUnsaved.mockResolvedValue('save');
     const teardown = useAppLifecycle(ctx());
@@ -204,8 +234,21 @@ describe('[contract] useAppLifecycle — onCloseRequested', () => {
     expect(preventDefault).toHaveBeenCalled();
     expect(hoisted.confirmUnsaved).toHaveBeenCalled();
     expect(hoisted.tabsState.saveAllDirty).toHaveBeenCalled();
-    expect(hoisted.tabsState.markSaved).toHaveBeenCalledWith('t1');
     expect(hoisted.destroy).toHaveBeenCalled();
+    teardown();
+  });
+
+  it('keeps the window open when saveAllDirty reports a save failure', async () => {
+    hoisted.tabsState.dirtyTabs = [{ id: 't1', fileName: 'a.md' }];
+    hoisted.confirmUnsaved.mockResolvedValue('save');
+    hoisted.tabsState.saveAllDirty.mockResolvedValueOnce(false);
+    const teardown = useAppLifecycle(ctx());
+    await flushListeners();
+    const preventDefault = vi.fn();
+    await hoisted.getCloseHandler()!({ preventDefault });
+    expect(preventDefault).toHaveBeenCalled();
+    expect(hoisted.tabsState.saveAllDirty).toHaveBeenCalled();
+    expect(hoisted.destroy).not.toHaveBeenCalled();
     teardown();
   });
 

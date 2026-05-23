@@ -118,7 +118,10 @@
           saveLabel: t('dialog.save'),
         });
         if (choice === 'cancel') return;
-        if (choice === 'save') await tabsStore.saveAllDirty();
+        if (choice === 'save') {
+          const saved = await tabsStore.saveAllDirty();
+          if (!saved) return;
+        }
       }
     }
     projectStore.isLoading = true;
@@ -977,6 +980,7 @@
     overflow: hidden;
     background: var(--novelist-sidebar-bg);
     color: var(--novelist-sidebar-text);
+    font-family: var(--novelist-sidebar-font, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   }
 
   .sidebar-header {
@@ -1099,7 +1103,7 @@
   .sidebar-files {
     flex: 1;
     overflow-y: auto;
-    padding: 4px 6px;
+    padding: 6px 6px;
   }
   .sidebar-files.drag-over-root {
     box-shadow: inset 0 0 0 2px var(--novelist-accent);
@@ -1115,7 +1119,9 @@
     border-radius: 5px;
     background: var(--novelist-bg);
     color: var(--novelist-text);
-    font-size: 0.8rem;
+    font-size: var(--novelist-sidebar-file-font-size, 14px);
+    line-height: var(--novelist-sidebar-file-line-height, 1.35);
+    font-family: var(--novelist-sidebar-font, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
     outline: none;
   }
 

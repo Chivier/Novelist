@@ -27,17 +27,27 @@ const OPEN_RECENT_PREFIX = 'open-recent:';
 export function wireMenuEvents(ctx: MenuEventContext): () => void {
   let unlisten: (() => void) | null = null;
 
-  listen<string>('menu-command', (event) => {
-    const id = event.payload;
-    if (id.startsWith(OPEN_RECENT_PREFIX)) {
-      const path = id.slice(OPEN_RECENT_PREFIX.length);
-      if (path && path !== '__none__') ctx.onOpenRecent(path);
-      return;
-    }
-    commandRegistry.execute(id);
-  }).then((fn) => {
-    unlisten = fn;
-  });
+  try {
+    listen<string>('menu-command', (event) => {
+      try {
+        const id = event.payload;
+        if (id.startsWith(OPEN_RECENT_PREFIX)) {
+          const path = id.slice(OPEN_RECENT_PREFIX.length);
+          if (path && path !== '__none__') ctx.onOpenRecent(path);
+          return;
+        }
+        commandRegistry.execute(id);
+      } catch (e) {
+        console.error('[menu-events] handler failed:', e);
+      }
+    }).then((fn) => {
+      unlisten = fn;
+    }).catch((e) => {
+      console.error('[menu-events] failed to register menu-command listener:', e);
+    });
+  } catch (e) {
+    console.error('[menu-events] menu listener setup failed:', e);
+  }
 
   return () => {
     unlisten?.();

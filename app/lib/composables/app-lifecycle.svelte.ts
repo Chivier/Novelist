@@ -53,30 +53,40 @@ export function useAppLifecycle(ctx: AppLifecycleContext): () => void {
   // `closeConfirmed` latches after a successful prompt so re-entry (destroy()
   // on macOS, or another Cmd+Q) doesn't re-show the dialog.
   let closeConfirmed = false;
-  getCurrentWindow().onCloseRequested(async (event) => {
-    if (ctx.isClosingTab()) {
-      event.preventDefault();
-      return;
-    }
-    if (closeConfirmed) return;
-
-    const dirty = tabsStore.dirtyTabs;
-    if (dirty.length > 0) {
-      event.preventDefault();
-      const names = dirty.map(dt => dt.fileName).join(', ');
-      const choice = await confirmUnsavedChanges({
-        fileNames: names,
-        saveLabel: ctx.t('dialog.save'),
-      });
-      if (choice === 'cancel') return;
-      if (choice === 'save') {
-        await tabsStore.saveAllDirty();
+  try {
+    getCurrentWindow().onCloseRequested(async (event) => {
+      if (ctx.isClosingTab()) {
+        event.preventDefault();
+        return;
       }
-      for (const tab of tabsStore.dirtyTabs) tabsStore.markSaved(tab.id);
-      closeConfirmed = true;
-      await getCurrentWindow().destroy();
-    }
-  }).then(fn => { unlistenCloseRequested = fn; });
+      if (closeConfirmed) return;
+
+      const dirty = tabsStore.dirtyTabs;
+      if (dirty.length > 0) {
+        event.preventDefault();
+        try {
+          const names = dirty.map(dt => dt.fileName).join(', ');
+          const choice = await confirmUnsavedChanges({
+            fileNames: names,
+            saveLabel: ctx.t('dialog.save'),
+          });
+          if (choice === 'cancel') return;
+          if (choice === 'save') {
+            const saved = await tabsStore.saveAllDirty();
+            if (!saved) return;
+          }
+          closeConfirmed = true;
+          await getCurrentWindow().destroy();
+        } catch (e) {
+          console.error('[lifecycle] close-request handling failed:', e);
+        }
+      }
+    }).then(fn => { unlistenCloseRequested = fn; }).catch((e) => {
+      console.error('[lifecycle] failed to register close handler:', e);
+    });
+  } catch (e) {
+    console.error('[lifecycle] close handler setup failed:', e);
+  }
 
   // Final sync attempt on app close.
   function handleBeforeUnload() {

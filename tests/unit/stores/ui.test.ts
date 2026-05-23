@@ -15,6 +15,7 @@ import {
   uiStore,
   pickAutoZoomFromScreen,
   autoInitZoomFromScreen,
+  migrateLegacyAutoZoomFromScreen,
 } from '$lib/stores/ui.svelte';
 
 function resetStore() {
@@ -145,6 +146,7 @@ describe('[contract] uiStore zoom', () => {
     uiStore.zoomLevel = 2.0;
     uiStore.zoomIn();
     expect(uiStore.zoomLevel).toBe(2.0);
+    expect(localStorage.getItem('novelist-zoom-user-set')).toBe('1');
   });
 
   it('zoomOut steps down by 0.1, clamped at 0.5', () => {
@@ -178,22 +180,23 @@ describe('[contract] uiStore zoom', () => {
 });
 
 describe('[contract] pickAutoZoomFromScreen', () => {
-  it('returns 1.0 for sub-2K physical widths', () => {
-    expect(pickAutoZoomFromScreen(1024)).toBe(1.0);
-    expect(pickAutoZoomFromScreen(1920)).toBe(1.0);
-    expect(pickAutoZoomFromScreen(2559)).toBe(1.0);
+  it('returns 1.0 for normal logical widths', () => {
+    expect(pickAutoZoomFromScreen({ logicalWidth: 1024, devicePixelRatio: 1 })).toBe(1.0);
+    expect(pickAutoZoomFromScreen({ logicalWidth: 1920, devicePixelRatio: 1 })).toBe(1.0);
+    expect(pickAutoZoomFromScreen({ logicalWidth: 2559, devicePixelRatio: 1 })).toBe(1.0);
   });
 
-  it('returns 1.25 for [2560, 3840) — 2K range', () => {
-    expect(pickAutoZoomFromScreen(2560)).toBe(1.25);
-    expect(pickAutoZoomFromScreen(3439)).toBe(1.25);
-    expect(pickAutoZoomFromScreen(3839)).toBe(1.25);
+  it('uses mild auto zoom for very wide unscaled displays', () => {
+    expect(pickAutoZoomFromScreen({ logicalWidth: 2560, devicePixelRatio: 1 })).toBe(1.1);
+    expect(pickAutoZoomFromScreen({ logicalWidth: 3439, devicePixelRatio: 1 })).toBe(1.1);
+    expect(pickAutoZoomFromScreen({ logicalWidth: 3840, devicePixelRatio: 1 })).toBe(1.2);
+    expect(pickAutoZoomFromScreen({ logicalWidth: 7680, devicePixelRatio: 1 })).toBe(1.2);
   });
 
-  it('returns 1.5 for ≥ 3840 — 4K and beyond', () => {
-    expect(pickAutoZoomFromScreen(3840)).toBe(1.5);
-    expect(pickAutoZoomFromScreen(5120)).toBe(1.5);
-    expect(pickAutoZoomFromScreen(7680)).toBe(1.5);
+  it('does not compound Windows/OS DPI scaling', () => {
+    expect(pickAutoZoomFromScreen({ logicalWidth: 2560, devicePixelRatio: 1.5 })).toBe(1.0);
+    expect(pickAutoZoomFromScreen({ logicalWidth: 1920, devicePixelRatio: 2 })).toBe(1.0);
+    expect(pickAutoZoomFromScreen({ logicalWidth: 3840, devicePixelRatio: 2 })).toBe(1.0);
   });
 });
 
@@ -202,24 +205,24 @@ describe('[contract] autoInitZoomFromScreen — first-launch behavior', () => {
     localStorage.clear();
   });
 
-  it('on fresh storage, picks zoom from physical width and writes both flags', () => {
+  it('on fresh storage, picks zoom from the logical screen profile and writes the flag', () => {
     const calls: number[] = [];
-    autoInitZoomFromScreen({ setZoom: (l) => calls.push(l) }, 3840);
-    expect(calls).toEqual([1.5]);
+    autoInitZoomFromScreen({ setZoom: (l) => calls.push(l) }, { logicalWidth: 3840, devicePixelRatio: 1 });
+    expect(calls).toEqual([1.2]);
     expect(localStorage.getItem('novelist-zoom-auto-inited')).toBe('1');
   });
 
   it('skips entirely when auto-inited flag is already set', () => {
     localStorage.setItem('novelist-zoom-auto-inited', '1');
     const calls: number[] = [];
-    autoInitZoomFromScreen({ setZoom: (l) => calls.push(l) }, 3840);
+    autoInitZoomFromScreen({ setZoom: (l) => calls.push(l) }, { logicalWidth: 3840, devicePixelRatio: 1 });
     expect(calls).toEqual([]);
   });
 
   it('respects pre-existing novelist-zoom (legacy users), only writes the flag', () => {
     localStorage.setItem('novelist-zoom', '0.8');
     const calls: number[] = [];
-    autoInitZoomFromScreen({ setZoom: (l) => calls.push(l) }, 3840);
+    autoInitZoomFromScreen({ setZoom: (l) => calls.push(l) }, { logicalWidth: 3840, devicePixelRatio: 1 });
     expect(calls).toEqual([]);
     expect(localStorage.getItem('novelist-zoom')).toBe('0.8');
     expect(localStorage.getItem('novelist-zoom-auto-inited')).toBe('1');
@@ -227,9 +230,52 @@ describe('[contract] autoInitZoomFromScreen — first-launch behavior', () => {
 
   it('handles low-DPI displays — picks 1.0 and still records the flag', () => {
     const calls: number[] = [];
-    autoInitZoomFromScreen({ setZoom: (l) => calls.push(l) }, 1920);
+    autoInitZoomFromScreen({ setZoom: (l) => calls.push(l) }, { logicalWidth: 1920, devicePixelRatio: 1 });
     expect(calls).toEqual([1.0]);
     expect(localStorage.getItem('novelist-zoom-auto-inited')).toBe('1');
+  });
+});
+
+describe('[contract] migrateLegacyAutoZoomFromScreen', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('downgrades the old 1.5 auto-pick on Windows-scaled 4K displays', () => {
+    const calls: number[] = [];
+    localStorage.setItem('novelist-zoom-auto-inited', '1');
+    localStorage.setItem('novelist-zoom', '1.5');
+    migrateLegacyAutoZoomFromScreen(
+      { setZoom: (l) => { calls.push(l); localStorage.setItem('novelist-zoom', String(l)); } },
+      { logicalWidth: 1920, devicePixelRatio: 2 },
+    );
+    expect(calls).toEqual([1.0]);
+    expect(localStorage.getItem('novelist-zoom-dpi-v2-migrated')).toBe('1');
+  });
+
+  it('leaves explicit user zoom alone', () => {
+    const calls: number[] = [];
+    localStorage.setItem('novelist-zoom-auto-inited', '1');
+    localStorage.setItem('novelist-zoom-user-set', '1');
+    localStorage.setItem('novelist-zoom', '1.5');
+    migrateLegacyAutoZoomFromScreen(
+      { setZoom: (l) => calls.push(l) },
+      { logicalWidth: 1920, devicePixelRatio: 2 },
+    );
+    expect(calls).toEqual([]);
+    expect(localStorage.getItem('novelist-zoom')).toBe('1.5');
+  });
+
+  it('runs at most once', () => {
+    const calls: number[] = [];
+    localStorage.setItem('novelist-zoom-auto-inited', '1');
+    localStorage.setItem('novelist-zoom-dpi-v2-migrated', '1');
+    localStorage.setItem('novelist-zoom', '1.5');
+    migrateLegacyAutoZoomFromScreen(
+      { setZoom: (l) => calls.push(l) },
+      { logicalWidth: 1920, devicePixelRatio: 2 },
+    );
+    expect(calls).toEqual([]);
   });
 });
 

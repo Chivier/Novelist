@@ -167,12 +167,8 @@ pub async fn write_project_settings(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
+    use serial_test::serial;
     use tempfile::TempDir;
-
-    // Tests that touch the global settings path mutate `NOVELIST_SETTINGS_DATA_DIR`
-    // (process-global env). Serialize through this mutex so they don't race.
-    static DATA_DIR_MUTEX: Mutex<()> = Mutex::new(());
 
     fn write_minimal_project(dir: &TempDir, overlay_toml: &str) {
         let novelist_dir = dir.path().join(".novelist");
@@ -199,10 +195,6 @@ mod tests {
                 std::env::remove_var("NOVELIST_SETTINGS_DATA_DIR");
             }
         }
-    }
-
-    fn lock_data_dir() -> std::sync::MutexGuard<'static, ()> {
-        DATA_DIR_MUTEX.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     #[tokio::test]
@@ -240,8 +232,8 @@ template = "Chapter {N}"
     }
 
     #[tokio::test]
+    #[serial(settings_data_dir)]
     async fn get_effective_settings_merges_global_with_project_overlay() {
-        let _guard = lock_data_dir();
         let global_tmp = TempDir::new().unwrap();
         let old = set_data_dir(global_tmp.path());
 
@@ -265,8 +257,8 @@ show_hidden_files = true
     }
 
     #[tokio::test]
+    #[serial(settings_data_dir)]
     async fn get_effective_settings_scratch_mode_is_not_project_scoped() {
-        let _guard = lock_data_dir();
         let global_tmp = TempDir::new().unwrap();
         let old = set_data_dir(global_tmp.path());
 

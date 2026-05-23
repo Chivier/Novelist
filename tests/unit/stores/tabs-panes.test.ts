@@ -18,7 +18,7 @@ vi.mock('$lib/ipc/commands', () => ({
 }));
 
 vi.mock('$lib/stores/new-file-settings.svelte', () => ({
-  newFileSettings: { template: '第{N}章' },
+  newFileSettings: { template: '第{N}章', autoRenameFromH1: true },
 }));
 
 vi.mock('$lib/i18n', () => ({ t: (k: string) => k }));
@@ -292,16 +292,43 @@ describe('[contract] tabsStore.allTabs / dirtyTabs / saveAllDirty', () => {
     tabsStore.markDirty(tabsStore.tabs[0].id);
     tabsStore.markDirty(tabsStore.tabs[1].id);
 
-    await tabsStore.saveAllDirty();
+    const saved = await tabsStore.saveAllDirty();
 
+    expect(saved).toBe(true);
     expect(commands.writeFile).toHaveBeenCalledTimes(2);
     expect(tabsStore.dirtyTabs).toHaveLength(0);
   });
 
   it('saveAllDirty skips clean tabs', async () => {
     tabsStore.openTab('/a.md', 'A');
-    await tabsStore.saveAllDirty();
+    const saved = await tabsStore.saveAllDirty();
+    expect(saved).toBe(true);
     expect(commands.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('saveAllDirty writes an empty dirty document instead of skipping it', async () => {
+    tabsStore.openTab('/empty.md', 'initial');
+    const id = tabsStore.activeTabId!;
+    tabsStore.updateContent(id, '');
+
+    const saved = await tabsStore.saveAllDirty();
+
+    expect(saved).toBe(true);
+    expect(commands.writeFile).toHaveBeenCalledWith('/empty.md', '');
+    expect(tabsStore.dirtyTabs).toHaveLength(0);
+  });
+
+  it('saveAllDirty reports false and leaves the tab dirty when a write fails', async () => {
+    tabsStore.openTab('/a.md', 'A');
+    tabsStore.markDirty(tabsStore.activeTabId!);
+    (commands.writeFile as any).mockResolvedValueOnce({ status: 'error', error: 'disk full' });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const saved = await tabsStore.saveAllDirty();
+
+    expect(saved).toBe(false);
+    expect(tabsStore.dirtyTabs).toHaveLength(1);
+    errorSpy.mockRestore();
   });
 });
 

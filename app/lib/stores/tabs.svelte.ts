@@ -216,7 +216,7 @@ class TabsStore {
    *    Manually renamed files have no anchor to find, so sync auto-detaches.
    */
   async tryRenameAfterSave(filePath: string, content: string): Promise<string> {
-    if (!newFileSettings.template.includes('{title}')) return filePath;
+    if (!newFileSettings.autoRenameFromH1) return filePath;
     if (isScratchFile(filePath)) return filePath;
 
     // Find the tab so we can read/update `lastSyncedH1`. Save-from-another-pane
@@ -396,7 +396,7 @@ class TabsStore {
         if (choice === 'save') {
           this.syncFromView(tab.id);
           const fresh = this.findByPath(tab.filePath);
-          if (fresh?.content) {
+          if (fresh) {
             if (scratch) {
               const savePath = await saveDialog({
                 defaultPath: fresh.fileName,
@@ -405,7 +405,12 @@ class TabsStore {
               if (savePath) {
                 await commands.registerWriteIgnore(savePath);
                 const result = await commands.writeFile(savePath, fresh.content);
-                if (result.status === 'ok') this.markSaved(fresh.id);
+                if (result.status === 'ok') {
+                  this.markSaved(fresh.id);
+                } else {
+                  console.error('[tabs] save before close failed:', result.error);
+                  return;
+                }
               } else {
                 // User cancelled the Save-As native picker — abort the close.
                 return;
@@ -416,6 +421,9 @@ class TabsStore {
               if (result.status === 'ok') {
                 await this.tryRenameAfterSave(fresh.filePath, fresh.content);
                 this.markSaved(fresh.id);
+              } else {
+                console.error('[tabs] save before close failed:', result.error);
+                return;
               }
             }
           }
@@ -575,19 +583,24 @@ class TabsStore {
   }
 
   /** Sync all dirty tabs from their EditorViews and save to disk. */
-  async saveAllDirty(): Promise<void> {
+  async saveAllDirty(): Promise<boolean> {
+    let allSaved = true;
     for (const tab of this.dirtyTabs) {
       this.syncFromView(tab.id);
       const fresh = this.findByPath(tab.filePath);
-      if (fresh?.isDirty && fresh.content) {
+      if (fresh?.isDirty) {
         await commands.registerWriteIgnore(fresh.filePath);
         const result = await commands.writeFile(fresh.filePath, fresh.content);
         if (result.status === 'ok') {
           await this.tryRenameAfterSave(fresh.filePath, fresh.content);
           this.markSaved(fresh.id);
+        } else {
+          console.error('[tabs] saveAllDirty failed:', result.error);
+          allSaved = false;
         }
       }
     }
+    return allSaved;
   }
 }
 

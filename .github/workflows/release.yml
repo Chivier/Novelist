@@ -31,8 +31,9 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
+          VERSION="${GITHUB_REF_NAME#v}"
           APP="core/target/release/bundle/macos/Novelist.app"
-          DMG="core/target/release/bundle/dmg/Novelist_${{ github.ref_name }}_aarch64.dmg"
+          DMG="core/target/release/bundle/dmg/Novelist_${VERSION}_aarch64.dmg"
           if [ ! -f "$DMG" ]; then
             bash scripts/create-dmg.sh "$APP" "$DMG"
           fi

@@ -16,6 +16,7 @@ export default defineConfig(async (env) => {
             name: "unit",
             include: ["tests/unit/**/*.test.ts"],
             environment: "happy-dom",
+            setupFiles: ["tests/setup.ts"],
           },
         },
         {
@@ -24,6 +25,7 @@ export default defineConfig(async (env) => {
             name: "integration",
             include: ["tests/integration/**/*.test.ts"],
             environment: "happy-dom",
+            setupFiles: ["tests/setup.ts"],
           },
         },
       ],

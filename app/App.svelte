@@ -191,16 +191,27 @@ let paletteOpen = $state(false);
     if (result.status === 'ok') recentProjects = result.data;
   }
 
+  function runStartupTask(label: string, task: () => Promise<void> | void): void {
+    try {
+      Promise.resolve(task()).catch((e) => {
+        console.error(`[startup] ${label} failed:`, e);
+      });
+    } catch (e) {
+      console.error(`[startup] ${label} failed:`, e);
+    }
+  }
+
   /** Auto-save all dirty files before switching project. */
-  async function autoSaveBeforeSwitch(): Promise<void> {
+  async function autoSaveBeforeSwitch(): Promise<boolean> {
     const dirty = tabsStore.dirtyTabs;
-    if (dirty.length === 0) return;
-    await tabsStore.saveAllDirty();
+    if (dirty.length === 0) return true;
+    return tabsStore.saveAllDirty();
   }
 
   async function openProjectFromPath(dirPath: string) {
     if (projectStore.isOpen) {
-      await autoSaveBeforeSwitch();
+      const saved = await autoSaveBeforeSwitch();
+      if (!saved) return;
     }
     projectStore.isLoading = true;
     await commands.stopFileWatcher();
@@ -389,10 +400,10 @@ let paletteOpen = $state(false);
     // deferred startup work (plugin scan, recent-projects refresh, updater).
     requestAnimationFrame(() => {
       startupMark('frontend.app.first-paint');
-      void startupReport();
+      runStartupTask('startupReport', () => startupReport());
 
       // Load recent projects for Cmd+Number switching.
-      refreshRecentProjects();
+      runStartupTask('refreshRecentProjects', () => refreshRecentProjects());
 
       // Load UI extensions from installed plugins. Deferred to idle so the
       // plugin disk scan (ensure_bundled_plugins + manifest parsing) runs
@@ -402,7 +413,9 @@ let paletteOpen = $state(false);
         typeof (globalThis as any).requestIdleCallback === 'function'
           ? (cb) => (globalThis as any).requestIdleCallback(cb, { timeout: 2000 })
           : (cb) => setTimeout(cb, 200);
-      scheduleIdle(() => { void extensionStore.loadFromPlugins(); });
+      scheduleIdle(() => {
+        runStartupTask('extensionStore.loadFromPlugins', () => extensionStore.loadFromPlugins());
+      });
 
       // Async event listeners — consolidated in $lib/composables/app-events.
       unlistenAppEvents = wireAppEvents({
@@ -417,7 +430,7 @@ let paletteOpen = $state(false);
 
       // Spawned-window seed: this window may have been launched by the
       // cli-open routing helper with `#project=…` or `#file=…` in its hash.
-      void consumeWindowSeed({
+      runStartupTask('consumeWindowSeed', () => consumeWindowSeed({
         openProject: (path) => openProjectFromPath(path),
         openFile: async (filePath, line) => {
           const result = await commands.readFile(filePath);
@@ -435,7 +448,7 @@ let paletteOpen = $state(false);
           }
           return true;
         },
-      });
+      }));
 
       // Native menu → commandRegistry dispatch bridge.
       unlistenMenu = wireMenuEvents({
@@ -444,8 +457,10 @@ let paletteOpen = $state(false);
 
       // Check for updates silently after startup (5s delay to not block UI)
       setTimeout(async () => {
-        const { checkForUpdates } = await import('$lib/updater');
-        checkForUpdates(true);
+        runStartupTask('checkForUpdates', async () => {
+          const { checkForUpdates } = await import('$lib/updater');
+          await checkForUpdates(true);
+        });
       }, 5000);
     });
 

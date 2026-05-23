@@ -189,14 +189,17 @@
     display: flex;
     align-items: center;
     width: 100%;
-    padding-top: 5px;
-    padding-bottom: 5px;
+    min-height: 30px;
+    padding-top: 4px;
+    padding-bottom: 4px;
     padding-right: 8px;
     border: none;
     border-radius: 5px;
     background: transparent;
     color: var(--novelist-sidebar-text);
-    font-size: 0.95rem;
+    font-family: var(--novelist-sidebar-font, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    font-size: var(--novelist-sidebar-file-font-size, 14px);
+    line-height: var(--novelist-sidebar-file-line-height, 1.35);
     text-align: left;
     cursor: pointer;
     transition: background 80ms;
@@ -216,20 +219,20 @@
     border-radius: 5px;
     background: var(--novelist-bg);
     color: var(--novelist-text);
-    font-size: 0.8rem;
+    font-size: var(--novelist-sidebar-file-font-size, 14px);
+    line-height: var(--novelist-sidebar-file-line-height, 1.35);
     outline: none;
-    font-family: var(--novelist-mono-font, ui-monospace, 'SF Mono', 'Cascadia Code', monospace);
+    font-family: var(--novelist-sidebar-font, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   }
   .tree-row-wrap {
     align-items: flex-start;
     white-space: normal;
-    min-height: 28px;
+    min-height: 32px;
   }
   .tree-row:hover { background: var(--novelist-sidebar-hover); }
   .tree-dir {
     cursor: default;
     color: var(--novelist-text-secondary);
-    font-size: 0.92rem;
     user-select: none;
   }
   .tree-chevron {
@@ -258,7 +261,7 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-family: var(--novelist-mono-font, ui-monospace, 'SF Mono', 'Cascadia Code', monospace);
+    font-family: inherit;
   }
   .tree-row-wrap .tree-name {
     overflow: visible;
@@ -266,13 +269,12 @@
     white-space: normal;
     overflow-wrap: anywhere;
     word-break: break-word;
-    line-height: 1.35;
   }
   .tree-ext {
     color: var(--novelist-text-tertiary, var(--novelist-text-secondary));
-    font-size: 0.78rem;
+    font-size: 12px;
     flex-shrink: 0;
-    font-family: var(--novelist-mono-font, ui-monospace, 'SF Mono', 'Cascadia Code', monospace);
+    font-family: inherit;
   }
   .tree-row-wrap .tree-ext {
     padding-top: 2px;

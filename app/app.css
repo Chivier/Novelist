@@ -42,6 +42,9 @@
   --novelist-sidebar-text: var(--novelist-text);
   --novelist-sidebar-hover: color-mix(in srgb, var(--novelist-accent) 8%, var(--novelist-bg-secondary));
   --novelist-sidebar-active: color-mix(in srgb, var(--novelist-accent) 14%, var(--novelist-bg-secondary));
+  --novelist-sidebar-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
+  --novelist-sidebar-file-font-size: 14px;
+  --novelist-sidebar-file-line-height: 1.35;
 }
 
 /* Dark mode variables are now handled by the theme system (src/lib/themes.ts).
