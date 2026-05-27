@@ -11,6 +11,14 @@ import {
   stripSkillTokens,
   type AiContextItem,
 } from '$lib/components/ai-shared/context';
+import {
+  attachmentToContextItem,
+  buildPromptFromAttachments,
+  createAttachmentFromContext,
+  displayTextFromInput,
+  searchAttachmentCandidates,
+  type AiContextAttachment,
+} from '$lib/components/ai-shared/attachments';
 
 describe('[contract] AI shared context parsing', () => {
   it('parses supported mention tokens', () => {
@@ -77,5 +85,65 @@ describe('[contract] AI context packs', () => {
     expect(prompt).toContain('## Context 1: Selection');
     expect(prompt).toContain('Path: /x.md');
     expect(prompt).toContain('## User request\nhelp');
+  });
+});
+
+describe('[contract] AI context attachments', () => {
+  const base: AiContextAttachment[] = [
+    {
+      id: 'file:/project/Chapter 1.md',
+      kind: 'project-file',
+      label: 'Chapter 1.md',
+      path: '/project/Chapter 1.md',
+      source: 'project',
+      mode: 'full',
+      content: '# Chapter 1\n\nOpening text',
+      estimatedChars: 24,
+      truncated: false,
+    },
+    {
+      id: 'memory',
+      kind: 'memory',
+      label: 'Project memory',
+      path: '/project/.novelist/ai/memory.md',
+      source: 'ai-assets',
+      mode: 'summary',
+      content: 'Tone notes',
+      estimatedChars: 10,
+      truncated: false,
+    },
+  ];
+
+  it('searches attachment candidates by label and path', () => {
+    expect(searchAttachmentCandidates(base, 'chap').map((x) => x.id)).toEqual(['file:/project/Chapter 1.md']);
+    expect(searchAttachmentCandidates(base, 'memory').map((x) => x.id)).toEqual(['memory']);
+  });
+
+  it('builds outbound prompt without replacing visible text', () => {
+    const packed = buildPromptFromAttachments('summarize this', base, 2000);
+    expect(packed.visibleText).toBe('summarize this');
+    expect(packed.outboundText).toContain('## Context 1: Chapter 1.md');
+    expect(packed.outboundText).toContain('## User request\nsummarize this');
+  });
+
+  it('strips mention and skill tokens only for display text when requested', () => {
+    expect(displayTextFromInput('@current $plot-doctor summarize this')).toBe('summarize this');
+  });
+
+  it('round-trips legacy context items through attachments', () => {
+    const attachment = createAttachmentFromContext({
+      id: 'selection',
+      kind: 'selection',
+      label: 'Selection',
+      path: '/project/a.md',
+      content: 'selected text',
+    });
+    expect(attachment.source).toBe('editor');
+    expect(attachmentToContextItem(attachment)).toMatchObject({
+      id: 'selection',
+      kind: 'selection',
+      label: 'Selection',
+      content: 'selected text',
+    });
   });
 });
