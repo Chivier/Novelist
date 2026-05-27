@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-05-27
+
+### Added
+
+- Added an explicit shared AI composer for AI Talk and AI Agent, with
+  attachable editor selection context and removable context chips instead of
+  hidden selection injection.
+- Added a searchable `@` context picker for open files, project files, recent
+  files, project metadata, active editor context, and current selection.
+- Added AI Agent transcript context cleanup so attached files and snippets are
+  summarized once and excluded from duplicated prior-turn payloads.
+- Added Apply Changes V1 review cards for AI-proposed
+  `novelist-change-set` JSON blocks, with per-file accept/reject controls and
+  stale-original conflict detection.
+
+### Changed
+
+- AI Talk now treats highlighted editor text as an explicit attach suggestion
+  instead of automatically sending every selection with the prompt.
+
 ### CI
 
 - **Release workflow no longer dead-locks on a single failing matrix leg.**
