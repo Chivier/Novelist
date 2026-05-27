@@ -11,6 +11,7 @@
   import AiAgentSettings from './AiAgentSettings.svelte';
   import SessionTabs from '$lib/components/ai-shared/SessionTabs.svelte';
   import AiComposer from '$lib/components/ai-shared/AiComposer.svelte';
+  import ApplyChangesCard from '$lib/components/ai-shared/ApplyChangesCard.svelte';
   import {
     buildPromptFromAttachments,
     createAttachmentFromContext,
@@ -27,6 +28,11 @@
     type SlashCommandId,
   } from '$lib/components/ai-shared/context';
   import {
+    parseChangeSetsFromText,
+    validateFileChange,
+    type AiFileChange,
+  } from '$lib/components/ai-shared/apply-change-set';
+  import {
     deleteAiSession,
     listAiPromptAssets,
     listAiSessions,
@@ -34,7 +40,7 @@
     writeAiSession,
     type AiPromptAsset,
   } from '$lib/components/ai-shared/persistence';
-  import { aiAgentSessions, type Turn } from './sessions.svelte';
+  import { aiAgentSessions, type ApplyChangesCard as ApplyChangesCardState, type Turn } from './sessions.svelte';
   import { commands } from '$lib/ipc/commands';
   import type { UnlistenFn } from '@tauri-apps/api/event';
   import type { ClaudeStreamEvent } from './host';
@@ -153,7 +159,11 @@
     const { idx, turns: base } = ensureAssistantTurn(s.turns);
     const cur = base[idx] as Extract<Turn, { role: 'assistant' }>;
     const finalText = text && text.length > cur.text.length ? text : cur.text;
-    base[idx] = { ...cur, text: finalText, cost };
+    const changeSets = parseChangeSetsFromText(finalText, { sourceSessionId: sessionId });
+    const cards = changeSets.length > 0
+      ? [...cur.cards, ...changeSets.map((changeSet) => ({ kind: 'apply-changes' as const, changeSet }))]
+      : cur.cards;
+    base[idx] = { ...cur, text: finalText, cards, cost };
     aiAgentSessions.updateTurns(sessionId, base, cost);
     void persistProjectSessions();
     scrollDown();
@@ -575,9 +585,11 @@
           if (c.kind === 'tool') {
             const inputStr = typeof c.input === 'string' ? c.input : JSON.stringify(c.input, null, 2);
             lines.push(`> 🔧 **${c.name}**`, '', '```', inputStr, '```', '');
-          } else {
+          } else if (c.kind === 'tool-result') {
             const body = c.content.length > 4000 ? c.content.slice(0, 4000) + '\n…' : c.content;
             lines.push('> ↳ tool result', '', '```', body, '```', '');
+          } else if (c.kind === 'apply-changes') {
+            lines.push('> Apply Changes', '', c.changeSet.summary, '');
           }
         }
         if (t.cost != null) lines.push(`_Cost: $${t.cost.toFixed(4)}_`, '');
@@ -610,6 +622,81 @@
       saveStatus = `Save failed: ${e instanceof Error ? e.message : String(e)}`;
     }
     setTimeout(() => (saveStatus = null), 4000);
+  }
+
+  async function latestFileText(path: string): Promise<string | null> {
+    const result = await commands.readFile(path);
+    return result.status === 'ok' ? result.data : null;
+  }
+
+  async function writeFileText(path: string, text: string): Promise<void> {
+    const result = await commands.writeFile(path, text);
+    if (result.status === 'error') throw new Error(result.error);
+  }
+
+  function updateApplyCard(
+    changeSetId: string,
+    update: (card: ApplyChangesCardState) => ApplyChangesCardState,
+  ) {
+    const s = activeSession;
+    if (!s) return;
+    const turns = s.turns.map((turn) => {
+      if (turn.role !== 'assistant') return turn;
+      return {
+        ...turn,
+        cards: turn.cards.map((card) =>
+          card.kind === 'apply-changes' && card.changeSet.id === changeSetId ? update(card) : card,
+        ),
+      };
+    });
+    aiAgentSessions.updateTurns(s.id, turns);
+  }
+
+  async function acceptApplyFile(changeSetId: string, file: AiFileChange) {
+    const latest = await latestFileText(file.path);
+    const valid = validateFileChange(file, latest);
+    if (!valid.ok) {
+      updateApplyCard(changeSetId, (card) => ({
+        ...card,
+        status: 'conflict',
+        changeSet: {
+          ...card.changeSet,
+          files: card.changeSet.files.map((candidate) =>
+            candidate.path === file.path ? { ...candidate, conflict: valid.reason } : candidate,
+          ),
+        },
+      }));
+      return;
+    }
+    await writeFileText(file.path, file.proposedText);
+    updateApplyCard(changeSetId, (card) => ({ ...card, status: 'accepted' }));
+  }
+
+  function rejectApplyFile(changeSetId: string, file: AiFileChange) {
+    updateApplyCard(changeSetId, (card) => ({
+      ...card,
+      status: 'rejected',
+      changeSet: {
+        ...card.changeSet,
+        files: card.changeSet.files.filter((candidate) => candidate.path !== file.path),
+      },
+    }));
+  }
+
+  async function acceptApplyAll(changeSetId: string) {
+    const s = activeSession;
+    if (!s) return;
+    const applyCards = s.turns.flatMap((turn) => turn.role === 'assistant' ? turn.cards : [])
+      .filter((card): card is ApplyChangesCardState =>
+        card.kind === 'apply-changes' && card.changeSet.id === changeSetId,
+      );
+    for (const card of applyCards) {
+      for (const file of card.changeSet.files) await acceptApplyFile(changeSetId, file);
+    }
+  }
+
+  function rejectApplyAll(changeSetId: string) {
+    updateApplyCard(changeSetId, (card) => ({ ...card, status: 'rejected' }));
   }
 
   function summarizeInput(input: unknown): string {
@@ -727,11 +814,20 @@
                   <summary><span class="summary-icon"><IconTool size={12} /></span> {c.name}</summary>
                   <pre>{summarizeInput(c.input)}</pre>
                 </details>
-              {:else}
+              {:else if c.kind === 'tool-result'}
                 <details class="card tool-result">
                   <summary><span class="summary-icon"><IconArrowInsert size={12} /></span> result</summary>
                   <pre>{c.content.length > 4000 ? c.content.slice(0, 4000) + '\n…' : c.content}</pre>
                 </details>
+              {:else if c.kind === 'apply-changes'}
+                <ApplyChangesCard
+                  changeSet={c.changeSet}
+                  status={c.status}
+                  onAcceptFile={(file) => acceptApplyFile(c.changeSet.id, file)}
+                  onRejectFile={(file) => rejectApplyFile(c.changeSet.id, file)}
+                  onAcceptAll={() => acceptApplyAll(c.changeSet.id)}
+                  onRejectAll={() => rejectApplyAll(c.changeSet.id)}
+                />
               {/if}
             {/each}
           </div>

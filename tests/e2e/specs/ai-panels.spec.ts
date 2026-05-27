@@ -311,6 +311,50 @@ test.describe('AI Agent panel', () => {
 
     await expect(panel.getByTestId('ai-context-bar')).toContainText('Chapter 1.md');
   });
+
+  test('Agent renders Apply Changes card from a structured result', async ({ app }) => {
+    await app.evaluate(() => {
+      (window as any).__TAURI_MOCK_STATE__.setClaudeCliDetectResult({
+        path: '/opt/homebrew/bin/claude',
+        version: '1.0.0',
+      });
+    });
+    await enterProject(app);
+    await app.getByTestId('panel-toggle-ai-agent').click();
+
+    const panel = app.getByTestId('ai-agent-panel');
+    await panel.locator('textarea').fill('tighten chapter');
+    await panel.getByRole('button', { name: 'Send' }).click();
+
+    const uuid = await app.evaluate(() => {
+      const stored = JSON.parse(localStorage.getItem('novelist:ai-agent:sessions:v1') || '[]');
+      return stored[0]?.sessionUuid;
+    });
+    await app.evaluate((sessionId) => {
+      const payload = {
+        type: 'result',
+        subtype: 'success',
+        result: [
+          'Done.',
+          '```novelist-change-set',
+          JSON.stringify({
+            summary: 'Tighten Chapter 1',
+            files: [{
+              path: '/tmp/novelist-test-project/Chapter 1.md',
+              status: 'modify',
+              originalText: '# Chapter 1\\n\\nIt was a dark and stormy night.\\n\\nThe wind howled through the trees.\\n',
+              proposedText: '# Chapter 1\\n\\nNight pressed against the windows.\\n\\nThe wind worried the trees.\\n',
+            }],
+          }),
+          '```',
+        ].join('\n'),
+      };
+      (window as any).__TAURI_MOCK_STATE__.emitClaudeStdout(sessionId, JSON.stringify(payload));
+    }, uuid);
+
+    await expect(panel.getByTestId('ai-apply-changes-card')).toBeVisible();
+    await expect(panel.getByTestId('ai-apply-changes-card')).toContainText('Tighten Chapter 1');
+  });
 });
 
 test.describe('Settings → Plugin settings nav', () => {

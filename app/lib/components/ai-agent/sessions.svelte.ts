@@ -13,10 +13,16 @@
  */
 
 import { killClaudeSession } from './host';
+import type { AiChangeSet } from '$lib/components/ai-shared/apply-change-set';
 
 export type ToolCard = { kind: 'tool'; name: string; input: unknown };
 export type ToolResultCard = { kind: 'tool-result'; content: string; status?: 'pending' | 'success' | 'error' | 'cancelled' };
-export type Card = ToolCard | ToolResultCard;
+export type ApplyChangesCard = {
+  kind: 'apply-changes';
+  changeSet: AiChangeSet;
+  status?: 'pending' | 'accepted' | 'rejected' | 'conflict';
+};
+export type Card = ToolCard | ToolResultCard | ApplyChangesCard;
 
 export type TurnAttachmentMeta = {
   id: string;
