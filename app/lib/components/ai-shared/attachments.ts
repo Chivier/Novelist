@@ -108,10 +108,23 @@ export function searchAttachmentCandidates(
   const q = query.trim().toLowerCase().replace(/^@/, '');
   const unique = dedupeAttachments(candidates);
   if (!q) return unique;
-  return unique.filter((item) => {
-    const haystack = `${item.label} ${item.path ?? ''} ${item.kind}`.toLowerCase();
-    return haystack.includes(q);
-  });
+  return unique
+    .map((item, index) => ({ item, index, score: scoreCandidate(item, q) }))
+    .filter((entry) => entry.score < Number.POSITIVE_INFINITY)
+    .sort((a, b) => a.score - b.score || a.index - b.index)
+    .map((entry) => entry.item);
+}
+
+function scoreCandidate(item: AiContextAttachment, query: string): number {
+  const label = item.label.toLowerCase();
+  const path = item.path?.toLowerCase() ?? '';
+  const kind = item.kind.toLowerCase();
+  if (label.startsWith(query)) return 0;
+  if (label.includes(query)) return 1;
+  if (path.startsWith(query)) return 2;
+  if (path.includes(query)) return 3;
+  if (kind.includes(query)) return 4;
+  return Number.POSITIVE_INFINITY;
 }
 
 export function displayTextFromInput(input: string): string {

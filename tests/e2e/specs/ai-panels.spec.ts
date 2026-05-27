@@ -294,6 +294,23 @@ test.describe('AI Agent panel', () => {
     await expect(panel).toContainText('summarize this');
     await expect(panel).not.toContainText('## Context 1');
   });
+
+  test('Agent @ picker attaches a project file by search', async ({ app }) => {
+    await app.evaluate(() => {
+      (window as any).__TAURI_MOCK_STATE__.setClaudeCliDetectResult({
+        path: '/opt/homebrew/bin/claude',
+        version: '1.0.0',
+      });
+    });
+    await enterProject(app);
+    await app.getByTestId('panel-toggle-ai-agent').click();
+
+    const panel = app.getByTestId('ai-agent-panel');
+    await panel.locator('textarea').fill('@chap');
+    await panel.getByRole('button', { name: /Chapter 1.md/ }).click();
+
+    await expect(panel.getByTestId('ai-context-bar')).toContainText('Chapter 1.md');
+  });
 });
 
 test.describe('Settings → Plugin settings nav', () => {

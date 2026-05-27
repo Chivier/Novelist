@@ -146,4 +146,35 @@ describe('[contract] AI context attachments', () => {
       content: 'selected text',
     });
   });
+
+  it('ranks label prefix matches before path-only matches', () => {
+    const candidates: AiContextAttachment[] = [
+      {
+        id: 'file:/project/Notes/outline.md',
+        kind: 'project-file',
+        label: 'outline.md',
+        path: '/project/Chapter notes/outline.md',
+        source: 'project',
+        mode: 'full',
+        content: 'outline',
+        estimatedChars: 7,
+        truncated: false,
+      },
+      {
+        id: 'file:/project/Chapter 1.md',
+        kind: 'project-file',
+        label: 'Chapter 1.md',
+        path: '/project/Chapter 1.md',
+        source: 'project',
+        mode: 'full',
+        content: 'chapter',
+        estimatedChars: 7,
+        truncated: false,
+      },
+    ];
+    expect(searchAttachmentCandidates(candidates, 'chap').map((x) => x.label)).toEqual([
+      'Chapter 1.md',
+      'outline.md',
+    ]);
+  });
 });

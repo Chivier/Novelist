@@ -16,6 +16,7 @@
   type Props = {
     value: string;
     placeholder: string;
+    inputTestId?: string;
     attachments: readonly AiContextAttachment[];
     mentionVisible: boolean;
     mentionQuery: string;
@@ -25,10 +26,13 @@
     busy?: boolean;
     canSend: boolean;
     sendLabel?: string;
+    sendTestId?: string;
+    stopTestId?: string;
     onInput: (value: string) => void;
     onSend: () => void;
     onStop?: () => void;
-    onPickMention: (token: string) => void;
+    mentionCandidates?: readonly AiContextAttachment[];
+    onPickMention: (token: string, attachment?: AiContextAttachment) => void | Promise<void>;
     onPickCommand: (id: SlashCommandId) => void;
     onRemoveAttachment: (id: string) => void;
     onClearAttachments: () => void;
@@ -41,6 +45,7 @@
   let {
     value,
     placeholder,
+    inputTestId,
     attachments,
     mentionVisible,
     mentionQuery,
@@ -50,9 +55,12 @@
     busy = false,
     canSend,
     sendLabel = 'Send',
+    sendTestId,
+    stopTestId,
     onInput,
     onSend,
     onStop,
+    mentionCandidates = [],
     onPickMention,
     onPickCommand,
     onRemoveAttachment,
@@ -108,8 +116,14 @@
     onClear={onClearAttachments}
   />
   <AiCommandMenu visible={commandVisible} query={commandQuery} onPick={onPickCommand} />
-  <AiMentionMenu visible={mentionVisible} query={mentionQuery} onPick={onPickMention} />
+  <AiMentionMenu
+    visible={mentionVisible}
+    query={mentionQuery}
+    candidates={mentionCandidates}
+    onPick={onPickMention}
+  />
   <textarea
+    data-testid={inputTestId}
     rows="3"
     {placeholder}
     value={value}
@@ -121,9 +135,9 @@
       {@render actions()}
     {/if}
     {#if busy}
-      <button class="novelist-btn novelist-btn-primary" type="button" onclick={() => onStop?.()}>Stop</button>
+      <button class="novelist-btn novelist-btn-primary" data-testid={stopTestId} type="button" onclick={() => onStop?.()}>Stop</button>
     {:else}
-      <button class="novelist-btn novelist-btn-primary" type="button" onclick={onSend} disabled={!canSend}>{sendLabel}</button>
+      <button class="novelist-btn novelist-btn-primary" data-testid={sendTestId} type="button" onclick={onSend} disabled={!canSend}>{sendLabel}</button>
     {/if}
   </div>
 </div>

@@ -7,7 +7,7 @@
     type DetectedCli,
   } from './host';
   import { ClaudeRuntime } from './runtime';
-  import { projectStore } from '$lib/stores/project.svelte';
+  import { projectStore, type FileNode } from '$lib/stores/project.svelte';
   import AiAgentSettings from './AiAgentSettings.svelte';
   import SessionTabs from '$lib/components/ai-shared/SessionTabs.svelte';
   import AiComposer from '$lib/components/ai-shared/AiComposer.svelte';
@@ -50,6 +50,7 @@
   // Sessions currently mid-spawn, keyed by session.id. Prevents racing
   // spawns when send() is called twice in rapid succession.
   const spawning = new Set<string>();
+  const SUPPORTED_CONTEXT_EXTENSIONS = new Set(['.md', '.txt', '.canvas', '.kanban']);
 
   let input = $state('');
   let error = $state<string | null>(null);
@@ -70,6 +71,7 @@
   let commandQuery = $derived(input.trim().startsWith('/') ? input.trim().slice(1) : '');
   let mentionMenuVisible = $derived(/(^|\s)@[^\s]*$/.test(input));
   let mentionQuery = $derived((/(?:^|\s)@([^\s]*)$/.exec(input)?.[1] ?? '').toLowerCase());
+  let mentionCandidates = $derived(buildMentionCandidates());
 
   onMount(async () => {
     aiAgentSessions.ensureOne();
@@ -219,8 +221,75 @@
     input = `/${id} `;
   }
 
-  function pickMention(token: string) {
+  async function pickMention(token: string, attachment?: AiContextAttachment) {
+    if (attachment) {
+      addAttachments([await hydrateAttachment(attachment)]);
+      input = input.replace(/(^|\s)@[^\s]*$/, '$1').trimStart();
+      return;
+    }
     input = input.replace(/(^|\s)@[^\s]*$/, `$1${token}`);
+  }
+
+  function extension(path: string): string {
+    const idx = path.lastIndexOf('.');
+    return idx >= 0 ? path.slice(idx).toLowerCase() : '';
+  }
+
+  function flattenNodes(nodes: FileNode[]): FileNode[] {
+    return nodes.flatMap((node) => [node, ...flattenNodes(node.children ?? [])]);
+  }
+
+  function buildMentionCandidates(): AiContextAttachment[] {
+    const fileCandidates: AiContextAttachment[] = flattenNodes(projectStore.files)
+      .filter((node) => !node.is_dir && SUPPORTED_CONTEXT_EXTENSIONS.has(extension(node.path)))
+      .map((node) => ({
+        id: `file:${node.path}`,
+        kind: 'project-file',
+        label: node.name,
+        path: node.path,
+        source: 'project',
+        mode: 'full',
+        content: '',
+        estimatedChars: node.size ?? 0,
+        truncated: false,
+      }));
+    const assetCandidates = promptAssets.map((asset) =>
+      createAttachmentFromContext({
+        id: `${asset.kind}:${asset.id}`,
+        kind: 'manual-note',
+        label: `${asset.kind === 'skill' ? 'Skill' : 'Command'}: ${asset.name}`,
+        path: asset.path,
+        content: asset.content,
+      }),
+    );
+    const sessionCandidates: AiContextAttachment[] = aiAgentSessions.sessions
+      .filter((session) => session.turns.length > 0)
+      .map((session) => ({
+        id: `session:${session.id}`,
+        kind: 'session',
+        label: `Session: ${session.title}`,
+        source: 'session',
+        mode: 'summary',
+        content: session.turns.map((turn) =>
+          turn.role === 'user'
+            ? `USER: ${turn.displayText ?? turn.text}`
+            : `ASSISTANT: ${turn.text}`,
+        ).join('\n\n'),
+        estimatedChars: session.title.length,
+        truncated: false,
+      }));
+    return [...fileCandidates, ...assetCandidates, ...sessionCandidates];
+  }
+
+  async function hydrateAttachment(attachment: AiContextAttachment): Promise<AiContextAttachment> {
+    if (attachment.kind !== 'project-file' || attachment.content || !attachment.path) return attachment;
+    const result = await commands.readFile(attachment.path);
+    if (result.status === 'error') return attachment;
+    return {
+      ...attachment,
+      content: result.data,
+      estimatedChars: result.data.length,
+    };
   }
 
   async function setActiveMode(mode: 'act' | 'plan') {
@@ -691,6 +760,7 @@
       attachments={attachments}
       mentionVisible={mentionMenuVisible}
       mentionQuery={mentionQuery}
+      mentionCandidates={mentionCandidates}
       commandVisible={commandMenuVisible}
       commandQuery={commandQuery}
       busy={isLive}

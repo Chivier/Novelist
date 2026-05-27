@@ -13,10 +13,17 @@
   import { cancelPendingStreams } from './cleanup';
   import AiTalkSettings from './AiTalkSettings.svelte';
   import SessionTabs from '$lib/components/ai-shared/SessionTabs.svelte';
-  import AiContextBar from '$lib/components/ai-shared/AiContextBar.svelte';
-  import AiCommandMenu from '$lib/components/ai-shared/AiCommandMenu.svelte';
-  import AiMentionMenu from '$lib/components/ai-shared/AiMentionMenu.svelte';
+  import AiComposer from '$lib/components/ai-shared/AiComposer.svelte';
   import InlineEditReview from '$lib/components/ai-shared/InlineEditReview.svelte';
+  import {
+    attachmentToContextItem,
+    createAttachmentFromContext,
+    type AiContextAttachment,
+  } from '$lib/components/ai-shared/attachments';
+  import {
+    reduceSelectionSuggestion,
+    type SelectionSuggestionState,
+  } from '$lib/components/ai-shared/selection-state';
   import {
     BUILTIN_SKILLS,
     buildContextPack,
@@ -28,7 +35,7 @@
     skillAssetsForTokens,
     stripMentionTokens,
     stripSkillTokens,
-    type AiContextItem,
+    type SlashCommandId,
   } from '$lib/components/ai-shared/context';
   import {
     listAiPromptAssets,
@@ -41,16 +48,17 @@
   import { aiTalkSessions, type DisplayMessage } from './sessions.svelte';
   import { promptPresets } from './presets.svelte';
   import { commands } from '$lib/ipc/commands';
-  import { projectStore } from '$lib/stores/project.svelte';
-  import { IconGear, IconClose, IconDocument } from '../icons';
+  import { projectStore, type FileNode } from '$lib/stores/project.svelte';
+  import { IconGear } from '../icons';
 
   type Tab = 'chat' | 'rewrite';
   let activeTab = $state<Tab>('chat');
   let settingsOpen = $state(false);
   let saveStatus = $state<string | null>(null); // brief toast after saving
-  let contextItems = $state<AiContextItem[]>([]);
+  let attachments = $state<AiContextAttachment[]>([]);
   let promptAssets = $state<AiPromptAsset[]>([...BUILTIN_SKILLS]);
   let projectSessionsLoaded = $state(false);
+  const SUPPORTED_CONTEXT_EXTENSIONS = new Set(['.md', '.txt', '.canvas', '.kanban']);
 
   // -------- Live editor selection (poll 300ms) --------
   // Shows a selection chip above the composer so the user knows their
@@ -58,18 +66,17 @@
   // Dismissing the chip disables injection for the *next* turn only.
 
   let liveSnapshot = $state<EditorSnapshot | null>(null);
-  let suppressSelectionOnce = $state(false);
+  let selectionState = $state<SelectionSuggestionState>({ snapshotKey: null, status: 'none' });
   let selectionTimer: ReturnType<typeof setInterval> | null = null;
 
   function refreshLiveSnapshot() {
     const s = getEditorSnapshot();
     // Only track non-empty selections.
     liveSnapshot = s && s.text.length > 0 ? s : null;
-  }
-
-  function clearSelectionContextOnce() {
-    suppressSelectionOnce = true;
-    liveSnapshot = null;
+    selectionState = reduceSelectionSuggestion(selectionState, {
+      type: 'selection-changed',
+      key: liveSnapshot ? selectionKey(liveSnapshot) : null,
+    });
   }
 
   // ------------------------------- Chat -------------------------------
@@ -88,6 +95,12 @@
   let commandQuery = $derived(chatInput.trim().startsWith('/') ? chatInput.trim().slice(1) : '');
   let mentionMenuVisible = $derived(/(^|\s)@[^\s]*$/.test(chatInput));
   let mentionQuery = $derived((/(?:^|\s)@([^\s]*)$/.exec(chatInput)?.[1] ?? '').toLowerCase());
+  let mentionCandidates = $derived(buildMentionCandidates());
+  let suggestedSelection = $derived(
+    liveSnapshot && aiTalkSettings.value.includeSelection && selectionState.status !== 'none'
+      ? { attachment: selectionAttachment(liveSnapshot), status: selectionState.status }
+      : null,
+  );
 
   /**
    * Resolves the effective system prompt / model / temperature for the
@@ -109,7 +122,7 @@
     };
   }
 
-  function buildChatContext(userText: string, extraContext: AiContextItem[] = []): ChatMessage[] {
+  function buildChatContext(userText: string, extraContext: AiContextAttachment[] = []): ChatMessage[] {
     const ctx: ChatMessage[] = [];
     const s = aiTalkSettings.value;
     const cfg = activeConfig();
@@ -118,23 +131,17 @@
     }
 
     const snap = getEditorSnapshot();
-    const includeSelection = s.includeSelection && !suppressSelectionOnce;
     if (snap) {
       if (s.includeCurrentFile && snap.fullDoc.trim()) {
         ctx.push({
           role: 'user',
           content: `The user is currently editing "${snap.filePath ?? 'untitled'}". Document contents:\n\n${snap.fullDoc}`,
         });
-      } else if (includeSelection && snap.text.trim()) {
-        ctx.push({
-          role: 'user',
-          content: `Selected text the user is asking about:\n\n${snap.text}`,
-        });
       }
     }
 
     if (extraContext.length > 0) {
-      const pack = buildContextPack('Use the attached context for this turn.', extraContext);
+      const pack = buildContextPack('Use the attached context for this turn.', extraContext.map(attachmentToContextItem));
       ctx.push({
         role: 'user',
         content: contextPackToPrompt(pack),
@@ -145,30 +152,115 @@
       ctx.push({ role: m.role, content: m.content });
     }
     ctx.push({ role: 'user', content: userText });
-    // Reset single-turn suppression after use.
-    suppressSelectionOnce = false;
     return ctx;
   }
 
-  function addContext(items: AiContextItem[]) {
-    const seen = new Set(contextItems.map((item) => item.id));
-    contextItems = [...contextItems, ...items.filter((item) => !seen.has(item.id))];
+  function addAttachments(items: AiContextAttachment[]) {
+    const seen = new Set(attachments.map((item) => item.id));
+    attachments = [...attachments, ...items.filter((item) => !seen.has(item.id))];
   }
 
-  function removeContext(id: string) {
-    contextItems = contextItems.filter((item) => item.id !== id);
+  function removeAttachment(id: string) {
+    attachments = attachments.filter((item) => item.id !== id);
   }
 
-  function clearContext() {
-    contextItems = [];
+  function clearAttachments() {
+    attachments = [];
   }
 
-  function pickCommand(id: string) {
+  function pickCommand(id: SlashCommandId) {
     chatInput = `/${id} `;
   }
 
-  function pickMention(token: string) {
+  async function pickMention(token: string, attachment?: AiContextAttachment) {
+    if (attachment) {
+      addAttachments([await hydrateAttachment(attachment)]);
+      chatInput = chatInput.replace(/(^|\s)@[^\s]*$/, '$1').trimStart();
+      return;
+    }
     chatInput = chatInput.replace(/(^|\s)@[^\s]*$/, `$1${token}`);
+  }
+
+  function selectionKey(snapshot: EditorSnapshot): string {
+    return `${snapshot.filePath ?? 'untitled'}:${snapshot.from}:${snapshot.to}:${snapshot.text.length}`;
+  }
+
+  function selectionAttachment(snapshot: EditorSnapshot): AiContextAttachment {
+    return createAttachmentFromContext({
+      id: `selection:${selectionKey(snapshot)}`,
+      kind: 'selection',
+      label: `Selection (${snapshot.text.length} chars)`,
+      path: snapshot.filePath ?? undefined,
+      content: snapshot.text,
+    });
+  }
+
+  function attachSelectionSuggestion() {
+    if (!liveSnapshot) return;
+    addAttachments([selectionAttachment(liveSnapshot)]);
+    selectionState = reduceSelectionSuggestion(selectionState, { type: 'attach' });
+  }
+
+  function dismissSelectionSuggestion() {
+    selectionState = reduceSelectionSuggestion(selectionState, { type: 'dismiss' });
+  }
+
+  function extension(path: string): string {
+    const idx = path.lastIndexOf('.');
+    return idx >= 0 ? path.slice(idx).toLowerCase() : '';
+  }
+
+  function flattenNodes(nodes: FileNode[]): FileNode[] {
+    return nodes.flatMap((node) => [node, ...flattenNodes(node.children ?? [])]);
+  }
+
+  function buildMentionCandidates(): AiContextAttachment[] {
+    const fileCandidates: AiContextAttachment[] = flattenNodes(projectStore.files)
+      .filter((node) => !node.is_dir && SUPPORTED_CONTEXT_EXTENSIONS.has(extension(node.path)))
+      .map((node) => ({
+        id: `file:${node.path}`,
+        kind: 'project-file',
+        label: node.name,
+        path: node.path,
+        source: 'project',
+        mode: 'full',
+        content: '',
+        estimatedChars: node.size ?? 0,
+        truncated: false,
+      }));
+    const assetCandidates = promptAssets.map((asset) =>
+      createAttachmentFromContext({
+        id: `${asset.kind}:${asset.id}`,
+        kind: 'manual-note',
+        label: `${asset.kind === 'skill' ? 'Skill' : 'Command'}: ${asset.name}`,
+        path: asset.path,
+        content: asset.content,
+      }),
+    );
+    const sessionCandidates: AiContextAttachment[] = aiTalkSessions.sessions
+      .filter((session) => session.messages.length > 0)
+      .map((session) => ({
+        id: `session:${session.id}`,
+        kind: 'session',
+        label: `Session: ${session.title}`,
+        source: 'session',
+        mode: 'summary',
+        content: session.messages.map((message) => `${message.role.toUpperCase()}: ${message.content}`).join('\n\n'),
+        estimatedChars: session.title.length,
+        truncated: false,
+      }));
+    return [...fileCandidates, ...assetCandidates, ...sessionCandidates];
+  }
+
+  async function hydrateAttachment(attachment: AiContextAttachment): Promise<AiContextAttachment> {
+    if (attachment.kind !== 'project-file' || attachment.content || !attachment.path) return attachment;
+    const result = await commands.readFile(attachment.path);
+    if (result.status === 'error') return attachment;
+    return {
+      ...attachment,
+      content: result.data,
+      estimatedChars: result.data.length,
+    };
   }
 
   async function handleSpecialTalkCommand(commandId: string): Promise<boolean> {
@@ -258,16 +350,19 @@
 
     const mentionContexts = await resolveMentionContexts(text);
     const skillTokens = parseSkillTokens(text);
-    const skillContext: AiContextItem[] = skillAssetsForTokens(skillTokens, promptAssets).map((skill) => ({
-      id: `skill:${skill.id}`,
-      kind: 'manual-note',
-      label: `Skill: ${skill.name}`,
-      path: skill.path,
-      content: skill.content,
-    }));
-    const turnContext = [...contextItems, ...mentionContexts, ...skillContext];
-    if (mentionContexts.length > 0 || skillContext.length > 0) {
-      addContext([...mentionContexts, ...skillContext]);
+    const skillAttachments = skillAssetsForTokens(skillTokens, promptAssets).map((skill) =>
+      createAttachmentFromContext({
+        id: `skill:${skill.id}`,
+        kind: 'manual-note',
+        label: `Skill: ${skill.name}`,
+        path: skill.path,
+        content: skill.content,
+      }),
+    );
+    const mentionAttachments = mentionContexts.map(createAttachmentFromContext);
+    const turnContext = [...attachments, ...mentionAttachments, ...skillAttachments];
+    if (mentionAttachments.length > 0 || skillAttachments.length > 0) {
+      addAttachments([...mentionAttachments, ...skillAttachments]);
     }
     const cleaned = stripSkillTokens(stripMentionTokens(slash ? slash.rest || text : text));
     const instruction = commandInstruction(slash);
@@ -419,13 +514,15 @@
       const assets = await listAiPromptAssets(projectDir);
       promptAssets = [...BUILTIN_SKILLS, ...assets.skills];
       if (assets.memory?.content) {
-        addContext([{
-          id: 'memory',
-          kind: 'manual-note',
-          label: 'Project memory',
-          path: assets.memory.path,
-          content: assets.memory.content,
-        }]);
+        addAttachments([
+          createAttachmentFromContext({
+            id: 'memory',
+            kind: 'manual-note',
+            label: 'Project memory',
+            path: assets.memory.path,
+            content: assets.memory.content,
+          }),
+        ]);
       }
       const files = await listAiSessions(projectDir, 'talk');
       if (files.length > 0) {
@@ -457,13 +554,6 @@
     queueMicrotask(() => {
       if (chatScroller) chatScroller.scrollTop = chatScroller.scrollHeight;
     });
-  }
-
-  function chatKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      void sendChat();
-    }
   }
 
   // ------------------------------ Rewrite ------------------------------
@@ -680,35 +770,33 @@
         </div>
       {/if}
     </div>
-    <div class="composer" data-testid="ai-talk-composer">
-      {#if liveSnapshot && !suppressSelectionOnce && aiTalkSettings.value.includeSelection}
-        <div class="selection-chip" data-testid="selection-chip">
-          <span class="chip-icon"><IconDocument size={12} /></span>
-          <span class="chip-label">
-            Selection · {liveSnapshot.text.length} chars
-          </span>
-          <span class="chip-preview">{liveSnapshot.text.slice(0, 80)}{liveSnapshot.text.length > 80 ? '…' : ''}</span>
-          <button
-            type="button"
-            class="chip-close"
-            title="Don't use this selection for the next message"
-            aria-label="Remove selection context"
-            onclick={clearSelectionContextOnce}
-          ><IconClose size={12} /></button>
-        </div>
-      {/if}
-      <AiContextBar items={contextItems} onRemove={removeContext} onClear={clearContext} />
-      <AiCommandMenu visible={commandMenuVisible} query={commandQuery} onPick={pickCommand} />
-      <AiMentionMenu visible={mentionMenuVisible} query={mentionQuery} onPick={pickMention} />
-      <textarea
-        data-testid="ai-talk-input"
-        rows="3"
-        placeholder="Ask anything…"
+    <div data-testid="ai-talk-composer">
+      <AiComposer
         value={chatInput}
-        oninput={(e) => (chatInput = e.currentTarget.value)}
-        onkeydown={chatKeydown}
-      ></textarea>
-      <div class="composer-actions">
+        placeholder="Ask anything..."
+        inputTestId="ai-talk-input"
+        attachments={attachments}
+        mentionVisible={mentionMenuVisible}
+        mentionQuery={mentionQuery}
+        mentionCandidates={mentionCandidates}
+        commandVisible={commandMenuVisible}
+        commandQuery={commandQuery}
+        suggestedSelection={suggestedSelection}
+        busy={chatStreaming}
+        canSend={Boolean(chatInput.trim())}
+        sendTestId="ai-talk-send"
+        stopTestId="ai-talk-stop"
+        onInput={(value) => (chatInput = value)}
+        onSend={sendChat}
+        onStop={cancelChat}
+        onPickMention={pickMention}
+        onPickCommand={pickCommand}
+        onRemoveAttachment={removeAttachment}
+        onClearAttachments={clearAttachments}
+        onAttachSelection={attachSelectionSuggestion}
+        onDismissSelection={dismissSelectionSuggestion}
+      >
+        {#snippet actions()}
         {#if saveStatus}
           <span class="save-status" data-testid="ai-talk-save-status">{saveStatus}</span>
         {/if}
@@ -738,12 +826,8 @@
           disabled={chatStreaming || messages.length < 2}
           title="Compact current conversation"
         >Compact</button>
-        {#if chatStreaming}
-          <button class="novelist-btn novelist-btn-primary" data-testid="ai-talk-stop" onclick={cancelChat}>Stop</button>
-        {:else}
-          <button class="novelist-btn novelist-btn-primary" data-testid="ai-talk-send" onclick={sendChat} disabled={!chatInput.trim()}>Send</button>
-        {/if}
-      </div>
+        {/snippet}
+      </AiComposer>
     </div>
   {:else}
     <div class="rewrite">
@@ -903,66 +987,6 @@
     border-radius: 3px;
     padding: 1px 4px;
     font-size: 11px;
-  }
-  .composer {
-    border-top: 1px solid var(--novelist-border);
-    padding: 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    background: var(--novelist-bg-secondary);
-  }
-  .composer textarea {
-    width: 100%;
-    box-sizing: border-box;
-    background: var(--novelist-bg);
-    border: 1px solid var(--novelist-border);
-    color: var(--novelist-text);
-    border-radius: 4px;
-    padding: 6px 8px;
-    font: inherit;
-    resize: vertical;
-  }
-  .selection-chip {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 8px;
-    background: color-mix(in srgb, var(--novelist-accent) 10%, var(--novelist-bg));
-    border: 1px solid color-mix(in srgb, var(--novelist-accent) 40%, transparent);
-    border-radius: 4px;
-    font-size: 11px;
-    color: var(--novelist-text);
-  }
-  .chip-icon { flex-shrink: 0; }
-  .chip-label {
-    font-weight: 500;
-    color: var(--novelist-accent);
-    flex-shrink: 0;
-  }
-  .chip-preview {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--novelist-text-secondary);
-    flex: 1;
-    min-width: 0;
-  }
-  .chip-close {
-    background: none;
-    border: none;
-    color: var(--novelist-text-secondary);
-    cursor: pointer;
-    padding: 0 4px;
-    font-size: 14px;
-    line-height: 1;
-    flex-shrink: 0;
-  }
-  .chip-close:hover { color: var(--novelist-text); }
-  .composer-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 6px;
   }
   /* Button styles live in app.css — .novelist-btn / -primary / -ghost. */
   .rewrite {

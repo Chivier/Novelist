@@ -1,5 +1,14 @@
 <script lang="ts">
-  type Mention = { token: string; label: string; hint: string };
+  import type { AiContextAttachment } from './attachments';
+  import { searchAttachmentCandidates } from './attachments';
+
+  type Mention = {
+    token: string;
+    label: string;
+    hint: string;
+    attachment?: AiContextAttachment;
+  };
+
   const MENTIONS: Mention[] = [
     { token: '@selection', label: '@selection', hint: 'selected editor text' },
     { token: '@current', label: '@current', hint: 'current file contents' },
@@ -11,17 +20,31 @@
   type Props = {
     visible: boolean;
     query: string;
-    onPick: (token: string) => void;
+    candidates?: readonly AiContextAttachment[];
+    onPick: (token: string, attachment?: AiContextAttachment) => void;
   };
 
-  let { visible, query, onPick }: Props = $props();
-  let filtered = $derived(MENTIONS.filter((m) => m.label.toLowerCase().includes(query.toLowerCase())));
+  let { visible, query, candidates = [], onPick }: Props = $props();
+  let dynamicMentions = $derived(
+    searchAttachmentCandidates(candidates, query).map((item) => ({
+      token: `@${item.id}`,
+      label: item.label,
+      hint: item.path ?? item.kind,
+      attachment: item,
+    })),
+  );
+  let filtered = $derived(
+    [
+      ...MENTIONS.filter((m) => `${m.label} ${m.hint}`.toLowerCase().includes(query.toLowerCase())),
+      ...dynamicMentions,
+    ].slice(0, 8),
+  );
 </script>
 
 {#if visible && filtered.length > 0}
   <div class="menu" data-testid="ai-mention-menu">
     {#each filtered as mention}
-      <button type="button" onclick={() => onPick(mention.token)}>
+      <button type="button" onclick={() => onPick(mention.token, mention.attachment)}>
         <strong>{mention.label}</strong>
         <span>{mention.hint}</span>
       </button>
