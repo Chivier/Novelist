@@ -10,21 +10,21 @@
   import { projectStore } from '$lib/stores/project.svelte';
   import AiAgentSettings from './AiAgentSettings.svelte';
   import SessionTabs from '$lib/components/ai-shared/SessionTabs.svelte';
-  import AiContextBar from '$lib/components/ai-shared/AiContextBar.svelte';
-  import AiCommandMenu from '$lib/components/ai-shared/AiCommandMenu.svelte';
-  import AiMentionMenu from '$lib/components/ai-shared/AiMentionMenu.svelte';
+  import AiComposer from '$lib/components/ai-shared/AiComposer.svelte';
+  import {
+    buildPromptFromAttachments,
+    createAttachmentFromContext,
+    displayTextFromInput,
+    type AiContextAttachment,
+  } from '$lib/components/ai-shared/attachments';
   import {
     BUILTIN_SKILLS,
-    buildContextPack,
     commandInstruction,
-    contextPackToPrompt,
     parseSkillTokens,
     parseSlashCommand,
     resolveMentionContexts,
     skillAssetsForTokens,
-    stripMentionTokens,
-    stripSkillTokens,
-    type AiContextItem,
+    type SlashCommandId,
   } from '$lib/components/ai-shared/context';
   import {
     deleteAiSession,
@@ -56,7 +56,7 @@
   let scroller = $state<HTMLDivElement | undefined>(undefined);
   let settingsOpen = $state(false);
   let saveStatus = $state<string | null>(null);
-  let contextItems = $state<AiContextItem[]>([]);
+  let attachments = $state<AiContextAttachment[]>([]);
   let promptAssets = $state<AiPromptAsset[]>([...BUILTIN_SKILLS]);
   let projectSessionsLoaded = $state(false);
 
@@ -202,20 +202,20 @@
     }
   }
 
-  function addContext(items: AiContextItem[]) {
-    const seen = new Set(contextItems.map((item) => item.id));
-    contextItems = [...contextItems, ...items.filter((item) => !seen.has(item.id))];
+  function addAttachments(items: AiContextAttachment[]) {
+    const seen = new Set(attachments.map((item) => item.id));
+    attachments = [...attachments, ...items.filter((item) => !seen.has(item.id))];
   }
 
-  function removeContext(id: string) {
-    contextItems = contextItems.filter((item) => item.id !== id);
+  function removeAttachment(id: string) {
+    attachments = attachments.filter((item) => item.id !== id);
   }
 
-  function clearContext() {
-    contextItems = [];
+  function clearAttachments() {
+    attachments = [];
   }
 
-  function pickCommand(id: string) {
+  function pickCommand(id: SlashCommandId) {
     input = `/${id} `;
   }
 
@@ -257,7 +257,7 @@
       '',
       ...s.turns.slice(-12).map((turn) =>
         turn.role === 'user'
-          ? `USER: ${turn.text}`
+          ? `USER: ${turn.displayText ?? turn.text}`
           : `CLAUDE: ${turn.text || turn.cards.map((c) => c.kind).join(', ')}`,
       ),
     ].join('\n');
@@ -354,27 +354,43 @@
 
     const mentionContexts = await resolveMentionContexts(text);
     const skillTokens = parseSkillTokens(text);
-    const skillContext = skillAssetsForTokens(skillTokens, promptAssets).map((skill) => ({
-      id: `skill:${skill.id}`,
-      kind: 'manual-note' as const,
-      label: `Skill: ${skill.name}`,
-      path: skill.path,
-      content: skill.content,
-    }));
-    const turnContext = [...contextItems, ...mentionContexts, ...skillContext];
-    if (mentionContexts.length > 0 || skillContext.length > 0) {
-      addContext([...mentionContexts, ...skillContext]);
+    const skillAttachments = skillAssetsForTokens(skillTokens, promptAssets).map((skill) =>
+      createAttachmentFromContext({
+        id: `skill:${skill.id}`,
+        kind: 'manual-note',
+        label: `Skill: ${skill.name}`,
+        path: skill.path,
+        content: skill.content,
+      }),
+    );
+    const mentionAttachments = mentionContexts.map(createAttachmentFromContext);
+    const turnAttachments = [...attachments, ...mentionAttachments, ...skillAttachments];
+    if (mentionAttachments.length > 0 || skillAttachments.length > 0) {
+      addAttachments([...mentionAttachments, ...skillAttachments]);
     }
-    const cleaned = stripSkillTokens(stripMentionTokens(slash ? slash.rest || text : text));
+    const displayText = displayTextFromInput(slash ? slash.rest || text : text);
     const instruction = commandInstruction(slash);
     const userText = instruction
-      ? `${instruction}\n\nUser request: ${cleaned || slash?.rest || text}`
-      : cleaned || text;
-    const pack = buildContextPack(userText, turnContext);
-    const outbound = pack.items.length > 0 ? contextPackToPrompt(pack) : userText;
+      ? `${instruction}\n\nUser request: ${displayText || slash?.rest || text}`
+      : displayText || text;
+    const packed = buildPromptFromAttachments(userText, turnAttachments);
+    const outbound = packed.outboundText;
 
     // Append user turn immediately (snappy UX).
-    aiAgentSessions.updateTurns(sessionId, [...s.turns, { role: 'user', text: outbound }]);
+    aiAgentSessions.updateTurns(sessionId, [
+      ...s.turns,
+      {
+        role: 'user',
+        text: outbound,
+        displayText: displayText || text,
+        attachments: packed.attachments.map((item) => ({
+          id: item.id,
+          label: item.label,
+          kind: item.kind,
+          path: item.path,
+        })),
+      },
+    ]);
     await persistProjectSessions();
     scrollDown();
     try {
@@ -435,13 +451,15 @@
       const assets = await listAiPromptAssets(projectDir);
       promptAssets = [...BUILTIN_SKILLS, ...assets.skills];
       if (assets.memory?.content) {
-        addContext([{
-          id: 'memory',
-          kind: 'manual-note',
-          label: 'Project memory',
-          path: assets.memory.path,
-          content: assets.memory.content,
-        }]);
+        addAttachments([
+          createAttachmentFromContext({
+            id: 'memory',
+            kind: 'manual-note',
+            label: 'Project memory',
+            path: assets.memory.path,
+            content: assets.memory.content,
+          }),
+        ]);
       }
       const files = await listAiSessions(projectDir, 'agent');
       if (files.length > 0) {
@@ -480,7 +498,7 @@
     const lines: string[] = [`# ${title}`, '', `_Exported from AI Agent · ${iso}_`, ''];
     for (const t of list) {
       if (t.role === 'user') {
-        lines.push('## You', '', t.text, '');
+        lines.push('## You', '', t.displayText ?? t.text, '');
       } else {
         lines.push('## Claude', '');
         if (t.text) lines.push(t.text, '');
@@ -523,18 +541,6 @@
       saveStatus = `Save failed: ${e instanceof Error ? e.message : String(e)}`;
     }
     setTimeout(() => (saveStatus = null), 4000);
-  }
-
-  function inputKeydown(e: KeyboardEvent) {
-    if (e.key === 'Tab' && e.shiftKey) {
-      e.preventDefault();
-      void setActiveMode(agentMode === 'plan' ? 'act' : 'plan');
-      return;
-    }
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      void send();
-    }
   }
 
   function summarizeInput(input: unknown): string {
@@ -617,7 +623,14 @@
         {#if turn.role === 'user'}
           <div class="turn user">
             <div class="role">You</div>
-            <div class="text">{turn.text}</div>
+            <div class="text">{turn.displayText ?? turn.text}</div>
+            {#if turn.attachments?.length}
+              <div class="turn-attachments">
+                {#each turn.attachments as item (item.id)}
+                  <span title={item.path ?? item.label}>{item.label}</span>
+                {/each}
+              </div>
+            {/if}
           </div>
         {:else}
           <div class="turn assistant">
@@ -672,18 +685,25 @@
       <div class="banner">{error}</div>
     {/if}
 
-    <div class="composer">
-      <AiContextBar items={contextItems} onRemove={removeContext} onClear={clearContext} />
-      <AiCommandMenu visible={commandMenuVisible} query={commandQuery} onPick={pickCommand} />
-      <AiMentionMenu visible={mentionMenuVisible} query={mentionQuery} onPick={pickMention} />
-      <textarea
-        rows="3"
-        placeholder="Ask the agent…  @current /plan $plot-doctor"
-        value={input}
-        oninput={(e) => (input = e.currentTarget.value)}
-        onkeydown={inputKeydown}
-      ></textarea>
-      <div class="composer-actions">
+    <AiComposer
+      value={input}
+      placeholder="Ask the agent... @current /plan $plot-doctor"
+      attachments={attachments}
+      mentionVisible={mentionMenuVisible}
+      mentionQuery={mentionQuery}
+      commandVisible={commandMenuVisible}
+      commandQuery={commandQuery}
+      busy={isLive}
+      canSend={Boolean(input.trim())}
+      onInput={(value) => (input = value)}
+      onSend={send}
+      onStop={stopActiveSession}
+      onPickMention={pickMention}
+      onPickCommand={pickCommand}
+      onRemoveAttachment={removeAttachment}
+      onClearAttachments={clearAttachments}
+    >
+      {#snippet actions()}
         {#if saveStatus}
           <span class="save-status" data-testid="ai-agent-save-status">{saveStatus}</span>
         {/if}
@@ -707,12 +727,8 @@
           disabled={turns.length === 0}
           title="Save chat as markdown into &lt;project&gt;/.novelist/chats/"
         >Save</button>
-        {#if isLive}
-          <button class="novelist-btn novelist-btn-ghost" data-testid="ai-agent-stop" onclick={stopActiveSession}>Stop</button>
-        {/if}
-        <button class="novelist-btn novelist-btn-primary" onclick={send} disabled={!input.trim()}>Send</button>
-      </div>
-    </div>
+      {/snippet}
+    </AiComposer>
   {/if}
 </main>
 
@@ -838,6 +854,27 @@
     align-self: flex-end;
     max-width: 85%;
   }
+  .turn-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 4px;
+    max-width: 85%;
+    align-self: flex-end;
+  }
+  .turn-attachments span {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border: 1px solid var(--novelist-border);
+    border-radius: 4px;
+    padding: 2px 6px;
+    background: var(--novelist-bg-secondary);
+    color: var(--novelist-text-secondary);
+    font-size: 10px;
+  }
   .plan-card {
     padding: 8px 10px;
     border: 1px solid color-mix(in srgb, var(--novelist-accent) 45%, var(--novelist-border));
@@ -903,30 +940,6 @@
     color: var(--novelist-text);
     font-size: 12px;
     border-radius: 4px;
-  }
-  .composer {
-    border-top: 1px solid var(--novelist-border);
-    padding: 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    background: var(--novelist-bg-secondary);
-  }
-  .composer textarea {
-    width: 100%;
-    box-sizing: border-box;
-    background: var(--novelist-bg);
-    border: 1px solid var(--novelist-border);
-    color: var(--novelist-text);
-    border-radius: 4px;
-    padding: 6px 8px;
-    font: inherit;
-    resize: vertical;
-  }
-  .composer-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 6px;
   }
   .save-status {
     font-size: 11px;

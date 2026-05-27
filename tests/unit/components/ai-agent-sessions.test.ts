@@ -76,4 +76,20 @@ describe('[contract] aiAgentSessions store', () => {
     expect(aiAgentSessions.active?.sessionUuid).not.toBe(uuid);
     expect(killClaudeSession).toHaveBeenCalledWith(uuid);
   });
+
+  it('keeps display text separate from outbound prompt metadata', () => {
+    const id = aiAgentSessions.create();
+    aiAgentSessions.updateTurns(id, [{
+      role: 'user',
+      text: '## Context 1: hidden\n\n## User request\nsummarize',
+      displayText: 'summarize',
+      attachments: [{ id: 'current:/p/a.md', label: 'Current file: a.md', kind: 'current-file' }],
+    }]);
+    expect(aiAgentSessions.active?.turns[0]).toMatchObject({
+      role: 'user',
+      text: '## Context 1: hidden\n\n## User request\nsummarize',
+      displayText: 'summarize',
+    });
+    expect(aiAgentSessions.active?.title).toBe('summarize');
+  });
 });

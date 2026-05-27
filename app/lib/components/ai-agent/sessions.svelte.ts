@@ -18,9 +18,28 @@ export type ToolCard = { kind: 'tool'; name: string; input: unknown };
 export type ToolResultCard = { kind: 'tool-result'; content: string; status?: 'pending' | 'success' | 'error' | 'cancelled' };
 export type Card = ToolCard | ToolResultCard;
 
-export type Turn =
-  | { role: 'user'; text: string }
-  | { role: 'assistant'; text: string; cards: Card[]; cost?: number };
+export type TurnAttachmentMeta = {
+  id: string;
+  label: string;
+  kind: string;
+  path?: string;
+};
+
+export type UserTurn = {
+  role: 'user';
+  text: string;
+  displayText?: string;
+  attachments?: TurnAttachmentMeta[];
+};
+
+export type AssistantTurn = {
+  role: 'assistant';
+  text: string;
+  cards: Card[];
+  cost?: number;
+};
+
+export type Turn = UserTurn | AssistantTurn;
 
 export type AgentSession = {
   id: string;
@@ -60,11 +79,9 @@ function safeParse<T>(raw: string | null, fallback: T): T {
 }
 
 export function deriveAgentTitle(turns: Turn[]): string {
-  const firstUser = turns.find((t) => t.role === 'user') as
-    | { role: 'user'; text: string }
-    | undefined;
+  const firstUser = turns.find((t) => t.role === 'user') as UserTurn | undefined;
   if (!firstUser) return 'New agent';
-  const first = firstUser.text.trim().split(/\n/)[0];
+  const first = (firstUser.displayText ?? firstUser.text).trim().split(/\n/)[0];
   return first.length > MAX_TITLE_LENGTH
     ? first.slice(0, MAX_TITLE_LENGTH - 1) + '…'
     : first || 'New agent';

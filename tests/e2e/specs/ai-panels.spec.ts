@@ -275,6 +275,25 @@ test.describe('AI Agent panel', () => {
     await expect(panel).not.toContainText('Claude Code CLI not found');
     await expect(panel.locator('textarea')).toBeVisible();
   });
+
+  test('Agent displays clean user text while sending attached context', async ({ app }) => {
+    await app.evaluate(() => {
+      (window as any).__TAURI_MOCK_STATE__.setClaudeCliDetectResult({
+        path: '/opt/homebrew/bin/claude',
+        version: '1.0.0',
+      });
+    });
+    await enterProject(app);
+    await app.getByText('Chapter 1', { exact: true }).click();
+    await app.getByTestId('panel-toggle-ai-agent').click();
+
+    const panel = app.getByTestId('ai-agent-panel');
+    await panel.locator('textarea').fill('@current summarize this');
+    await panel.getByRole('button', { name: 'Send' }).click();
+
+    await expect(panel).toContainText('summarize this');
+    await expect(panel).not.toContainText('## Context 1');
+  });
 });
 
 test.describe('Settings → Plugin settings nav', () => {
