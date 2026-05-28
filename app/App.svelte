@@ -1003,13 +1003,20 @@ let paletteOpen = $state(false);
   .sidebar-edge {
     position: relative;
     flex-shrink: 0;
-    width: 8px;
+    box-sizing: border-box;
+    width: 4px;
     display: flex;
     align-items: stretch;
+    background: var(--novelist-sidebar-bg);
+    border-left: 1px solid var(--novelist-border-subtle, var(--novelist-border));
   }
   .sidebar-edge .panel-resize-handle {
     width: 4px;
-    margin-left: 4px;
+    margin-left: 0;
+    background: transparent;
+  }
+  .sidebar-edge .panel-resize-handle:hover {
+    background: color-mix(in srgb, var(--novelist-accent) 16%, var(--novelist-sidebar-bg));
   }
   .sidebar-toggle-handle,
   .sidebar-reopen-handle {
@@ -1019,24 +1026,29 @@ let paletteOpen = $state(false);
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 42px;
+    width: 14px;
+    height: 30px;
     padding: 0;
     border: 1px solid var(--novelist-border-subtle, var(--novelist-border));
-    background: var(--novelist-bg);
+    background: var(--novelist-sidebar-bg);
     color: var(--novelist-text-tertiary, var(--novelist-text-secondary));
     cursor: pointer;
     transform: translateY(-50%);
     transition: color 120ms, border-color 120ms, background 120ms;
   }
+  .sidebar-toggle-handle svg,
+  .sidebar-reopen-handle svg {
+    width: 10px;
+    height: 10px;
+  }
   .sidebar-toggle-handle {
-    right: -9px;
-    border-radius: 0 5px 5px 0;
+    right: -6px;
+    border-radius: 0 4px 4px 0;
   }
   .sidebar-reopen-handle {
     left: 0;
     border-left: none;
-    border-radius: 0 5px 5px 0;
+    border-radius: 0 4px 4px 0;
   }
   .sidebar-toggle-handle:hover,
   .sidebar-reopen-handle:hover {

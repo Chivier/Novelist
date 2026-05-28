@@ -44,6 +44,38 @@ test.describe('Sidebar', () => {
     expect(metrics.fontFamily.toLowerCase()).not.toContain('monospace');
   });
 
+  test('sidebar collapse edge stays compact and visually continuous', async ({ app }) => {
+    const toggle = app.getByTestId('sidebar-edge-toggle');
+    await expect(toggle).toBeVisible();
+
+    const metrics = await toggle.evaluate((button) => {
+      const handle = button as HTMLElement;
+      const edge = handle.parentElement as HTMLElement | null;
+      const sidebarRegion = document.querySelector('[data-testid="sidebar-region"]') as HTMLElement | null;
+      const handleRect = handle.getBoundingClientRect();
+      const edgeRect = edge?.getBoundingClientRect();
+      const handleStyles = getComputedStyle(handle);
+      const edgeStyles = edge ? getComputedStyle(edge) : null;
+
+      return {
+        handleWidth: handleRect.width,
+        handleHeight: handleRect.height,
+        handleBackground: handleStyles.backgroundColor,
+        edgeWidth: edgeRect?.width ?? 0,
+        edgeBackground: edgeStyles?.backgroundColor ?? '',
+        edgeLeft: edgeRect?.left ?? 0,
+        sidebarRight: sidebarRegion?.getBoundingClientRect().right ?? 0,
+      };
+    });
+
+    expect(metrics.handleWidth).toBeLessThanOrEqual(16);
+    expect(metrics.handleHeight).toBeLessThanOrEqual(32);
+    expect(metrics.edgeWidth).toBeLessThanOrEqual(6);
+    expect(metrics.edgeBackground).not.toBe('rgba(0, 0, 0, 0)');
+    expect(metrics.handleBackground).toBe(metrics.edgeBackground);
+    expect(metrics.edgeLeft).toBeCloseTo(metrics.sidebarRight, 1);
+  });
+
   test('toggle sidebar visibility', async ({ app }) => {
     const sidebar = app.getByTestId('sidebar');
     await expect(sidebar).toBeVisible();
