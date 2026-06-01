@@ -205,6 +205,7 @@ name = "With Overlay"
 sort_mode = "numeric-asc"
 show_hidden_files = true
 wrap_file_names = true
+sidebar_font_size = 16
 
 [new_file]
 template = "第{N}章"
@@ -217,6 +218,7 @@ enabled = { mindmap = false }
         assert_eq!(config.view.sort_mode.as_deref(), Some("numeric-asc"));
         assert_eq!(config.view.show_hidden_files, Some(true));
         assert_eq!(config.view.wrap_file_names, Some(true));
+        assert_eq!(config.view.sidebar_font_size, Some(16));
         assert_eq!(config.new_file.template.as_deref(), Some("第{N}章"));
         assert_eq!(config.new_file.auto_rename_from_h1, Some(false));
         // detect_from_folder is None (not in TOML) — correct
@@ -228,6 +230,7 @@ enabled = { mindmap = false }
         let back: ProjectConfig = toml::from_str(&serialized).unwrap();
         assert_eq!(back.view.show_hidden_files, Some(true));
         assert_eq!(back.view.wrap_file_names, Some(true));
+        assert_eq!(back.view.sidebar_font_size, Some(16));
         assert_eq!(back.new_file.template.as_deref(), Some("第{N}章"));
         assert_eq!(back.plugins.enabled.get("mindmap"), Some(&false));
     }

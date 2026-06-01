@@ -59,6 +59,7 @@ the tree.
 | `sort_mode`        | string | Sidebar header sort menu. Allowed values: `name-asc/desc`, `numeric-asc/desc`, `mtime-asc/desc`, `ctime-asc/desc`. Anything else coerces back to `numeric-asc` in `projectStore.coerceSortMode`. |
 | `show_hidden_files`| bool   | Sidebar blank-area right-click toggle. |
 | `wrap_file_names`  | bool   | Settings → Editor. When `true`, `FileTreeNode` adds `tree-row-wrap` so long names wrap to multiple lines instead of truncating with an ellipsis. |
+| `sidebar_font_size`| u16    | Settings → Editor → Sidebar. Clamped to 12-18px and applied to `--novelist-sidebar-file-font-size` on the sidebar tree. |
 
 `ctime-*` reads the new `ctime: Option<i64>` field on `FileEntry`,
 populated from `metadata.created()` in `list_directory`. The

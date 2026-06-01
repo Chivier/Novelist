@@ -40,6 +40,7 @@ export const SETTINGS_SEARCH_INDEX: SearchableSetting[] = [
   { id: 'editor.tabIndent', sectionId: 'editor', sectionLabelKey: 'settings.editor', labelKey: 'settings.tabIndent' },
   { id: 'editor.highlightMatches', sectionId: 'editor', sectionLabelKey: 'settings.editor', labelKey: 'settings.highlightMatches' },
   { id: 'editor.renderImages', sectionId: 'editor', sectionLabelKey: 'settings.editor', labelKey: 'settings.renderImages' },
+  { id: 'editor.sidebarFontSize', sectionId: 'editor', sectionLabelKey: 'settings.editor', labelKey: 'settings.sidebar.fontSize', anchor: 'settings-sidebar-font-size', keywords: ['sidebar', 'font', 'size', '侧边栏', '字体', '字号'] },
   { id: 'editor.sidebarWrapFileNames', sectionId: 'editor', sectionLabelKey: 'settings.editor', labelKey: 'settings.sidebar.wrapFileNames', hintKey: 'settings.sidebar.wrapFileNamesHint', anchor: 'settings-sidebar-wrap-filenames', keywords: ['sidebar', 'filename', 'ellipsis', 'wrap', '侧边栏', '文件名', '换行', '省略号'] },
   // Editor → New File
   { id: 'newfile.template', sectionId: 'editor', sectionLabelKey: 'settings.editor', labelKey: 'settings.editor.newFile.template', hintKey: 'settings.editor.newFile.templateHint', anchor: 'settings-newfile-template', keywords: ['macro', 'date', 'datetime', 'h1', 'rename', 'title', '宏', '日期', '重命名', '标题'] },

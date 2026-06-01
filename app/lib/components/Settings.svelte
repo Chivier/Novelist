@@ -15,6 +15,7 @@
   import { makeTemplateContext, resolveBody } from '$lib/utils/template-tokens';
   import SettingsImageHostsPanel from './SettingsImageHostsPanel.svelte';
   import SettingsPublishPanel from './SettingsPublishPanel.svelte';
+  import SettingsSwitch from './SettingsSwitch.svelte';
   import MacroHint from './MacroHint.svelte';
   import PortableModeBanner from '$lib/components/PortableModeBanner.svelte';
   import {
@@ -107,12 +108,19 @@
   ];
   const fontSizeOptions = [13, 14, 15, 16, 17, 18, 20, 22, 24];
   const lineHeightOptions = [1.4, 1.5, 1.6, 1.8, 2.0, 2.2];
+  const sidebarFontSizeMin = 12;
+  const sidebarFontSizeMax = 18;
 
   let settings = $derived(uiStore.editorSettings);
 
   function setEditorMaxWidth(value: number) {
     const next = Math.max(480, Math.min(9999, Math.round(value)));
     uiStore.updateEditorSettings({ maxWidth: next });
+  }
+
+  function setSidebarFontSize(value: number) {
+    const next = Math.max(sidebarFontSizeMin, Math.min(sidebarFontSizeMax, Math.round(value)));
+    void settingsStore.writeView({ sidebar_font_size: next });
   }
 
   // Theme options: system + builtins + custom (imported)
@@ -465,6 +473,11 @@
     syncInProgress = false;
   }
 
+  function setSyncEnabled(checked: boolean) {
+    syncConfig.enabled = checked;
+    void saveSyncConfig();
+  }
+
   // Shortcut recording state
   let recordingCommandId = $state<string | null>(null);
 
@@ -579,20 +592,13 @@
         >
           <span class="inline-block" style="transform: {reloadingPluginId === plugin.id ? 'rotate(360deg)' : 'none'}; transition: transform 0.6s;">↻</span>
         </button>
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          class="w-10 h-5 rounded-full relative transition-colors"
-          class:cursor-pointer={plugin.id !== 'ai-talk' && plugin.id !== 'ai-agent'}
-          style="background: {plugin.enabled ? 'var(--novelist-accent)' : 'var(--novelist-bg-tertiary, #555)'}; opacity: {plugin.id === 'ai-talk' || plugin.id === 'ai-agent' ? 0.6 : 1};"
+        <SettingsSwitch
+          checked={plugin.enabled}
+          disabled={plugin.id === 'ai-talk' || plugin.id === 'ai-agent'}
           title={plugin.id === 'ai-talk' || plugin.id === 'ai-agent' ? t('settings.plugins.section.builtinAlwaysOn') : ''}
-          onclick={() => { if (plugin.id !== 'ai-talk' && plugin.id !== 'ai-agent') togglePluginEnabled(plugin); }}
-        >
-          <div
-            class="absolute top-0.5 w-4 h-4 rounded-full transition-transform"
-            style="background: #fff; left: {plugin.enabled ? '22px' : '2px'}; box-shadow: 0 1px 2px rgba(0,0,0,0.2);"
-          ></div>
-        </div>
+          ariaLabel={plugin.name}
+          onCheckedChange={() => togglePluginEnabled(plugin)}
+        />
       </div>
     </div>
   </div>
@@ -703,132 +709,140 @@
       {#if activeSection === 'editor'}
         <h3 class="text-xs font-semibold uppercase tracking-wide mb-4" style="color: var(--novelist-text-secondary);">{t('settings.editor')}</h3>
 
-        <div class="flex items-center justify-between mb-3">
-          <label for="settings-language" class="text-sm">{t('settings.language')}</label>
-          <select
-            id="settings-language"
-            class="text-sm px-2 py-1 rounded cursor-pointer"
-            style="background: var(--novelist-bg-secondary); color: var(--novelist-text); border: 1px solid var(--novelist-border);"
-            value={i18n.locale}
-            onchange={(e) => i18n.setLocale((e.target as HTMLSelectElement).value as Locale)}
-          >
-            {#each i18n.availableLocales as loc}
-              <option value={loc.code}>{loc.nativeName}</option>
-            {/each}
-          </select>
-        </div>
-
-        <div class="flex items-center justify-between mb-3">
-          <label for="settings-font" class="text-sm">{t('settings.font')}</label>
-          <select id="settings-font" class="text-sm px-2 py-1 rounded cursor-pointer" style="background: var(--novelist-bg-secondary); color: var(--novelist-text); border: 1px solid var(--novelist-border); max-width: 180px;" value={settings.fontFamily} onchange={(e) => uiStore.updateEditorSettings({ fontFamily: (e.target as HTMLSelectElement).value })}>
-            {#each fontOptions as opt}<option value={opt.value}>{opt.label}</option>{/each}
-          </select>
-        </div>
-
-        <div class="flex items-center justify-between mb-3">
-          <label for="settings-size" class="text-sm">{t('settings.size')}</label>
-          <select id="settings-size" class="text-sm px-2 py-1 rounded cursor-pointer" style="background: var(--novelist-bg-secondary); color: var(--novelist-text); border: 1px solid var(--novelist-border);" value={settings.fontSize} onchange={(e) => uiStore.updateEditorSettings({ fontSize: Number((e.target as HTMLSelectElement).value) })}>
-            {#each fontSizeOptions as size}<option value={size}>{size}px</option>{/each}
-          </select>
-        </div>
-
-        <div class="flex items-center justify-between mb-3">
-          <label for="settings-line-height" class="text-sm">{t('settings.lineHeight')}</label>
-          <select id="settings-line-height" class="text-sm px-2 py-1 rounded cursor-pointer" style="background: var(--novelist-bg-secondary); color: var(--novelist-text); border: 1px solid var(--novelist-border);" value={settings.lineHeight} onchange={(e) => uiStore.updateEditorSettings({ lineHeight: Number((e.target as HTMLSelectElement).value) })}>
-            {#each lineHeightOptions as lh}<option value={lh}>{lh}</option>{/each}
-          </select>
-        </div>
-
-        <div class="flex items-center justify-between mb-3">
-          <label for="settings-width" class="text-sm">{t('settings.width')}</label>
-          <div class="flex items-center gap-2" style="min-width: 220px;">
-            <input
-              id="settings-width"
-              type="range"
-              min="480"
-              max="1600"
-              step="20"
-              value={Math.min(settings.maxWidth, 1600)}
-              oninput={(e) => setEditorMaxWidth(Number((e.target as HTMLInputElement).value))}
-              style="width: 130px; accent-color: var(--novelist-accent);"
-            />
-            <input
-              type="number"
-              min="480"
-              max="9999"
-              step="20"
-              value={settings.maxWidth}
-              oninput={(e) => setEditorMaxWidth(Number((e.target as HTMLInputElement).value))}
-              class="text-sm px-2 py-1 rounded"
-              style="width: 76px; background: var(--novelist-bg-secondary); color: var(--novelist-text); border: 1px solid var(--novelist-border);"
-            />
+        <div class="settings-group">
+          <h4 class="settings-group-title">{t('settings.group.general')}</h4>
+          <div class="settings-row">
+            <label for="settings-language" class="settings-row-label">{t('settings.language')}</label>
+            <select
+              id="settings-language"
+              class="settings-control"
+              value={i18n.locale}
+              onchange={(e) => i18n.setLocale((e.target as HTMLSelectElement).value as Locale)}
+            >
+              {#each i18n.availableLocales as loc}
+                <option value={loc.code}>{loc.nativeName}</option>
+              {/each}
+            </select>
+          </div>
+          <div class="settings-row">
+            <label for="settings-autosave" class="settings-row-label">{t('settings.autoSave')}</label>
+            <select id="settings-autosave" class="settings-control" value={settings.autoSaveMinutes} onchange={(e) => uiStore.updateEditorSettings({ autoSaveMinutes: Number((e.target as HTMLSelectElement).value) })}>
+              <option value={0}>{t('settings.autoSave.off')}</option>
+              <option value={1}>{t('settings.autoSave.1min')}</option>
+              <option value={2}>{t('settings.autoSave.2min')}</option>
+              <option value={5}>{t('settings.autoSave.5min')}</option>
+              <option value={10}>{t('settings.autoSave.10min')}</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <label for="settings-indent" class="settings-row-label">{t('settings.tabIndent')}</label>
+            <select id="settings-indent" class="settings-control" value={settings.indentStyle} onchange={(e) => { const v = (e.target as HTMLSelectElement).value; uiStore.updateEditorSettings({ indentStyle: v === 'tab' ? 'tab' : Number(v) }); }}>
+              <option value={2}>{t('settings.indent.2spaces')}</option>
+              <option value={4}>{t('settings.indent.4spaces')}</option>
+              <option value={8}>{t('settings.indent.8spaces')}</option>
+              <option value="tab">{t('settings.indent.tab')}</option>
+            </select>
           </div>
         </div>
 
-        <div class="flex items-center justify-between mb-3">
-          <label for="settings-autosave" class="text-sm">{t('settings.autoSave')}</label>
-          <select id="settings-autosave" class="text-sm px-2 py-1 rounded cursor-pointer" style="background: var(--novelist-bg-secondary); color: var(--novelist-text); border: 1px solid var(--novelist-border);" value={settings.autoSaveMinutes} onchange={(e) => uiStore.updateEditorSettings({ autoSaveMinutes: Number((e.target as HTMLSelectElement).value) })}>
-            <option value={0}>{t('settings.autoSave.off')}</option>
-            <option value={1}>{t('settings.autoSave.1min')}</option>
-            <option value={2}>{t('settings.autoSave.2min')}</option>
-            <option value={5}>{t('settings.autoSave.5min')}</option>
-            <option value={10}>{t('settings.autoSave.10min')}</option>
-          </select>
-        </div>
-
-        <div class="flex items-center justify-between mb-3">
-          <label for="settings-indent" class="text-sm">{t('settings.tabIndent')}</label>
-          <select id="settings-indent" class="text-sm px-2 py-1 rounded cursor-pointer" style="background: var(--novelist-bg-secondary); color: var(--novelist-text); border: 1px solid var(--novelist-border);" value={settings.indentStyle} onchange={(e) => { const v = (e.target as HTMLSelectElement).value; uiStore.updateEditorSettings({ indentStyle: v === 'tab' ? 'tab' : Number(v) }); }}>
-            <option value={2}>{t('settings.indent.2spaces')}</option>
-            <option value={4}>{t('settings.indent.4spaces')}</option>
-            <option value={8}>{t('settings.indent.8spaces')}</option>
-            <option value="tab">{t('settings.indent.tab')}</option>
-          </select>
-        </div>
-
-        <div class="flex items-center justify-between mb-3">
-          <label for="settings-highlight" class="text-sm">{t('settings.highlightMatches')}</label>
-          <button
-            id="settings-highlight"
-            class="text-xs px-3 py-1 rounded cursor-pointer"
-            style="background: {settings.highlightMatches ? 'var(--novelist-accent)' : 'var(--novelist-bg-tertiary, var(--novelist-bg-secondary))'}; color: {settings.highlightMatches ? '#fff' : 'var(--novelist-text)'}; border: none;"
-            onclick={() => uiStore.updateEditorSettings({ highlightMatches: !settings.highlightMatches })}
-          >{settings.highlightMatches ? t('settings.on') : t('settings.off')}</button>
-        </div>
-
-        <div class="flex items-center justify-between mb-3">
-          <label for="settings-render-images" class="text-sm">{t('settings.renderImages')}</label>
-          <button
-            id="settings-render-images"
-            class="text-xs px-3 py-1 rounded cursor-pointer"
-            style="background: {settings.renderImages ? 'var(--novelist-accent)' : 'var(--novelist-bg-tertiary, var(--novelist-bg-secondary))'}; color: {settings.renderImages ? '#fff' : 'var(--novelist-text)'}; border: none;"
-            onclick={() => uiStore.updateEditorSettings({ renderImages: !settings.renderImages })}
-          >{settings.renderImages ? t('settings.on') : t('settings.off')}</button>
-        </div>
-
-        <label class="flex items-start gap-2 mb-3">
-          <input
-            type="checkbox"
-            class="mt-1 shrink-0"
-            data-testid="settings-sidebar-wrap-filenames"
-            checked={settingsStore.effective.view.wrap_file_names}
-            onchange={(e) => settingsStore.writeView({ wrap_file_names: e.currentTarget.checked })}
-          />
-          <div>
-            <div class="text-sm">{t('settings.sidebar.wrapFileNames')}</div>
-            <div class="text-xs" style="color: var(--novelist-text-secondary);">
-              {t('settings.sidebar.wrapFileNamesHint')}
+        <div class="settings-group">
+          <h4 class="settings-group-title">{t('settings.group.writingSurface')}</h4>
+          <div class="settings-row">
+            <label for="settings-font" class="settings-row-label">{t('settings.font')}</label>
+            <select id="settings-font" class="settings-control settings-control-wide" value={settings.fontFamily} onchange={(e) => uiStore.updateEditorSettings({ fontFamily: (e.target as HTMLSelectElement).value })}>
+              {#each fontOptions as opt}<option value={opt.value}>{opt.label}</option>{/each}
+            </select>
+          </div>
+          <div class="settings-row">
+            <label for="settings-size" class="settings-row-label">{t('settings.size')}</label>
+            <select id="settings-size" class="settings-control" value={settings.fontSize} onchange={(e) => uiStore.updateEditorSettings({ fontSize: Number((e.target as HTMLSelectElement).value) })}>
+              {#each fontSizeOptions as size}<option value={size}>{size}px</option>{/each}
+            </select>
+          </div>
+          <div class="settings-row">
+            <label for="settings-line-height" class="settings-row-label">{t('settings.lineHeight')}</label>
+            <select id="settings-line-height" class="settings-control" value={settings.lineHeight} onchange={(e) => uiStore.updateEditorSettings({ lineHeight: Number((e.target as HTMLSelectElement).value) })}>
+              {#each lineHeightOptions as lh}<option value={lh}>{lh}</option>{/each}
+            </select>
+          </div>
+          <div class="settings-row">
+            <label for="settings-width" class="settings-row-label">{t('settings.width')}</label>
+            <div class="settings-range-control">
+              <input
+                id="settings-width"
+                type="range"
+                min="480"
+                max="1600"
+                step="20"
+                value={Math.min(settings.maxWidth, 1600)}
+                oninput={(e) => setEditorMaxWidth(Number((e.target as HTMLInputElement).value))}
+              />
+              <input
+                type="number"
+                min="480"
+                max="9999"
+                step="20"
+                value={settings.maxWidth}
+                oninput={(e) => setEditorMaxWidth(Number((e.target as HTMLInputElement).value))}
+                class="settings-control settings-number-control"
+              />
             </div>
           </div>
-        </label>
-
-        <div class="mt-4 rounded p-3 text-sm" style="background: var(--novelist-bg-secondary); font-family: {settings.fontFamily}; font-size: {settings.fontSize}px; line-height: {settings.lineHeight}; border: 1px solid var(--novelist-border);">
-          The quick brown fox jumps over the lazy dog.<br/>
-          落霞与孤鹜齐飞，秋水共长天一色。
+          <div class="settings-preview" style="font-family: {settings.fontFamily}; font-size: {settings.fontSize}px; line-height: {settings.lineHeight};">
+            The quick brown fox jumps over the lazy dog.<br/>
+            落霞与孤鹜齐飞，秋水共长天一色。
+          </div>
         </div>
 
-        <div class="mt-8" data-testid="settings-newfile-section">
-          <h4 class="text-sm font-semibold mb-3" style="color: var(--novelist-text);">
+        <div class="settings-group">
+          <h4 class="settings-group-title">{t('settings.group.editorBehavior')}</h4>
+          <div class="settings-row">
+            <span class="settings-row-label">{t('settings.highlightMatches')}</span>
+            <SettingsSwitch
+              id="settings-highlight"
+              checked={settings.highlightMatches}
+              ariaLabel={t('settings.highlightMatches')}
+              onCheckedChange={(checked) => uiStore.updateEditorSettings({ highlightMatches: checked })}
+            />
+          </div>
+          <div class="settings-row">
+            <span class="settings-row-label">{t('settings.renderImages')}</span>
+            <SettingsSwitch
+              id="settings-render-images"
+              checked={settings.renderImages}
+              ariaLabel={t('settings.renderImages')}
+              onCheckedChange={(checked) => uiStore.updateEditorSettings({ renderImages: checked })}
+            />
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h4 class="settings-group-title">{t('settings.group.sidebar')}</h4>
+          <div class="settings-row">
+            <label for="settings-sidebar-font-size" class="settings-row-label">{t('settings.sidebar.fontSize')}</label>
+            <input
+              id="settings-sidebar-font-size"
+              data-testid="settings-sidebar-font-size"
+              type="number"
+              min={sidebarFontSizeMin}
+              max={sidebarFontSizeMax}
+              step="1"
+              value={settingsStore.effective.view.sidebar_font_size}
+              oninput={(e) => setSidebarFontSize(Number((e.target as HTMLInputElement).value))}
+              class="settings-control settings-number-control"
+            />
+          </div>
+          <SettingsSwitch
+            checked={settingsStore.effective.view.wrap_file_names}
+            testId="settings-sidebar-wrap-filenames"
+            label={t('settings.sidebar.wrapFileNames')}
+            description={t('settings.sidebar.wrapFileNamesHint')}
+            onCheckedChange={(checked) => settingsStore.writeView({ wrap_file_names: checked })}
+          />
+        </div>
+
+        <div class="settings-group" data-testid="settings-newfile-section">
+          <h4 class="settings-group-title">
             {t('settings.editor.newFile.heading')}
           </h4>
 
@@ -1259,12 +1273,12 @@
         {:else}
           <div class="flex items-center justify-between mb-3">
             <label for="sync-enabled" class="text-sm">{t('settings.sync.enabled')}</label>
-            <button
+            <SettingsSwitch
               id="sync-enabled"
-              class="text-xs px-3 py-1 rounded cursor-pointer"
-              style="background: {syncConfig.enabled ? 'var(--novelist-accent)' : 'var(--novelist-bg-tertiary, var(--novelist-bg-secondary))'}; color: {syncConfig.enabled ? '#fff' : 'var(--novelist-text)'}; border: none;"
-              onclick={() => { syncConfig.enabled = !syncConfig.enabled; saveSyncConfig(); }}
-            >{syncConfig.enabled ? t('settings.sync.on') : t('settings.sync.off')}</button>
+              checked={syncConfig.enabled}
+              ariaLabel={t('settings.sync.enabled')}
+              onCheckedChange={setSyncEnabled}
+            />
           </div>
 
           <div class="mb-3">
@@ -1406,6 +1420,66 @@
     background: transparent;
     box-shadow: 0 0 0 0 transparent;
   }
+}
+.settings-group {
+  padding: 14px 0;
+  border-top: 1px solid var(--novelist-border);
+}
+.settings-group:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+.settings-group-title {
+  margin: 0 0 10px;
+  color: var(--novelist-text);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 34px;
+  margin-bottom: 8px;
+}
+.settings-row-label {
+  min-width: 0;
+  color: var(--novelist-text);
+  font-size: 0.875rem;
+}
+.settings-control {
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--novelist-border);
+  border-radius: 5px;
+  background: var(--novelist-bg-secondary);
+  color: var(--novelist-text);
+  font-size: 0.875rem;
+}
+.settings-control-wide {
+  max-width: 220px;
+}
+.settings-number-control {
+  width: 76px;
+}
+.settings-range-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+}
+.settings-range-control input[type="range"] {
+  width: 130px;
+  accent-color: var(--novelist-accent);
+}
+.settings-preview {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--novelist-border);
+  border-radius: 6px;
+  background: var(--novelist-bg-secondary);
+  color: var(--novelist-text);
 }
 .plugin-add-btn {
   display: flex;

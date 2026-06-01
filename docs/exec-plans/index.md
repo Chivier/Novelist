@@ -1,6 +1,6 @@
 # Execution Plans
 
-Last updated: 2026-04-25
+Last updated: 2026-05-27
 
 Execution plans are temporary working artifacts. Once a plan has shipped,
 move it to `completed/` or delete it if the durable decision has already
@@ -9,15 +9,19 @@ been captured in design docs.
 ## Active
 
 - [2026-04-12 memory optimization](active/2026-04-12-memory-optimization.md)
-- [2026-05-06 image hosting (v0.2.4)](active/2026-05-06-image-host.md)
-- [2026-05-06 publishing (v0.2.4)](active/2026-05-06-publish.md)
-- [2026-05-07 rename UX & filename macros (v0.2.4)](active/2026-05-07-v0.2.4-rename-and-macros.md)
 
 ## Completed Archive
 
-The old `docs/superpowers/` specs and plans have been moved to
-`completed/`. They are kept as a historical audit trail, but new work should
-start from product specs, design docs, and the tech debt tracker.
+Completed implementation drafts are kept as a historical audit trail. New work
+should start from product specs, design docs, and the tech debt tracker.
+
+- [2026-05-06 image hosting (v0.2.4)](completed/2026-05-06-image-host.md)
+- [2026-05-06 publishing (v0.2.4)](completed/2026-05-06-publish.md)
+- [2026-05-07 rename UX & filename macros (v0.2.4)](completed/2026-05-07-v0.2.4-rename-and-macros.md)
+
+Workflow-generated specs and plans can also live under `docs/superpowers/`.
+When they ship, link them from the relevant release note and copy any lasting
+decision into a product spec or design doc.
 
 ## Ongoing Tracker
 

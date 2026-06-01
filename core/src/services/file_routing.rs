@@ -100,6 +100,20 @@ pub fn pick_winner(bids: &[Bid], source_label: Option<&str>) -> Option<String> {
         .map(|b| b.window_label.clone())
 }
 
+/// Pick one webview to receive app-level external-open events.
+///
+/// Tauri app events are broadcast to every webview by default. For
+/// `cli-open` / macOS `open-file`, broadcasting would make every window start
+/// its own routing round. We instead pick a single coordinator window, and
+/// let the normal bid router decide the final owner from there.
+pub fn pick_open_event_target(mut labels: Vec<String>) -> Option<String> {
+    if labels.iter().any(|label| label == "main") {
+        return Some("main".to_string());
+    }
+    labels.sort();
+    labels.into_iter().next()
+}
+
 /// Run a single bid round and resolve the winner. Async because we wait on
 /// frontend replies. Callers from a synchronous context (e.g. the
 /// single-instance callback) should `tauri::async_runtime::spawn` this.
@@ -286,5 +300,27 @@ mod tests {
     fn no_source_label_picks_project_first() {
         let bids = vec![bid("a", true, false), bid("b", true, true)];
         assert_eq!(pick_winner(&bids, None), Some("b".into()));
+    }
+
+    #[test]
+    fn open_event_target_prefers_main_window() {
+        let labels = vec![
+            "novelist-2".to_string(),
+            "main".to_string(),
+            "novelist-1".to_string(),
+        ];
+        assert_eq!(pick_open_event_target(labels), Some("main".into()));
+    }
+
+    #[test]
+    fn open_event_target_uses_stable_fallback_when_main_is_missing() {
+        let labels = vec!["novelist-2".to_string(), "novelist-1".to_string()];
+        assert_eq!(pick_open_event_target(labels), Some("novelist-1".into()));
+    }
+
+    #[test]
+    fn open_event_target_returns_none_without_windows() {
+        let labels: Vec<String> = vec![];
+        assert_eq!(pick_open_event_target(labels), None);
     }
 }

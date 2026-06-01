@@ -3,6 +3,7 @@
   import { AI_TALK_PRESETS, applyAiTalkPreset } from './presets';
   import PromptPresetManager from './PromptPresetManager.svelte';
   import { t } from '$lib/i18n';
+  import SettingsSwitch from '$lib/components/SettingsSwitch.svelte';
 
   let { compact = false }: { compact?: boolean } = $props();
 </script>
@@ -76,22 +77,20 @@
       oninput={(e) => aiTalkSettings.update({ systemPrompt: e.currentTarget.value })}
     ></textarea>
   </label>
-  <label class="check">
-    <input
-      type="checkbox"
+  <div class="switch-row">
+    <SettingsSwitch
       checked={aiTalkSettings.value.includeCurrentFile}
-      onchange={(e) => aiTalkSettings.update({ includeCurrentFile: e.currentTarget.checked })}
+      label={t('settings.aiTalk.includeCurrentFile')}
+      onCheckedChange={(checked) => aiTalkSettings.update({ includeCurrentFile: checked })}
     />
-    <span>{t('settings.aiTalk.includeCurrentFile')}</span>
-  </label>
-  <label class="check">
-    <input
-      type="checkbox"
+  </div>
+  <div class="switch-row">
+    <SettingsSwitch
       checked={aiTalkSettings.value.includeSelection}
-      onchange={(e) => aiTalkSettings.update({ includeSelection: e.currentTarget.checked })}
+      label={t('settings.aiTalk.includeSelection')}
+      onCheckedChange={(checked) => aiTalkSettings.update({ includeSelection: checked })}
     />
-    <span>{t('settings.aiTalk.includeSelection')}</span>
-  </label>
+  </div>
   <p class="hint">{t('settings.aiTalk.hint')}</p>
 </div>
 
@@ -123,13 +122,8 @@
   label.full {
     grid-column: 1 / -1;
   }
-  label.check {
+  .switch-row {
     grid-column: 1 / -1;
-    flex-direction: row;
-    align-items: center;
-    gap: 6px;
-    color: var(--novelist-text);
-    font-size: 12px;
   }
   input,
   select,

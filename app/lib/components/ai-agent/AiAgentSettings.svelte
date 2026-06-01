@@ -3,6 +3,7 @@
   import { aiAgentSettings } from './settings.svelte';
   import { detectClaudeCli, type DetectedCli } from './host';
   import { t } from '$lib/i18n';
+  import SettingsSwitch from '$lib/components/SettingsSwitch.svelte';
 
   let { compact = false }: { compact?: boolean } = $props();
 
@@ -84,18 +85,18 @@
       oninput={(e) => aiAgentSettings.update({ systemPrompt: e.currentTarget.value })}
     ></textarea>
   </label>
-  <label class="check">
-    <input
-      type="checkbox"
+  <div class="switch-row">
+    <SettingsSwitch
       checked={aiAgentSettings.value.attachProjectRoot}
-      onchange={(e) => aiAgentSettings.update({ attachProjectRoot: e.currentTarget.checked })}
+      onCheckedChange={(checked) => aiAgentSettings.update({ attachProjectRoot: checked })}
+      ariaLabel={t('settings.aiAgent.attachProjectRootLead')}
     />
-    <span>
+    <span class="switch-label">
       {t('settings.aiAgent.attachProjectRootLead')}
       <code>{t('settings.aiAgent.addDirFlag')}</code>
       {t('settings.aiAgent.attachProjectRootTail')}
     </span>
-  </label>
+  </div>
   <p class="hint">
     {t('settings.aiAgent.hintLead')} <code>{t('settings.aiAgent.cliLabel')}</code>
     {t('settings.aiAgent.hintMid')}
@@ -145,13 +146,16 @@
     color: var(--novelist-text-secondary);
   }
   label.full { grid-column: 1 / -1; }
-  label.check {
+  .switch-row {
     grid-column: 1 / -1;
-    flex-direction: row;
+    display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 10px;
     color: var(--novelist-text);
     font-size: 12px;
+  }
+  .switch-label {
+    min-width: 0;
   }
   input,
   textarea,

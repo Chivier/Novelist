@@ -16,7 +16,7 @@ vi.mock('$lib/ipc/commands', () => ({
 vi.mock('$lib/stores/settings.svelte', () => ({
   settingsStore: {
     effective: {
-      view: { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: false },
+      view: { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: false, sidebar_font_size: 14 },
       new_file: { template: '', detect_from_folder: true, auto_rename_from_h1: true, default_dir: null, last_used_dir: null },
       plugins: { enabled: {} },
       is_project_scoped: false,

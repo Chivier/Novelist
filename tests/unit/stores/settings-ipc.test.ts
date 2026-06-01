@@ -23,7 +23,7 @@ import { settingsStore } from '$lib/stores/settings.svelte';
 import { commands } from '$lib/ipc/commands';
 
 const DEFAULT_EFFECTIVE = {
-  view: { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: false },
+  view: { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: false, sidebar_font_size: 14 },
   new_file: {
     template: 'Untitled {N}',
     detect_from_folder: true,
@@ -51,7 +51,7 @@ describe('[contract] settingsStore.load', () => {
       status: 'ok',
       data: {
         ...DEFAULT_EFFECTIVE,
-        view: { sort_mode: 'name-desc', show_hidden_files: true, wrap_file_names: false },
+        view: { sort_mode: 'name-desc', show_hidden_files: true, wrap_file_names: false, sidebar_font_size: 14 },
         is_project_scoped: true,
       },
     });
@@ -123,7 +123,7 @@ describe('[contract] settingsStore.load — migration from localStorage', () => 
 
     expect(commands.writeProjectSettings).toHaveBeenCalledWith(
       '/proj',
-      { sort_mode: 'name-desc', show_hidden_files: null, wrap_file_names: null },
+      { sort_mode: 'name-desc', show_hidden_files: null, wrap_file_names: null, sidebar_font_size: null },
       null,
       null,
     );
@@ -227,7 +227,7 @@ describe('[contract] settingsStore.writeView', () => {
     await settingsStore.writeView({ sort_mode: 'name-asc' });
 
     expect(commands.writeGlobalSettings).toHaveBeenCalledWith(
-      { sort_mode: 'name-asc', show_hidden_files: false, wrap_file_names: false },
+      { sort_mode: 'name-asc', show_hidden_files: false, wrap_file_names: false, sidebar_font_size: 14 },
       null,
       null,
     );
@@ -241,11 +241,24 @@ describe('[contract] settingsStore.writeView', () => {
     await settingsStore.writeView({ wrap_file_names: true });
 
     expect(commands.writeGlobalSettings).toHaveBeenCalledWith(
-      { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: true },
+      { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: true, sidebar_font_size: 14 },
       null,
       null,
     );
     expect(settingsStore.effective.view.wrap_file_names).toBe(true);
+  });
+
+  it('persists sidebar font size with the rest of the view config', async () => {
+    (commands.writeGlobalSettings as any).mockResolvedValue({ status: 'ok', data: null });
+
+    await settingsStore.writeView({ sidebar_font_size: 16 } as any);
+
+    expect(commands.writeGlobalSettings).toHaveBeenCalledWith(
+      { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: false, sidebar_font_size: 16 },
+      null,
+      null,
+    );
+    expect((settingsStore.effective.view as any).sidebar_font_size).toBe(16);
   });
 
   it('routes to writeProjectSettings when a Novelist project is open', async () => {
@@ -510,7 +523,7 @@ describe('[contract] settingsStore.promoteToGlobal', () => {
   it('writes the current effective settings as the new globals', async () => {
     settingsStore.effective = {
       ...DEFAULT_EFFECTIVE,
-      view: { sort_mode: 'mtime-desc', show_hidden_files: true, wrap_file_names: false },
+      view: { sort_mode: 'mtime-desc', show_hidden_files: true, wrap_file_names: false, sidebar_font_size: 16 },
       new_file: {
         template: 'Chapter {N}',
         detect_from_folder: false,
@@ -525,7 +538,7 @@ describe('[contract] settingsStore.promoteToGlobal', () => {
     await settingsStore.promoteToGlobal();
 
     expect(commands.writeGlobalSettings).toHaveBeenCalledWith(
-      { sort_mode: 'mtime-desc', show_hidden_files: true, wrap_file_names: false },
+      { sort_mode: 'mtime-desc', show_hidden_files: true, wrap_file_names: false, sidebar_font_size: 16 },
       { template: 'Chapter {N}', detect_from_folder: false, auto_rename_from_h1: false },
       { enabled: { mindmap: false } },
     );

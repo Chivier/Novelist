@@ -399,6 +399,10 @@ export const zhCN: TranslationMap = {
   'settings.width': '宽度',
   'settings.autoSave': '自动保存',
   'settings.tabIndent': '缩进',
+  'settings.group.general': '通用',
+  'settings.group.writingSurface': '写作区',
+  'settings.group.editorBehavior': '编辑行为',
+  'settings.group.sidebar': '侧边栏',
 
   'settings.autoSave.off': '关闭',
   'settings.autoSave.1min': '1 分钟',
@@ -413,6 +417,7 @@ export const zhCN: TranslationMap = {
 
   'settings.highlightMatches': '高亮匹配词',
   'settings.renderImages': '渲染图片预览',
+  'settings.sidebar.fontSize': '侧边栏字号',
   'settings.sidebar.wrapFileNames': '侧边栏文件名换行',
   'settings.sidebar.wrapFileNamesHint': '长文件名显示为多行，而不是截断成省略号。',
   'settings.on': '开',

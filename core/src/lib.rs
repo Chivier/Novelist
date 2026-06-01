@@ -66,7 +66,9 @@ use commands::template_files::{
 };
 use commands::window::set_window_appearance;
 use serde::{Deserialize, Serialize};
-use services::file_routing::{route_single_file_open_cmd, submit_file_open_bid, FileRoutingState};
+use services::file_routing::{
+    pick_open_event_target, route_single_file_open_cmd, submit_file_open_bid, FileRoutingState,
+};
 use services::file_watcher::{
     register_open_file, register_write_ignore, start_file_watcher, stop_file_watcher,
     unregister_open_file, FileWatcherState,
@@ -184,6 +186,19 @@ impl CliOpenPayload {
                 .collect(),
             force_new_window: req.force_new_window,
         }
+    }
+}
+
+fn open_event_target_label(app: &tauri::AppHandle) -> Option<String> {
+    let labels = app.webview_windows().keys().cloned().collect();
+    pick_open_event_target(labels)
+}
+
+fn focus_open_event_target(app: &tauri::AppHandle, label: &str) {
+    if let Some(win) = app.get_webview_window(label) {
+        let _ = win.show();
+        let _ = win.unminimize();
+        let _ = win.set_focus();
     }
 }
 
@@ -531,18 +546,26 @@ pub fn run() {
             let cwd_path = std::path::PathBuf::from(&cwd);
             let req = parse_argv(&argv, &cwd_path);
             let payload = CliOpenPayload::from_request(&req);
-            // Bring some window to the front so the user sees the result.
-            if let Some(win) = app.get_webview_window("main") {
-                let _ = win.show();
-                let _ = win.unminimize();
-                let _ = win.set_focus();
-            }
-            if let Err(e) = app.emit("cli-open", payload) {
-                tracing::warn!(
-                    target: "novelist::cli",
-                    error = %e,
-                    "failed to emit cli-open event to frontend"
-                );
+            match open_event_target_label(app) {
+                Some(label) => {
+                    // Bring the coordinator to the front so the user sees the
+                    // routed result, whether it lands there or in a new window.
+                    focus_open_event_target(app, &label);
+                    if let Err(e) = app.emit_to(label.as_str(), "cli-open", payload) {
+                        tracing::warn!(
+                            target: "novelist::cli",
+                            window = %label,
+                            error = %e,
+                            "failed to emit cli-open event to frontend"
+                        );
+                    }
+                }
+                None => {
+                    tracing::warn!(
+                        target: "novelist::cli",
+                        "no webview window available for cli-open event"
+                    );
+                }
             }
         }))
         .menu(|handle| menu::build_menu(handle, &menu::MenuLabels::fallback(), &[]))
@@ -675,7 +698,26 @@ pub fn run() {
                                 pending.push(PendingFile::from_path(file_path.clone()));
                                 // Also emit for the hot path (app already running,
                                 // listener active)
-                                let _ = app.emit("open-file", file_path);
+                                match open_event_target_label(app) {
+                                    Some(label) => {
+                                        if let Err(e) =
+                                            app.emit_to(label.as_str(), "open-file", file_path)
+                                        {
+                                            tracing::warn!(
+                                                target: "novelist::cli",
+                                                window = %label,
+                                                error = %e,
+                                                "failed to emit open-file event to frontend"
+                                            );
+                                        }
+                                    }
+                                    None => {
+                                        tracing::warn!(
+                                            target: "novelist::cli",
+                                            "no webview window available for open-file event"
+                                        );
+                                    }
+                                }
                                 break;
                             }
                         }

@@ -399,6 +399,10 @@ export const en: TranslationMap = {
   'settings.width': 'Width',
   'settings.autoSave': 'Auto-save',
   'settings.tabIndent': 'Tab / Indent',
+  'settings.group.general': 'General',
+  'settings.group.writingSurface': 'Writing surface',
+  'settings.group.editorBehavior': 'Editor behavior',
+  'settings.group.sidebar': 'Sidebar',
 
   'settings.autoSave.off': 'Off',
   'settings.autoSave.1min': '1 min',
@@ -413,6 +417,7 @@ export const en: TranslationMap = {
 
   'settings.highlightMatches': 'Highlight Matching Words',
   'settings.renderImages': 'Render Image Previews',
+  'settings.sidebar.fontSize': 'Sidebar font size',
   'settings.sidebar.wrapFileNames': 'Wrap sidebar file names',
   'settings.sidebar.wrapFileNamesHint': 'Show long names on multiple lines instead of truncating them.',
   'settings.on': 'On',

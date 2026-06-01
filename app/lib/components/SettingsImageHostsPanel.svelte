@@ -3,6 +3,7 @@
   import { commands, type HostConfig, type ImageHostSettings, type ProviderConfig } from '$lib/ipc/commands';
   import { dispatchUpload, toProviderConfig } from '$lib/services/image-host';
   import { t } from '$lib/i18n';
+  import SettingsSwitch from './SettingsSwitch.svelte';
 
   type ProviderId = ProviderConfig['provider'];
 
@@ -90,8 +91,8 @@
     settings.active_host_id = id;
     await persist();
   }
-  async function toggleAutoOnPaste() {
-    settings.auto_on_paste = !settings.auto_on_paste;
+  async function toggleAutoOnPaste(checked: boolean) {
+    settings.auto_on_paste = checked;
     await persist();
   }
 
@@ -160,11 +161,11 @@
   {:else}
     <div class="flex items-center justify-between mb-4">
       <label class="text-sm" for="auto-on-paste">{t('settings.imageHosts.autoOnPaste')}</label>
-      <input
+      <SettingsSwitch
         id="auto-on-paste"
-        type="checkbox"
         checked={settings.auto_on_paste}
-        onchange={toggleAutoOnPaste}
+        ariaLabel={t('settings.imageHosts.autoOnPaste')}
+        onCheckedChange={toggleAutoOnPaste}
       />
     </div>
 

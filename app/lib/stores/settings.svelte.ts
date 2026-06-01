@@ -18,8 +18,40 @@ import {
   type ViewConfig,
 } from '$lib/ipc/commands';
 
-const DEFAULT_EFFECTIVE: EffectiveSettings = {
-  view: { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: false },
+const DEFAULT_SIDEBAR_FONT_SIZE = 14;
+const MIN_SIDEBAR_FONT_SIZE = 12;
+const MAX_SIDEBAR_FONT_SIZE = 18;
+
+export type ViewConfigWithSidebarFontSize = ViewConfig & {
+  sidebar_font_size?: number | null;
+};
+
+type ResolvedViewWithSidebarFontSize = EffectiveSettings['view'] & {
+  sidebar_font_size: number;
+};
+
+type EffectiveSettingsWithSidebarFontSize = Omit<EffectiveSettings, 'view'> & {
+  view: ResolvedViewWithSidebarFontSize;
+};
+
+function clampSidebarFontSize(value: number | null | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_SIDEBAR_FONT_SIZE;
+  return Math.max(MIN_SIDEBAR_FONT_SIZE, Math.min(MAX_SIDEBAR_FONT_SIZE, Math.round(value)));
+}
+
+function normalizeEffectiveSettings(settings: EffectiveSettings): EffectiveSettingsWithSidebarFontSize {
+  const view = settings.view as EffectiveSettings['view'] & { sidebar_font_size?: number | null };
+  return {
+    ...settings,
+    view: {
+      ...settings.view,
+      sidebar_font_size: clampSidebarFontSize(view.sidebar_font_size),
+    },
+  };
+}
+
+const DEFAULT_EFFECTIVE: EffectiveSettingsWithSidebarFontSize = {
+  view: { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: false, sidebar_font_size: DEFAULT_SIDEBAR_FONT_SIZE },
   new_file: {
     template: '第{N}章-{title}',
     detect_from_folder: true,
@@ -32,7 +64,7 @@ const DEFAULT_EFFECTIVE: EffectiveSettings = {
 };
 
 class SettingsStore {
-  effective = $state<EffectiveSettings>(DEFAULT_EFFECTIVE);
+  effective = $state<EffectiveSettingsWithSidebarFontSize>(DEFAULT_EFFECTIVE);
   private dirPath = $state<string | null>(null);
 
   get isProjectScoped(): boolean {
@@ -57,7 +89,7 @@ class SettingsStore {
       }
       const res = await commands.getEffectiveSettings(dirPath);
       if (res.status === 'ok') {
-        this.effective = res.data;
+        this.effective = normalizeEffectiveSettings(res.data);
       } else {
         console.error('[settings] load failed:', res.error);
         this.effective = { ...DEFAULT_EFFECTIVE, is_project_scoped: dirPath !== null };
@@ -95,9 +127,15 @@ class SettingsStore {
     let didMigrateNewFile = false;
 
     if (legacySort && !hasView) {
+      const migratedView: ViewConfigWithSidebarFontSize = {
+        sort_mode: legacySort,
+        show_hidden_files: null,
+        wrap_file_names: null,
+        sidebar_font_size: null,
+      };
       const res = await commands.writeProjectSettings(
         dirPath,
-        { sort_mode: legacySort, show_hidden_files: null, wrap_file_names: null },
+        migratedView,
         null,
         null
       );
@@ -140,12 +178,13 @@ class SettingsStore {
   }
 
   /** Patch view fields. Writes to the current scope (project if open, else global). */
-  async writeView(patch: Partial<ViewConfig>): Promise<void> {
+  async writeView(patch: Partial<ViewConfigWithSidebarFontSize>): Promise<void> {
     const current = this.effective.view;
-    const next: ViewConfig = {
+    const next: ViewConfigWithSidebarFontSize = {
       sort_mode: patch.sort_mode ?? current.sort_mode,
       show_hidden_files: patch.show_hidden_files ?? current.show_hidden_files,
       wrap_file_names: patch.wrap_file_names ?? current.wrap_file_names,
+      sidebar_font_size: clampSidebarFontSize(patch.sidebar_font_size ?? current.sidebar_font_size),
     };
     const dirPath = this.canWriteProjectSettings ? this.dirPath : null;
     const res = dirPath
@@ -161,6 +200,7 @@ class SettingsStore {
         sort_mode: next.sort_mode ?? DEFAULT_EFFECTIVE.view.sort_mode,
         show_hidden_files: next.show_hidden_files ?? DEFAULT_EFFECTIVE.view.show_hidden_files,
         wrap_file_names: next.wrap_file_names ?? DEFAULT_EFFECTIVE.view.wrap_file_names,
+        sidebar_font_size: clampSidebarFontSize(next.sidebar_font_size),
       },
     };
   }
@@ -307,10 +347,11 @@ class SettingsStore {
    */
   async promoteToGlobal(): Promise<void> {
     // Write the current resolved effective settings as the new globals.
-    const v: ViewConfig = {
+    const v: ViewConfigWithSidebarFontSize = {
       sort_mode: this.effective.view.sort_mode,
       show_hidden_files: this.effective.view.show_hidden_files,
       wrap_file_names: this.effective.view.wrap_file_names,
+      sidebar_font_size: this.effective.view.sidebar_font_size,
     };
     const n: NewFileConfig = {
       template: this.effective.new_file.template,

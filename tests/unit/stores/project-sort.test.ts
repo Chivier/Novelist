@@ -7,7 +7,7 @@ describe('projectStore.sortMode', () => {
     localStorage.clear();
     // Reset the unified store — the sortMode getter reads from here.
     settingsStore.effective = {
-      view: { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: false },
+      view: { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: false, sidebar_font_size: 14 },
       new_file: {
         template: 'Untitled {N}',
         detect_from_folder: true,
@@ -27,7 +27,7 @@ describe('projectStore.sortMode', () => {
   it('reflects the current settingsStore value', () => {
     settingsStore.effective = {
       ...settingsStore.effective,
-      view: { sort_mode: 'name-desc', show_hidden_files: false, wrap_file_names: false },
+      view: { sort_mode: 'name-desc', show_hidden_files: false, wrap_file_names: false, sidebar_font_size: 14 },
     };
     expect(projectStore.sortMode).toBe('name-desc');
   });
@@ -42,7 +42,7 @@ describe('projectStore.sortMode', () => {
   it('coerces an unknown sort_mode from backend to numeric-asc default', () => {
     settingsStore.effective = {
       ...settingsStore.effective,
-      view: { sort_mode: 'bogus-mode', show_hidden_files: false, wrap_file_names: false },
+      view: { sort_mode: 'bogus-mode', show_hidden_files: false, wrap_file_names: false, sidebar_font_size: 14 },
     };
     expect(projectStore.sortMode).toBe('numeric-asc');
   });
@@ -50,9 +50,18 @@ describe('projectStore.sortMode', () => {
   it('reflects sidebar filename wrapping from settingsStore', () => {
     settingsStore.effective = {
       ...settingsStore.effective,
-      view: { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: true },
+      view: { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: true, sidebar_font_size: 14 },
     };
 
     expect(projectStore.wrapFileNames).toBe(true);
+  });
+
+  it('reflects sidebar font size from settingsStore', () => {
+    settingsStore.effective = {
+      ...settingsStore.effective,
+      view: { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: false, sidebar_font_size: 16 },
+    };
+
+    expect(projectStore.sidebarFontSize).toBe(16);
   });
 });

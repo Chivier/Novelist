@@ -62,6 +62,10 @@ class ProjectStore {
     return settingsStore.effective.view.wrap_file_names;
   }
 
+  get sidebarFontSize(): number {
+    return settingsStore.effective.view.sidebar_font_size;
+  }
+
   get isOpen() { return this.dirPath !== null || this.singleFileMode; }
 
   /** Persists to the current scope (project file if open, global otherwise). */

@@ -16,6 +16,9 @@ pub const DEFAULT_SORT_MODE: &str = "numeric-asc";
 pub const DEFAULT_TEMPLATE: &str = "第{N}章-{title}";
 pub const DEFAULT_SHOW_HIDDEN: bool = false;
 pub const DEFAULT_WRAP_FILE_NAMES: bool = false;
+pub const DEFAULT_SIDEBAR_FONT_SIZE: u16 = 14;
+pub const MIN_SIDEBAR_FONT_SIZE: u16 = 12;
+pub const MAX_SIDEBAR_FONT_SIZE: u16 = 18;
 pub const DEFAULT_DETECT_FROM_FOLDER: bool = true;
 pub const DEFAULT_AUTO_RENAME_FROM_H1: bool = true;
 
@@ -28,6 +31,8 @@ pub struct ViewConfig {
     pub show_hidden_files: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wrap_file_names: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sidebar_font_size: Option<u16>,
 }
 
 /// New-file template preferences.
@@ -90,6 +95,7 @@ pub struct ResolvedView {
     pub sort_mode: String,
     pub show_hidden_files: bool,
     pub wrap_file_names: bool,
+    pub sidebar_font_size: u16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq)]
@@ -117,6 +123,10 @@ pub struct EffectiveSettings {
     pub is_project_scoped: bool,
 }
 
+fn clamp_sidebar_font_size(value: u16) -> u16 {
+    value.clamp(MIN_SIDEBAR_FONT_SIZE, MAX_SIDEBAR_FONT_SIZE)
+}
+
 /// Merge global defaults with optional project overrides. Field-level override:
 /// project values win when present; otherwise global; otherwise the baked-in default.
 pub fn resolve(
@@ -138,6 +148,12 @@ pub fn resolve(
             .and_then(|v| v.wrap_file_names)
             .or(global.view.wrap_file_names)
             .unwrap_or(DEFAULT_WRAP_FILE_NAMES),
+        sidebar_font_size: clamp_sidebar_font_size(
+            project_view
+                .and_then(|v| v.sidebar_font_size)
+                .or(global.view.sidebar_font_size)
+                .unwrap_or(DEFAULT_SIDEBAR_FONT_SIZE),
+        ),
     };
     let new_file = ResolvedNewFile {
         template: project_new_file
@@ -192,6 +208,7 @@ mod tests {
         assert_eq!(eff.view.sort_mode, DEFAULT_SORT_MODE);
         assert_eq!(eff.view.show_hidden_files, DEFAULT_SHOW_HIDDEN);
         assert_eq!(eff.view.wrap_file_names, DEFAULT_WRAP_FILE_NAMES);
+        assert_eq!(eff.view.sidebar_font_size, DEFAULT_SIDEBAR_FONT_SIZE);
         assert_eq!(eff.new_file.template, DEFAULT_TEMPLATE);
         assert!(eff.new_file.detect_from_folder);
         assert!(eff.new_file.auto_rename_from_h1);
@@ -206,6 +223,7 @@ mod tests {
                 sort_mode: Some("name-asc".into()),
                 show_hidden_files: Some(true),
                 wrap_file_names: Some(true),
+                sidebar_font_size: Some(16),
             },
             new_file: NewFileConfig {
                 template: Some("第{N}章".into()),
@@ -223,6 +241,7 @@ mod tests {
         assert_eq!(eff.view.sort_mode, "name-asc");
         assert!(eff.view.show_hidden_files);
         assert!(eff.view.wrap_file_names);
+        assert_eq!(eff.view.sidebar_font_size, 16);
         assert_eq!(eff.new_file.template, "第{N}章");
         assert!(!eff.new_file.detect_from_folder);
         assert!(eff.new_file.auto_rename_from_h1); // falls through to baked default
@@ -235,6 +254,7 @@ mod tests {
                 sort_mode: Some("name-asc".into()),
                 show_hidden_files: Some(false),
                 wrap_file_names: Some(false),
+                sidebar_font_size: Some(13),
             },
             ..Default::default()
         };
@@ -243,12 +263,41 @@ mod tests {
             sort_mode: None,
             show_hidden_files: Some(true),
             wrap_file_names: Some(true),
+            sidebar_font_size: Some(17),
         };
         let eff = resolve(&global, Some(&project_view), None, None);
         assert_eq!(eff.view.sort_mode, "name-asc");
         assert!(eff.view.show_hidden_files);
         assert!(eff.view.wrap_file_names);
+        assert_eq!(eff.view.sidebar_font_size, 17);
         assert!(eff.is_project_scoped);
+    }
+
+    #[test]
+    fn sidebar_font_size_is_clamped_to_readable_range() {
+        let too_small = GlobalSettings {
+            view: ViewConfig {
+                sidebar_font_size: Some(4),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let too_large = GlobalSettings {
+            view: ViewConfig {
+                sidebar_font_size: Some(42),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert_eq!(
+            resolve(&too_small, None, None, None).view.sidebar_font_size,
+            MIN_SIDEBAR_FONT_SIZE
+        );
+        assert_eq!(
+            resolve(&too_large, None, None, None).view.sidebar_font_size,
+            MAX_SIDEBAR_FONT_SIZE
+        );
     }
 
     #[test]
@@ -313,6 +362,7 @@ mod tests {
                 sort_mode: Some("mtime-desc".into()),
                 show_hidden_files: Some(true),
                 wrap_file_names: Some(true),
+                sidebar_font_size: Some(16),
             },
             new_file: NewFileConfig {
                 template: Some("Chapter {N}".into()),

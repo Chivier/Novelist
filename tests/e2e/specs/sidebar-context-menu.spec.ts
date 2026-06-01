@@ -177,7 +177,7 @@ test.describe('Sidebar view context menu', () => {
     await app.evaluate(() => (window as any).__test_api__.toggleSettings());
     await app.getByTestId('settings-dialog').waitFor({ state: 'visible' });
     await app.getByTestId('settings-section-editor').click();
-    await app.getByTestId('settings-sidebar-wrap-filenames').check();
+    await app.getByTestId('settings-sidebar-wrap-filenames').click();
     await app.keyboard.press('Escape');
 
     await expect(name).toHaveCSS('white-space', 'normal');
@@ -192,5 +192,29 @@ test.describe('Sidebar view context menu', () => {
       `__novelist_mock_project_settings__:${MOCK_PROJECT_DIR}`,
     );
     expect(JSON.parse(stored!).view.wrap_file_names).toBe(true);
+  });
+
+  test('settings control changes sidebar file font size', async ({ app }) => {
+    await seedAndEnterProject(app, [
+      { name: 'Readable Chapter.md', path: `${MOCK_PROJECT_DIR}/Readable Chapter.md`, is_dir: false, size: 0 },
+    ]);
+
+    const row = app.getByTestId('sidebar-file-Readable Chapter.md');
+    await expect(row).toBeVisible();
+    await expect(row).toHaveCSS('font-size', '14px');
+
+    await app.evaluate(() => (window as any).__test_api__.toggleSettings());
+    await app.getByTestId('settings-dialog').waitFor({ state: 'visible' });
+    await app.getByTestId('settings-section-editor').click();
+    await app.getByTestId('settings-sidebar-font-size').fill('16');
+    await app.keyboard.press('Escape');
+
+    await expect(row).toHaveCSS('font-size', '16px');
+
+    const stored = await app.evaluate(
+      (key) => localStorage.getItem(key),
+      `__novelist_mock_project_settings__:${MOCK_PROJECT_DIR}`,
+    );
+    expect(JSON.parse(stored!).view.sidebar_font_size).toBe(16);
   });
 });

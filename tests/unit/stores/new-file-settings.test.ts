@@ -6,7 +6,7 @@ describe('newFileSettings shim', () => {
   beforeEach(() => {
     // Reset the unified store's state; the shim reads from it.
     settingsStore.effective = {
-      view: { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: false },
+      view: { sort_mode: 'numeric-asc', show_hidden_files: false, wrap_file_names: false, sidebar_font_size: 14 },
       new_file: {
         template: 'Untitled {N}',
         detect_from_folder: true,
